@@ -28,7 +28,7 @@ import {
 const navItems = [
   { href: "/dashboard",  label: "Dashboard",            icon: LayoutDashboard },
   { href: "/urunler",    label: "Ürünler",               icon: Package },
-  { href: "/import",     label: "Excel İçe Aktar",       icon: FileSpreadsheet },
+  { href: "/import",     label: "Excel & PDF İçe Aktar", icon: FileSpreadsheet },
   { href: "/stok",       label: "Stok Yönetimi",         icon: Boxes },
   { href: "/musteriler", label: "Müşteriler",            icon: Users },
   { href: "/teklif/yeni",label: "Teklif Oluştur",        icon: FileText },

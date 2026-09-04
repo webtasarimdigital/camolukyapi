@@ -39,6 +39,7 @@ yarn-error.log*
 # temp
 logo_source.png
 camolukyapi_tmp/
+scripts/
 
 # vercel
 .vercel

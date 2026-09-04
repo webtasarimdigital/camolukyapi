@@ -9,7 +9,7 @@ import Image from "next/image";
 export default function LoginPage() {
   const router = useRouter();
   const supabase = createClient();
-  const [email, setEmail] = useState("");
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -17,13 +17,14 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
 
+    // Kullanıcı adını e-postaya dönüştür (arka planda)
+    const email = `${username.trim().toLowerCase()}@camolukyapi.com`;
+
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
     if (error) {
       toast.error("Giriş başarısız", {
-        description: error.message === "Invalid login credentials"
-          ? "E-posta veya şifre hatalı."
-          : error.message,
+        description: "Kullanıcı adı veya şifre hatalı.",
       });
       setLoading(false);
       return;
@@ -35,7 +36,7 @@ export default function LoginPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-brand-navy">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md px-4">
         {/* Logo */}
         <div className="flex justify-center mb-8">
           <div className="bg-white rounded-xl px-8 py-4">
@@ -61,16 +62,16 @@ export default function LoginPage() {
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
               <label className="block text-sm text-slate-300 mb-1.5">
-                E-posta
+                Kullanıcı Adı
               </label>
               <input
-                type="email"
+                type="text"
                 required
-                autoComplete="email"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-brand-navy border border-white/10 text-white rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold transition"
-                placeholder="ornek@camoluk.com"
+                autoComplete="username"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                className="w-full bg-brand-navy border border-white/10 text-white rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold transition placeholder:text-slate-600"
+                placeholder="camoluk"
               />
             </div>
 
@@ -84,7 +85,7 @@ export default function LoginPage() {
                 autoComplete="current-password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-brand-navy border border-white/10 text-white rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold transition"
+                className="w-full bg-brand-navy border border-white/10 text-white rounded-lg px-3.5 py-2.5 text-sm outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold transition placeholder:text-slate-600"
                 placeholder="••••••••"
               />
             </div>
@@ -97,10 +98,6 @@ export default function LoginPage() {
               {loading ? "Giriş yapılıyor..." : "Giriş Yap"}
             </button>
           </form>
-
-          <p className="text-center text-xs text-slate-600 mt-6">
-            Hesap oluşturma devre dışı. Admin ile iletişime geçin.
-          </p>
         </div>
       </div>
     </div>
