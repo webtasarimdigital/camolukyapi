@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
-import { saveExcelProducts, savePdfDocument, ParsedProductRow } from "../actions";
+import { saveExcelProducts, savePdfDocument, extractProductsFromPdf, ParsedProductRow } from "../actions";
 import { parseTurkishNumber, formatCurrency } from "@/lib/formatters";
 import {
   UploadCloud,
@@ -212,6 +212,38 @@ export default function ImportWizardPage() {
       router.refresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "PDF kaydetme hatası";
+      toast.error("Hata: " + msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // PDF İçerisinden Fiyat ve Ürünleri Otomatik Ayıkla
+  async function handleExtractFromPdf() {
+    if (!pdfFile) {
+      toast.error("Lütfen önce bir PDF dosyası seçin.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.set("file", pdfFile);
+
+      const res = await extractProductsFromPdf(formData);
+      if (!res.products || res.products.length === 0) {
+        toast.warning(
+          "PDF metninden otomatik fiyat satırı tespit edilemedi. Belgeyi arşiv olarak kaydetmek için 'Sadece Belge Olarak Arşivle' butonunu kullanabilirsiniz."
+        );
+      } else {
+        setParsedRows(res.products);
+        setSelectedSheet("PDF_PARSED");
+        setActiveType("excel");
+        setStep(2);
+        toast.success(`PDF içinden ${res.products.length} ürün ve fiyat bilgisi ayrıştırıldı!`);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "PDF ayrıştırma hatası";
       toast.error("Hata: " + msg);
     } finally {
       setLoading(false);
@@ -473,19 +505,28 @@ export default function ImportWizardPage() {
             </div>
           </div>
 
-          <div className="flex justify-end pt-2">
+          <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-border">
             <button
               type="submit"
               disabled={loading}
-              className="flex items-center gap-2 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-6 py-2.5 rounded-lg text-sm transition disabled:opacity-50"
+              className="flex items-center gap-2 bg-surface hover:bg-gray-200 text-text font-semibold px-4 py-2.5 rounded-lg text-sm transition border border-border disabled:opacity-50"
+            >
+              Sadece Belge Olarak Arşivle
+            </button>
+
+            <button
+              type="button"
+              disabled={loading || !pdfFile}
+              onClick={handleExtractFromPdf}
+              className="flex items-center gap-2 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-6 py-2.5 rounded-lg text-sm transition disabled:opacity-50 shadow-sm"
             >
               {loading ? (
                 <>
-                  <Loader2 size={16} className="animate-spin" /> Kaydediliyor...
+                  <Loader2 size={16} className="animate-spin" /> PDF Ayrıştırılıyor...
                 </>
               ) : (
                 <>
-                  <CheckCircle2 size={16} /> PDF Belgesini Kaydet
+                  <CheckCircle2 size={16} /> PDF Fiyat & Ürünleri Ayrıştırıp Sisteme Aktar
                 </>
               )}
             </button>

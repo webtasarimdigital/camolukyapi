@@ -218,3 +218,100 @@ export async function savePdfDocument(formData: FormData) {
   revalidatePath("/import");
   return { success: true, id: (importRecord as { id: string })?.id };
 }
+
+/**
+ * PDF Dosyasından Metin ve Tablo Ayrıştırma
+ * PDF içindeki ürün kodu, ürün adı, ebat ve fiyatları akıllı regex ile çıkarır.
+ */
+export async function extractProductsFromPdf(formData: FormData): Promise<{
+  success: boolean;
+  fileName: string;
+  products: ParsedProductRow[];
+}> {
+  const file = formData.get("file") as File | null;
+  if (!file) throw new Error("Lütfen bir PDF dosyası seçin.");
+
+  const buffer = Buffer.from(await file.arrayBuffer());
+
+  // pdf-parse ile metin ayıkla
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const pdfParse = require("pdf-parse");
+  const data = await pdfParse(buffer);
+  const text = (data.text || "") as string;
+
+  const lines = text.split(/\r?\n/);
+  const products: ParsedProductRow[] = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    if (!line || line.length < 5) continue;
+
+    // Fiyat tespit et (örn: 1.250,00 veya 850,50 veya 3.870,00)
+    const priceMatches = line.match(/\b\d{1,3}(?:\.\d{3})*,\d{2}\b/g);
+    if (!priceMatches || priceMatches.length === 0) continue;
+
+    // Fiyatları ayrıştır
+    const prices = priceMatches.map((p: string) => {
+      const cleaned = p.replace(/\./g, "").replace(",", ".");
+      const n = parseFloat(cleaned);
+      return isNaN(n) ? null : n;
+    });
+
+    let textPart = line;
+    for (const pm of priceMatches) {
+      textPart = textPart.replace(pm, " ");
+    }
+    // Gereksiz terimleri temizle
+    textPart = textPart.replace(/\b(TL|₺|TRY|KDV|DAHİL|HARİÇ)\b/gi, " ").trim();
+
+    // Ebat tespit et (örn: 60*120, 120*280, 60x120)
+    const sizeMatch = textPart.match(/\b\d{2,4}\s*[\*xX]\s*\d{2,4}\b/);
+    const size = sizeMatch ? sizeMatch[0].replace(/\s+/g, "") : undefined;
+    if (sizeMatch) {
+      textPart = textPart.replace(sizeMatch[0], " ");
+    }
+
+    // Birim tespit et
+    const unitMatch = textPart.match(/\b(M2|M²|ADT|ADET|PK|PAKET|MT|METRE|KG|SET)\b/i);
+    const unit = unitMatch ? unitMatch[0].toUpperCase().replace("M²", "M2") : "M2";
+    if (unitMatch) {
+      textPart = textPart.replace(unitMatch[0], " ");
+    }
+
+    const tokens = textPart.split(/\s+/).filter(Boolean);
+    if (tokens.length < 2) continue;
+
+    // Rakam içeren kodu tespit et
+    let code = "";
+    let name = "";
+    const codeIdx = tokens.findIndex((t: string) => /\d/.test(t) && t.length >= 4);
+
+    if (codeIdx !== -1) {
+      code = tokens[codeIdx];
+      tokens.splice(codeIdx, 1);
+      name = tokens.join(" ");
+    } else {
+      code = tokens[0];
+      name = tokens.slice(1).join(" ");
+    }
+
+    if (!code || !name) continue;
+
+    products.push({
+      product_code: code,
+      product_name: name,
+      size,
+      unit,
+      price_quality_1: prices[0] ?? null,
+      price_quality_2: prices[1] ?? null,
+      price_commercial: prices[2] ?? null,
+      default_sale_price: prices[0] ?? null,
+    });
+  }
+
+  return {
+    success: true,
+    fileName: file.name,
+    products,
+  };
+}
