@@ -17,8 +17,9 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
 
-    // Kullanıcı adını e-postaya dönüştür (arka planda)
-    const email = `${username.trim().toLowerCase()}@camolukyapi.com`;
+    // Kullanıcı adı veya e-posta girilmesini destekle
+    const inputVal = username.trim().toLowerCase();
+    const email = inputVal.includes("@") ? inputVal : `${inputVal}@camolukyapi.com`;
 
     const { error } = await supabase.auth.signInWithPassword({ email, password });
 
