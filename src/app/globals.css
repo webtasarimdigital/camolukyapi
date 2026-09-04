@@ -1,0 +1,37 @@
+@import "tailwindcss";
+
+@theme {
+  /* Çamoluk Yapı Brand Tokens */
+  --color-brand-navy: #131B2A;
+  --color-brand-navy-2: #202B3D;
+  --color-brand-gold: #D7A64A;
+  --color-brand-gold-light: #E8BE72;
+  --color-brand-red: #B30E17;
+  --color-brand-red-light: #D01019;
+  --color-surface: #F5F6F8;
+  --color-border: #E2E5EA;
+  --color-text: #161A22;
+  --color-text-muted: #6B7280;
+
+  /* Sidebar */
+  --color-sidebar-bg: #131B2A;
+  --color-sidebar-hover: #202B3D;
+  --color-sidebar-active: #D7A64A;
+  --color-sidebar-text: #CBD5E1;
+  --color-sidebar-text-active: #131B2A;
+
+  /* Font */
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+/* Para alanları */
+.currency-cell { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* Sticky table header */
+.sticky-header thead th { position: sticky; top: 0; z-index: 10; }
