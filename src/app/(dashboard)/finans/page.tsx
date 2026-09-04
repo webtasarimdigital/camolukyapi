@@ -46,6 +46,7 @@ export default async function FinansPage() {
           <Link href="/finans/tahsilatlar" className="bg-surface border border-border px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-100">Tahsilatlar</Link>
           <Link href="/finans/giderler" className="bg-surface border border-border px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-100">Giderler</Link>
           <Link href="/finans/hareketler" className="bg-surface border border-border px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-100">Tüm Hareketler</Link>
+          <Link href="/ortak-cari" className="bg-amber-100 border border-amber-300 text-amber-900 px-4 py-2 rounded-lg text-sm font-semibold hover:bg-amber-200">Ortak Finans (Cari)</Link>
         </div>
       </div>
 

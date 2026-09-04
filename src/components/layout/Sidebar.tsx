@@ -36,7 +36,7 @@ const navItems = [
   { href: "/satis/yeni", label: "Satış Oluştur",         icon: ShoppingCart },
   { href: "/satislar",   label: "Satışlar",              icon: ReceiptText },
   { href: "/finans",     label: "Finans",                icon: Wallet },
-  { href: "/ortak-cari", label: "Ortak Cari",            icon: Handshake, adminOnly: true },
+  { href: "/ortak-cari", label: "Ortak Finans (Cari)",   icon: Handshake },
   { href: "/raporlar",   label: "Raporlar",              icon: BarChart3 },
   { href: "/kullanicilar",label: "Kullanıcılar",         icon: UserCog, adminOnly: true },
   { href: "/ayarlar",    label: "Ayarlar",               icon: Settings, adminOnly: true },

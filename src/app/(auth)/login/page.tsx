@@ -4,7 +4,6 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { toast } from "sonner";
-import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -38,19 +37,6 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-brand-navy">
       <div className="w-full max-w-md px-4">
-        {/* Logo */}
-        <div className="flex justify-center mb-8">
-          <div className="bg-white rounded-xl px-8 py-4">
-            <Image
-              src="/logo.png"
-              alt="Çamoluk Yapı"
-              width={200}
-              height={60}
-              priority
-            />
-          </div>
-        </div>
-
         {/* Kart */}
         <div className="bg-brand-navy-2 rounded-2xl p-8 shadow-2xl border border-white/10">
           <h1 className="text-white text-xl font-semibold mb-1">
