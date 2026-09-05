@@ -222,6 +222,22 @@ export function SaleForm({
     setStagedDiscountValue(0);
   };
 
+  // Add Free-text Item to the Cart
+  const handleAddFreeItem = () => {
+    const newItem: ItemRow = {
+      tempId: "free-" + Date.now() + Math.random(),
+      productId: null,
+      productCode: "",
+      productName: "Serbest Kalem",
+      unit: "Adet",
+      quantity: 1,
+      unitPrice: 0,
+      discountType: "percent",
+      discountValue: 0,
+    };
+    setItems(prev => [...prev, newItem]);
+  };
+
   // Remove Item from Cart
   const handleRemoveItem = (index: number) => {
     setItems(prev => prev.filter((_, i) => i !== index));
@@ -641,6 +657,13 @@ export function SaleForm({
               Ürün adını veya kodunu biraz yazın, gelen listeden seçin ve miktarı girip <strong>"Kalemi Satışa Ekle"</strong> butonuna basın.
             </p>
           </div>
+          <button
+            type="button"
+            onClick={handleAddFreeItem}
+            className="bg-surface border border-border text-text-muted px-4 py-2 rounded-lg text-xs font-semibold hover:bg-gray-100 flex items-center gap-1.5 flex-shrink-0"
+          >
+            <Tag size={13} /> + Serbest Kalem Ekle
+          </button>
         </div>
 
         {/* Arama Inputu ve Otomatik Tamamlama */}
@@ -923,16 +946,42 @@ export function SaleForm({
                   <tr key={item.tempId} className="hover:bg-surface/50 transition">
                     <td className="py-3 px-4 text-xs font-mono text-text-muted">{idx + 1}</td>
                     <td className="py-3 px-4">
-                      <p className="font-bold text-text text-sm">{item.productName}</p>
-                      <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5">
-                        {item.productCode && (
-                          <span className="font-mono bg-surface px-1.5 py-0.5 rounded border border-border text-[11px]">
-                            {item.productCode}
-                          </span>
-                        )}
-                        {item.size && <span>Ebat: {item.size}</span>}
-                        <span>Birim: {item.unit}</span>
-                      </div>
+                      {!item.productId ? (
+                        <div className="space-y-1">
+                          <input
+                            type="text"
+                            value={item.productName}
+                            onChange={(e) => handleUpdateItem(idx, "productName", e.target.value)}
+                            placeholder="Ürün veya Hizmet Adı Yazın..."
+                            className="w-full border border-amber-300 rounded-lg px-2.5 py-1 text-sm font-bold text-text bg-amber-50/50 outline-none focus:border-brand-navy"
+                          />
+                          <div className="flex items-center gap-2">
+                            <span className="text-[10px] text-amber-800 font-bold bg-amber-100 px-1.5 py-0.5 rounded">
+                              Elle Giriş
+                            </span>
+                            <input
+                              type="text"
+                              value={item.unit}
+                              onChange={(e) => handleUpdateItem(idx, "unit", e.target.value)}
+                              placeholder="Birim"
+                              className="w-16 border border-border rounded px-1.5 py-0.5 text-xs text-text-muted"
+                            />
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          <p className="font-bold text-text text-sm">{item.productName}</p>
+                          <div className="flex items-center gap-2 text-xs text-text-muted mt-0.5">
+                            {item.productCode && (
+                              <span className="font-mono bg-surface px-1.5 py-0.5 rounded border border-border text-[11px]">
+                                {item.productCode}
+                              </span>
+                            )}
+                            {item.size && <span>Ebat: {item.size}</span>}
+                            <span>Birim: {item.unit}</span>
+                          </div>
+                        </>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-center">
                       <div className="inline-flex items-center gap-1">

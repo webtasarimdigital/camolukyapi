@@ -86,3 +86,49 @@ export async function saveQuote(data: any) {
 
   return { quoteId: quoteData.id, quoteCode };
 }
+
+export async function quickCreateCustomer(data: {
+  companyName: string;
+  contactName?: string;
+  phone?: string;
+  type?: "kurumsal" | "bireysel";
+  taxOffice?: string;
+  taxNumber?: string;
+  address?: string;
+}) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) throw new Error("Oturum açmanız gerekiyor.");
+
+  const { data: profileData } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", userData.user.id)
+    .single();
+
+  const profile = profileData as { company_id: string } | null;
+  if (!profile?.company_id) throw new Error("Kullanıcı şirket bilgisi bulunamadı.");
+
+  const { data: customer, error } = await supabase
+    .from("customers")
+    .insert({
+      company_id: profile.company_id,
+      company_name: data.companyName.trim(),
+      contact_name: data.contactName?.trim() || data.companyName.trim(),
+      phone: data.phone?.trim() || "-",
+      type: data.type || "kurumsal",
+      tax_office: data.taxOffice?.trim() || null,
+      tax_number: data.taxNumber?.trim() || null,
+      address: data.address?.trim() || null,
+      created_by: userData.user.id,
+      is_active: true,
+    } as never)
+    .select()
+    .single();
+
+  if (error || !customer) {
+    throw new Error("Müşteri kaydedilemedi: " + (error?.message || "Bilinmeyen hata"));
+  }
+
+  return { success: true, customer: customer as any };
+}
