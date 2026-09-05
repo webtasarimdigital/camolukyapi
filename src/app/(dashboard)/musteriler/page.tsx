@@ -5,8 +5,9 @@ import Link from "next/link";
 export default async function MusterilerPage({
   searchParams,
 }: {
-  searchParams: { q?: string; type?: string; status?: string };
+  searchParams: Promise<{ q?: string; type?: string; status?: string }>;
 }) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -19,9 +20,9 @@ export default async function MusterilerPage({
   const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id) redirect("/login");
 
-  const q = searchParams.q || "";
-  const typeFilter = searchParams.type || "";
-  const statusFilter = searchParams.status || "";
+  const q = sp?.q || "";
+  const typeFilter = sp?.type || "";
+  const statusFilter = sp?.status || "";
 
   let query = supabase
     .from("customers")

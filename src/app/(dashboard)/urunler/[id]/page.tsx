@@ -3,17 +3,21 @@
 import Link from 'next/link';
 import { updateProduct, deactivateProduct } from '../actions';
 import { toast } from 'sonner';
+import { useParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 
-export default function DuzenleUrunPage({ params }: { params: { id: string } }) {
+export default function DuzenleUrunPage() {
+  const routeParams = useParams();
+  const id = routeParams?.id as string;
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const supabase = createClient();
 
   useEffect(() => {
     async function loadProduct() {
-      const { data, error } = await supabase.from('products').select('*').eq('id', params.id).single();
+      if (!id) return;
+      const { data, error } = await supabase.from('products').select('*').eq('id', id).single();
       if (error) {
         toast.error('Ürün yüklenemedi');
       } else {
@@ -22,11 +26,11 @@ export default function DuzenleUrunPage({ params }: { params: { id: string } }) 
       setLoading(false);
     }
     loadProduct();
-  }, [params.id]);
+  }, [id]);
 
   async function handleSubmit(formData: FormData) {
     try {
-      await updateProduct(params.id, formData);
+      await updateProduct(id, formData);
     } catch (error: any) {
       toast.error('Hata: ' + error.message);
     }
@@ -35,7 +39,7 @@ export default function DuzenleUrunPage({ params }: { params: { id: string } }) 
   async function handleDelete() {
     if (confirm('Bu ürünü silmek istediğinize emin misiniz?')) {
       try {
-        await deactivateProduct(params.id);
+        await deactivateProduct(id);
       } catch (error: any) {
         toast.error('Hata: ' + error.message);
       }

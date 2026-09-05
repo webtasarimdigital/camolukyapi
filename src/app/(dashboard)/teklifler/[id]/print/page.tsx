@@ -1,13 +1,18 @@
 import { createClient } from "@/lib/supabase/server";
 import { formatCurrency } from "@/lib/formatters";
 
-export default async function PrintQuotePage({ params }: { params: { id: string } }) {
+export default async function PrintQuotePage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
   const supabase = await createClient();
   
   const { data: quoteData } = await supabase
     .from("quotes")
     .select("*, customer:customers(*), creator:profiles(full_name), items:quote_items(*)")
-    .eq("id", params.id)
+    .eq("id", id)
     .single();
 
   if (!quoteData) return <div>Teklif bulunamadı</div>;

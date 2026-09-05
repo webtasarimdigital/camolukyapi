@@ -4,7 +4,12 @@ import { formatCurrency, formatDate } from "@/lib/formatters";
 import Link from "next/link";
 import { toggleCustomerActive } from "../actions";
 
-export default async function MusteriDetayPage({ params }: { params: { id: string } }) {
+export default async function MusteriDetayPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -16,7 +21,7 @@ export default async function MusteriDetayPage({ params }: { params: { id: strin
   const { data: customerData, error } = await supabase
     .from("customers")
     .select("*")
-    .eq("id", params.id)
+    .eq("id", id)
     .eq("company_id", profile.company_id)
     .single();
 

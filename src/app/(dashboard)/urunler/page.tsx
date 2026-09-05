@@ -7,8 +7,9 @@ import { Suspense } from 'react';
 export default async function UrunlerPage({
   searchParams,
 }: {
-  searchParams: { [key: string]: string | string[] | undefined };
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) redirect('/login');
@@ -22,8 +23,8 @@ export default async function UrunlerPage({
   const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id) redirect('/login');
 
-  const q = typeof searchParams.q === 'string' ? searchParams.q : '';
-  const page = typeof searchParams.page === 'string' ? parseInt(searchParams.page, 10) : 1;
+  const q = typeof sp.q === 'string' ? sp.q : '';
+  const page = typeof sp.page === 'string' ? parseInt(sp.page, 10) : 1;
   const pageSize = 50;
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;

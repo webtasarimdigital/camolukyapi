@@ -16,8 +16,9 @@ const MOVEMENT_TYPES: Record<string, string> = {
 export default async function StokHareketlerPage({
   searchParams,
 }: {
-  searchParams: { [key: string]: string | string[] | undefined };
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) redirect('/login');
@@ -31,7 +32,7 @@ export default async function StokHareketlerPage({
   const profile = profileData as { company_id: string } | null;
   if (!profile?.company_id) redirect('/login');
 
-  const page = typeof searchParams.page === 'string' ? parseInt(searchParams.page, 10) : 1;
+  const page = typeof sp.page === 'string' ? parseInt(sp.page, 10) : 1;
   const pageSize = 50;
   const from = (page - 1) * pageSize;
   const to = from + pageSize - 1;
@@ -47,8 +48,8 @@ export default async function StokHareketlerPage({
     .order('created_at', { ascending: false })
     .range(from, to);
 
-  if (searchParams.movement_type) {
-    query = query.eq('movement_type', searchParams.movement_type as string);
+  if (sp?.movement_type) {
+    query = query.eq('movement_type', sp.movement_type as string);
   }
 
   const { data: rawMovements, count } = await query;

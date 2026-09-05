@@ -7,8 +7,9 @@ import AdjustStockModal from './AdjustStockModal';
 export default async function StokPage({
   searchParams,
 }: {
-  searchParams: { [key: string]: string | string[] | undefined };
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) redirect('/login');
@@ -22,8 +23,8 @@ export default async function StokPage({
   const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id) redirect('/login');
 
-  const q = typeof searchParams.q === 'string' ? searchParams.q : '';
-  const criticalOnly = searchParams.critical === 'true';
+  const q = typeof sp.q === 'string' ? sp.q : '';
+  const criticalOnly = sp.critical === 'true';
 
   let query = supabase
     .from('products')

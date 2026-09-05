@@ -6,8 +6,9 @@ import { formatDate } from "@/lib/formatters";
 export default async function AuditLogPage({
   searchParams,
 }: {
-  searchParams: { entity_type?: string; date?: string; user?: string };
+  searchParams: Promise<{ entity_type?: string; date?: string; user?: string }>;
 }) {
+  const sp = await searchParams;
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) redirect("/login");
@@ -22,7 +23,7 @@ export default async function AuditLogPage({
     .eq("company_id", profile.company_id)
     .order("created_at", { ascending: false });
 
-  if (searchParams.entity_type) query = query.eq("entity_type", searchParams.entity_type);
+  if (sp?.entity_type) query = query.eq("entity_type", sp.entity_type);
   
   const { data: logsData } = await query.limit(50);
   const logs = (logsData || []) as any[];
@@ -38,7 +39,7 @@ export default async function AuditLogPage({
 
       <div className="bg-white p-4 rounded-xl border border-border">
         <form className="flex gap-4">
-          <select name="entity_type" defaultValue={searchParams.entity_type || ""} className="border border-border rounded px-3 py-2 text-sm flex-1">
+          <select name="entity_type" defaultValue={sp?.entity_type || ""} className="border border-border rounded px-3 py-2 text-sm flex-1">
             <option value="">Tüm Varlık Tipleri</option>
             <option value="sales">Satışlar</option>
             <option value="quotes">Teklifler</option>

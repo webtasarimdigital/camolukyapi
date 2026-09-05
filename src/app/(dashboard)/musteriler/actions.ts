@@ -46,11 +46,7 @@ export async function createCustomer(formData: FormData) {
 
   const customer = customerData as { id: string } | null;
   revalidatePath("/musteriler");
-  if (customer?.id) {
-    redirect(`/musteriler/${customer.id}`);
-  } else {
-    redirect("/musteriler");
-  }
+  return { success: true, id: customer?.id };
 }
 
 export async function updateCustomer(id: string, formData: FormData) {

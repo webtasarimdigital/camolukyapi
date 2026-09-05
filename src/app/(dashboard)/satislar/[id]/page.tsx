@@ -3,7 +3,12 @@ import { redirect } from "next/navigation";
 import { formatCurrency } from "@/lib/formatters";
 import Link from "next/link";
 
-export default async function SaleDetailPage({ params }: { params: { id: string } }) {
+export default async function SaleDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) redirect("/login");
@@ -11,7 +16,7 @@ export default async function SaleDetailPage({ params }: { params: { id: string 
   const { data: saleData } = await supabase
     .from("sales")
     .select("*, customer:customers(*), creator:profiles(full_name), items:sale_items(*)")
-    .eq("id", params.id)
+    .eq("id", id)
     .single();
 
   if (!saleData) return <div>Satış bulunamadı</div>;
