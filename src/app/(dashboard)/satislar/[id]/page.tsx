@@ -29,7 +29,7 @@ export default async function SaleDetailPage({
 
   const { data: saleData } = await supabase
     .from("sales")
-    .select("*, customer:customers(*), creator:profiles(full_name), items:sale_items(*)")
+    .select("*, customer:customers(*), items:sale_items(*)")
     .eq("id", id)
     .single();
 
@@ -46,6 +46,17 @@ export default async function SaleDetailPage({
 
   const sale = saleData as any;
   const items = sale.items || [];
+
+  let saleCreatorName = "Yetkili";
+  if (sale.created_by) {
+    const { data: scp } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", sale.created_by)
+      .single();
+    const profileData = scp as { full_name: string | null } | null;
+    if (profileData?.full_name) saleCreatorName = profileData.full_name;
+  }
 
   // Fetch payments for this sale
   const { data: paymentsData } = await supabase
@@ -98,7 +109,7 @@ export default async function SaleDetailPage({
             </span>
           </div>
           <p className="text-xs text-text-muted mt-1">
-            Temsilci: <strong className="text-text">{sale.creator?.full_name || "Yetkili"}</strong> • Satış Tarihi: {new Date(sale.sale_date || sale.created_at).toLocaleDateString("tr-TR")}
+            Temsilci: <strong className="text-text">{saleCreatorName || "Yetkili"}</strong> • Satış Tarihi: {new Date(sale.sale_date || sale.created_at).toLocaleDateString("tr-TR")}
           </p>
         </div>
 

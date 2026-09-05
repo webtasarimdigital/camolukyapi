@@ -17,7 +17,7 @@ export default async function QuoteDetailPage({
 
   const { data: quoteData } = await supabase
     .from("quotes")
-    .select("*, customer:customers(*), creator:profiles(full_name), items:quote_items(*)")
+    .select("*, customer:customers(*), items:quote_items(*)")
     .eq("id", id)
     .single();
 
@@ -25,6 +25,17 @@ export default async function QuoteDetailPage({
   const quote = quoteData as any;
   const items = quote.items || [];
   const isConverted = quote.status === "converted_to_sale";
+
+  let creatorName = "Yetkili";
+  if (quote.created_by) {
+    const { data: cp } = await supabase
+      .from("profiles")
+      .select("full_name")
+      .eq("id", quote.created_by)
+      .single();
+    const profileData = cp as { full_name: string | null } | null;
+    if (profileData?.full_name) creatorName = profileData.full_name;
+  }
 
   const statusLabels: Record<string, { label: string; cls: string }> = {
     draft: { label: "Taslak", cls: "bg-gray-100 text-gray-700" },
@@ -60,7 +71,7 @@ export default async function QuoteDetailPage({
               </span>
             </h1>
             <p className="text-xs text-text-muted mt-0.5">
-              Oluşturulma: {formatDate(quote.created_at)} • Temsilci: {quote.creator?.full_name || "Yetkili"}
+              Oluşturulma: {formatDate(quote.created_at)} • Temsilci: {creatorName || "Yetkili"}
             </p>
           </div>
         </div>

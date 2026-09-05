@@ -19,12 +19,18 @@ export default async function SalesPage() {
 
   const { data: salesData } = await supabase
     .from("sales")
-    .select("*, customer:customers(company_name, contact_name), creator:profiles(full_name)")
+    .select("*, customer:customers(company_name, contact_name)")
     .eq("company_id", profile.company_id)
     .order("created_at", { ascending: false })
     .limit(100);
     
   const sales = salesData as any[] | null;
+
+  const { data: salesProfiles } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .eq("company_id", profile.company_id);
+  const salesProfileMap = new Map((salesProfiles || []).map((p: any) => [p.id, p.full_name]));
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto pb-12">

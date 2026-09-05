@@ -27,7 +27,7 @@ export default async function PrintQuotePage({
 
   const { data: quoteData } = await supabase
     .from("quotes")
-    .select("*, customer:customers(*), creator:profiles(full_name, phone), items:quote_items(*)")
+    .select("*, customer:customers(*), items:quote_items(*)")
     .eq("id", id)
     .single();
 
@@ -47,6 +47,16 @@ export default async function PrintQuotePage({
 
   const quote = quoteData as any;
   const items = quote.items || [];
+
+  let creator: { full_name: string | null; phone: string | null } | null = null;
+  if (quote.created_by) {
+    const { data: creatorProfile } = await supabase
+      .from("profiles")
+      .select("full_name, phone")
+      .eq("id", quote.created_by)
+      .single();
+    if (creatorProfile) creator = creatorProfile as any;
+  }
 
   const { data: companyResult } = await supabase
     .from("companies")
@@ -85,8 +95,8 @@ export default async function PrintQuotePage({
     : (quote.customer_snapshot?.tax_number || quote.customer?.tax_number || "-");
   const customerEmail = quote.customer_snapshot?.email || quote.customer?.email || "-";
 
-  const salesRepName = quote.creator?.full_name || "Ahmet Duvarbaşı";
-  const salesRepPhone = quote.creator?.phone || company?.phone || "0555 997 29 14";
+  const salesRepName = creator?.full_name || quote.creator_name || "Ahmet Duvarbaşı";
+  const salesRepPhone = creator?.phone || company?.phone || "0555 997 29 14";
 
   const qrIbanUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(primaryBank.iban || "")}`;
 

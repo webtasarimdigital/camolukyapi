@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { calculateLine, calculateTotals } from "@/lib/calculations";
+import { revalidatePath } from "next/cache";
 
 export async function saveQuote(data: any) {
   const supabase = await createClient();
@@ -84,6 +85,9 @@ export async function saveQuote(data: any) {
   const { error: itemsError } = await supabase.from("quote_items").insert(quoteItems as never);
   if (itemsError) throw new Error(itemsError.message);
 
+  revalidatePath("/teklifler");
+  revalidatePath("/dashboard");
+  revalidatePath("/satislar");
   return { quoteId: quoteData.id, quoteCode };
 }
 

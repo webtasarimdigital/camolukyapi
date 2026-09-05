@@ -57,7 +57,7 @@ export default async function TekliflerPage({
   // Tablo sorgusu
   let query = supabase
     .from("quotes")
-    .select("*, customer:customers(company_name, contact_name), creator:profiles(full_name)")
+    .select("*, customer:customers(company_name, contact_name)")
     .eq("company_id", profile.company_id)
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
@@ -75,6 +75,12 @@ export default async function TekliflerPage({
 
   const { data: quotesData } = await query;
   const quotes = quotesData as any[] | null;
+
+  const { data: profilesData } = await supabase
+    .from("profiles")
+    .select("id, full_name")
+    .eq("company_id", profile.company_id);
+  const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p.full_name]));
 
   const statusColors: Record<string, string> = {
     draft: "bg-gray-100 text-gray-700",
@@ -296,7 +302,7 @@ export default async function TekliflerPage({
                       <div className="truncate max-w-xs">{customerName}</div>
                     </td>
                     <td className="px-4 py-3.5 text-text-muted text-xs">
-                      {quote.creator?.full_name || "-"}
+                      {(profileMap.get(quote.created_by) || "Yetkili") || "-"}
                     </td>
                     <td className="px-4 py-3.5 text-right tabular-nums font-bold text-text">
                       {formatCurrency(quote.grand_total || quote.total_amount)}
