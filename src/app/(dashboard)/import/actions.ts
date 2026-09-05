@@ -309,13 +309,36 @@ export async function extractProductsFromPdf(formData: FormData): Promise<{
       }
     }
 
+    // Polyfill DOMMatrix, Path2D, ImageData if missing (e.g. in Vercel Serverless / Node environment)
+    if (typeof globalThis !== "undefined") {
+      if (!(globalThis as any).DOMMatrix) {
+        class FakeDOMMatrix {
+          a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+          m11 = 1; m12 = 0; m21 = 0; m22 = 1; m41 = 0; m42 = 0;
+          constructor(_init?: any) {}
+          multiplySelf() { return this; }
+          preMultiplySelf() { return this; }
+          invertSelf() { return this; }
+          translate() { return this; }
+          scale() { return this; }
+        }
+        (globalThis as any).DOMMatrix = FakeDOMMatrix;
+      }
+      if (!(globalThis as any).Path2D) {
+        (globalThis as any).Path2D = class Path2D { addPath() {} };
+      }
+      if (!(globalThis as any).ImageData) {
+        (globalThis as any).ImageData = class ImageData {};
+      }
+    }
+
     // 2. Metin çıkarma: pdf-parse v2 veya fallback
     let text = "";
     try {
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const pdfModule = require("pdf-parse");
       const PDFParseClass = pdfModule.PDFParse || pdfModule;
-      if (typeof PDFParseClass === "function" && PDFParseClass.prototype?.getText) {
+      if (typeof PDFParseClass === "function") {
         const parser = new PDFParseClass({ data: new Uint8Array(buffer), verbosity: 0 });
         const res = await parser.getText();
         text = (res?.text || "") as string;
@@ -355,7 +378,58 @@ export async function extractProductsFromPdf(formData: FormData): Promise<{
     const productsMap = new Map<string, ParsedProductRow>();
     let matchedWithExisting = 0;
 
-    // 3. Öncelikli Aşama: Sistemimizde mevcut olan ürünleri PDF içinde tara ve eşleştir
+    // 3.1 Yapılandırılmış Ebat + Kod + Fiyat Satırlarını Ayrıştır (Seramik, Karo, Mermer vb. Liste Formatları)
+    // Örnek: 120*280 NG SERAMİK AMAZONIT 55018167RP 120*280 AMAZONIT PARLAK 6MM REKTIFIYE 3.870,00 2.130,00 M2
+    for (const line of lines) {
+      const sizeMatch = line.match(/^(\d{2,4}[\*xX]\d{2,4})\s+/);
+      const priceMatches = line.match(/\b\d{1,3}(?:\.\d{3})*(?:,\d{2})\b/g);
+      const unitMatch = line.match(/\b(M2|M²|ADET|ADT|PK|SET|METRE|MT)\b/i);
+
+      if (sizeMatch && priceMatches && priceMatches.length >= 1) {
+        const size = sizeMatch[1];
+        const unit = unitMatch ? unitMatch[1].toUpperCase().replace("M²", "M2") : "M2";
+        const prices = priceMatches.map((p) => parseFloat(p.replace(/\./g, "").replace(",", ".")));
+        const p1 = prices[0] || null;
+        const p2 = prices[1] || null;
+        const pC = prices[2] || null;
+
+        let middle = line.substring(sizeMatch[0].length);
+        for (const pm of priceMatches) middle = middle.replace(pm, "");
+        if (unitMatch) middle = middle.replace(unitMatch[0], "");
+        middle = middle.trim();
+
+        const codeMatch = middle.match(/\b(\d{6,10}[A-Z0-9]*|[A-Z]{2,4}\d{4,10}[A-Z0-9]*)\b/);
+        if (codeMatch) {
+          const code = codeMatch[1];
+          const codePos = middle.indexOf(code);
+          const beforeCode = middle.substring(0, codePos).trim();
+          const afterCode = middle.substring(codePos + code.length).trim();
+          const name = afterCode || beforeCode || `${size} ${code}`;
+          let group = "NG SERAMİK";
+          let series = beforeCode;
+          if (beforeCode.startsWith("NG SERAMİK")) {
+            series = beforeCode.replace("NG SERAMİK", "").trim();
+          }
+
+          if (!productsMap.has(code.toUpperCase())) {
+            productsMap.set(code.toUpperCase(), {
+              product_code: code,
+              product_name: name,
+              product_group: group || undefined,
+              series_name: series || undefined,
+              size,
+              unit,
+              price_quality_1: p1,
+              price_quality_2: p2,
+              price_commercial: pC,
+              default_sale_price: p1,
+            });
+          }
+        }
+      }
+    }
+
+    // 3.2 Öncelikli Aşama: Sistemimizde mevcut olan ürünleri PDF içinde tara ve eşleştir
     // "tüm pdf ler aynı formatta gelmeyebiliyor ama ortak bizde olanları alıp işlemeye çalış her zaman"
     if (existingProducts.length > 0) {
       for (const ep of existingProducts) {
