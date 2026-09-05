@@ -25,6 +25,7 @@ export async function addPartnerMovement(formData: FormData) {
   const customNotes = (formData.get("notes") as string) || "";
   const doc_no = (formData.get("doc_no") as string) || "";
   const target_partner_id = formData.get("target_partner_id") as string | null;
+  const splitBoth = formData.get("split_both") === "true";
 
   if (isNaN(amount) || amount <= 0) {
     throw new Error("Lütfen geçerli bir tutar girin.");
@@ -45,7 +46,53 @@ export async function addPartnerMovement(formData: FormData) {
     return { success: true, duplicateIgnored: true };
   }
 
-  // 1. Ortaklar Arası Şahsi Borç (Ahmet ↔ Mehmet)
+  // 1. Şahsi Gelir & Kâr Payı (Kira, Dönem Kârı, Hak Ediş vb. - Şirkete borç değildir, adamlara kâr/gelir yazar)
+  if (movement_type === "sahsi_gelir") {
+    const metaNotes = JSON.stringify({
+      is_personal_income: true,
+      category: category || "kira",
+      custom_notes: customNotes,
+    });
+
+    const incomeReason = reason.includes("Şahsi Gelir") || reason.includes("Kira") 
+      ? reason 
+      : `[Şahsi Gelir / Kira] ${reason}`;
+
+    // Ana ortak kaydı
+    await supabase.from("partner_ledger").insert({
+      company_id: profile.company_id,
+      partner_id: partner_id,
+      direction: "company_to_partner",
+      amount,
+      transaction_date,
+      reason: incomeReason,
+      notes: metaNotes,
+      doc_no: doc_no || "SAHSI_GELIR",
+      created_by: user.id,
+    } as never);
+
+    // Eğer "Her iki ortağa da eşit böl / ekle" seçilmişse diğer ortağa da ekle
+    if (splitBoth && target_partner_id && target_partner_id !== partner_id) {
+      await supabase.from("partner_ledger").insert({
+        company_id: profile.company_id,
+        partner_id: target_partner_id,
+        direction: "company_to_partner",
+        amount,
+        transaction_date,
+        reason: incomeReason,
+        notes: metaNotes,
+        doc_no: doc_no || "SAHSI_GELIR",
+        created_by: user.id,
+      } as never);
+    }
+
+    revalidatePath("/ortak-cari");
+    revalidatePath(`/ortak-cari/${partner_id}`);
+    if (target_partner_id) revalidatePath(`/ortak-cari/${target_partner_id}`);
+    return { success: true, duplicateIgnored: false };
+  }
+
+  // 2. Ortaklar Arası Şahsi Borç (Ahmet ↔ Mehmet)
   if (movement_type === "partner_to_partner" && target_partner_id && target_partner_id !== partner_id) {
     const p2pNotes = JSON.stringify({
       is_p2p: true,
@@ -55,7 +102,7 @@ export async function addPartnerMovement(formData: FormData) {
       to_partner_id: target_partner_id,
     });
 
-    // Veren ortak kaydı (partner_to_company olarak tutulur, ortağın alacağına yazılır)
+    // Veren ortak kaydı
     await supabase.from("partner_ledger").insert({
       company_id: profile.company_id,
       partner_id: partner_id,
@@ -68,7 +115,7 @@ export async function addPartnerMovement(formData: FormData) {
       created_by: user.id,
     } as never);
 
-    // Alan ortak kaydı (company_to_partner olarak tutulur, ortağın borcuna yazılır)
+    // Alan ortak kaydı
     await supabase.from("partner_ledger").insert({
       company_id: profile.company_id,
       partner_id: target_partner_id,
@@ -84,69 +131,21 @@ export async function addPartnerMovement(formData: FormData) {
     revalidatePath("/ortak-cari");
     revalidatePath(`/ortak-cari/${partner_id}`);
     revalidatePath(`/ortak-cari/${target_partner_id}`);
-    return;
+    return { success: true, duplicateIgnored: false };
   }
 
-  // 2. Bağımsız Kâr Dağıtımı (Kâr Payı Ortaklara Verilir -> company_to_partner)
-  if (movement_type === "profit_distribution") {
-    const metaNotes = JSON.stringify({
-      is_profit_dist: true,
-      category: "kar_dagitimi",
-      custom_notes: customNotes,
-    });
-
-    await supabase.from("partner_ledger").insert({
-      company_id: profile.company_id,
-      partner_id,
-      direction: "company_to_partner",
-      amount,
-      transaction_date,
-      reason: `[Bağımsız Kâr Payı] ${reason}`,
-      notes: metaNotes,
-      doc_no: doc_no || "KAR_PAYI",
-      created_by: user.id,
-    } as never);
-
-    revalidatePath("/ortak-cari");
-    revalidatePath(`/ortak-cari/${partner_id}`);
-    return;
-  }
-
-  // 3. Bağımsız Zarar / Masraf Karşılama (Ortaklar kasaya para koyar -> partner_to_company)
-  if (movement_type === "loss_coverage") {
-    const metaNotes = JSON.stringify({
-      is_loss_coverage: true,
-      category: "zarar_karsilama",
-      custom_notes: customNotes,
-    });
-
-    await supabase.from("partner_ledger").insert({
-      company_id: profile.company_id,
-      partner_id,
-      direction: "partner_to_company",
-      amount,
-      transaction_date,
-      reason: `[Zarar Karşılama / Takviye] ${reason}`,
-      notes: metaNotes,
-      doc_no: doc_no || "ZARAR_TAKVIYE",
-      created_by: user.id,
-    } as never);
-
-    revalidatePath("/ortak-cari");
-    revalidatePath(`/ortak-cari/${partner_id}`);
-    return;
-  }
-
-  // 4. Standart Hareketler (partner_to_company veya company_to_partner)
+  // 3. Standart Hareketler: Firmaya Verdiği (partner_to_company) veya Firmadan Aldığı (company_to_partner)
   const metaNotes = JSON.stringify({
     category,
     custom_notes: customNotes,
   });
 
+  const direction = movement_type === "company_to_partner" ? "company_to_partner" : "partner_to_company";
+
   const { error } = await supabase.from("partner_ledger").insert({
     company_id: profile.company_id,
     partner_id,
-    direction: movement_type === "company_to_partner" ? "company_to_partner" : "partner_to_company",
+    direction,
     amount,
     transaction_date,
     reason,
@@ -180,8 +179,6 @@ export async function voidPartnerMovement(id: string, reason: string) {
     .update({
       voided_at: new Date().toISOString(),
       void_reason: reason,
-      updated_at: new Date().toISOString(),
-      updated_by: user.id,
     } as never)
     .eq("id", id)
     .eq("company_id", profile.company_id)
@@ -210,6 +207,7 @@ export async function updatePartnerMovement(id: string, formData: FormData) {
   const category = (formData.get("category") as string) || "diger";
   const reason = (formData.get("reason") as string) || "Cari Hareket";
   const customNotes = (formData.get("notes") as string) || "";
+  const movementType = formData.get("movement_type") as string;
 
   if (isNaN(amount) || amount <= 0) {
     throw new Error("Lütfen geçerli bir tutar girin.");
@@ -234,6 +232,23 @@ export async function updatePartnerMovement(id: string, formData: FormData) {
   meta.category = category;
   meta.custom_notes = customNotes;
 
+  let newDocNo = currentMov.doc_no;
+  let newDirection = currentMov.direction;
+
+  if (movementType === "sahsi_gelir") {
+    meta.is_personal_income = true;
+    newDocNo = "SAHSI_GELIR";
+    newDirection = "company_to_partner";
+  } else if (movementType === "partner_to_company") {
+    delete meta.is_personal_income;
+    if (newDocNo === "SAHSI_GELIR") newDocNo = null;
+    newDirection = "partner_to_company";
+  } else if (movementType === "company_to_partner") {
+    delete meta.is_personal_income;
+    if (newDocNo === "SAHSI_GELIR") newDocNo = null;
+    newDirection = "company_to_partner";
+  }
+
   const updatedNotes = JSON.stringify(meta);
 
   // Güncelle
@@ -244,13 +259,15 @@ export async function updatePartnerMovement(id: string, formData: FormData) {
       transaction_date,
       reason,
       notes: updatedNotes,
+      direction: newDirection,
+      doc_no: newDocNo,
     } as never)
     .eq("id", id)
     .eq("company_id", profile.company_id);
 
   if (error) throw error;
 
-  // Eğer P2P hareketi ise eşleşen diğer kaydı da güncelle
+  // Eğer P2P hareketi ise eşleşen diğer kaydı da senkronize et
   if (meta.is_p2p && (currentMov.doc_no === "P2P_GIVER" || currentMov.doc_no === "P2P_RECEIVER")) {
     const pairDoc = currentMov.doc_no === "P2P_GIVER" ? "P2P_RECEIVER" : "P2P_GIVER";
     const pairPartnerId = currentMov.doc_no === "P2P_GIVER" ? meta.to_partner_id : meta.from_partner_id;
@@ -262,13 +279,12 @@ export async function updatePartnerMovement(id: string, formData: FormData) {
           amount,
           transaction_date,
           reason: currentMov.doc_no === "P2P_GIVER" 
-            ? `[Şahsi Borç Alındı] ${reason.replace("[Şahsi Borç Verildi] ", "")}`
+            ? `[Şahsi Borç Alındı] ${reason.replace("[Şahsi Borç Verildi] ", "")}` 
             : `[Şahsi Borç Verildi] ${reason.replace("[Şahsi Borç Alındı] ", "")}`,
-          notes: updatedNotes,
         } as never)
-        .eq("company_id", profile.company_id)
         .eq("partner_id", pairPartnerId)
         .eq("doc_no", pairDoc)
+        .eq("transaction_date", currentMov.transaction_date)
         .eq("amount", currentMov.amount);
     }
   }
@@ -291,37 +307,39 @@ export async function deletePartnerMovement(id: string) {
   const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id || profile.role !== "admin") throw new Error("Unauthorized");
 
-  const { data: currentMovData } = await supabase
+  // Mevcut hareketi çek
+  const { data: movData } = await supabase
     .from("partner_ledger")
     .select("*")
     .eq("id", id)
     .eq("company_id", profile.company_id)
     .single();
 
-  const currentMov = currentMovData as any;
-  if (!currentMov) throw new Error("Kayıt bulunamadı.");
+  const mov = movData as any;
+  if (!mov) throw new Error("Kayıt bulunamadı.");
 
   let meta: any = {};
   try {
-    meta = currentMov.notes ? JSON.parse(currentMov.notes) : {};
+    meta = mov.notes ? JSON.parse(mov.notes) : {};
   } catch {}
 
-  // P2P ise eş kaydı da sil
-  if (meta.is_p2p && (currentMov.doc_no === "P2P_GIVER" || currentMov.doc_no === "P2P_RECEIVER")) {
-    const pairDoc = currentMov.doc_no === "P2P_GIVER" ? "P2P_RECEIVER" : "P2P_GIVER";
-    const pairPartnerId = currentMov.doc_no === "P2P_GIVER" ? meta.to_partner_id : meta.from_partner_id;
+  // Eğer P2P hareketi ise eşleşen kaydı da sil
+  if (meta.is_p2p && (mov.doc_no === "P2P_GIVER" || mov.doc_no === "P2P_RECEIVER")) {
+    const pairDoc = mov.doc_no === "P2P_GIVER" ? "P2P_RECEIVER" : "P2P_GIVER";
+    const pairPartnerId = mov.doc_no === "P2P_GIVER" ? meta.to_partner_id : meta.from_partner_id;
 
     if (pairPartnerId) {
       await supabase
         .from("partner_ledger")
         .delete()
-        .eq("company_id", profile.company_id)
         .eq("partner_id", pairPartnerId)
         .eq("doc_no", pairDoc)
-        .eq("amount", currentMov.amount);
+        .eq("transaction_date", mov.transaction_date)
+        .eq("amount", mov.amount);
     }
   }
 
+  // Kendisini sil
   const { error } = await supabase
     .from("partner_ledger")
     .delete()
@@ -331,13 +349,10 @@ export async function deletePartnerMovement(id: string) {
   if (error) throw error;
 
   revalidatePath("/ortak-cari");
-  revalidatePath(`/ortak-cari/${currentMov.partner_id}`);
+  revalidatePath(`/ortak-cari/${mov.partner_id}`);
   return { success: true };
 }
 
-/**
- * Ortaklar Arası Özel Not Ekleme (Projeden Bağımsız Defter)
- */
 export async function addPartnerNote(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
@@ -352,33 +367,21 @@ export async function addPartnerNote(formData: FormData) {
   if (!profile?.company_id || profile.role !== "admin") throw new Error("Unauthorized");
 
   const partner_id = (formData.get("partner_id") as string) || null;
-  const partner_name = (formData.get("partner_name") as string) || "Ortaklar";
-  const title = formData.get("title") as string;
+  const title = (formData.get("title") as string) || "Özel Not";
   const content = (formData.get("content") as string) || "";
-  const rawAmount = formData.get("amount") as string;
-  const amount = rawAmount ? Math.abs(parseFloat(rawAmount)) : 0;
+  const amountStr = formData.get("amount") as string;
+  const amount = amountStr ? parseFloat(amountStr) : 0;
   const due_date = (formData.get("due_date") as string) || null;
   const priority = (formData.get("priority") as string) || "normal";
 
-  if (!title || title.trim().length === 0) {
-    throw new Error("Lütfen bir not başlığı girin.");
+  // Partner adı
+  let partner_name = "Ortaklar";
+  if (partner_id) {
+    const { data: p } = await supabase.from("partners").select("name").eq("id", partner_id).single();
+    if (p) partner_name = (p as any).name;
   }
 
-  // İlk aktif ortağın ID'sini al (eğer partner_id seçilmediyse)
-  let validPartnerId = partner_id;
-  if (!validPartnerId) {
-    const { data: firstPartner } = await supabase
-      .from("partners")
-      .select("id")
-      .eq("company_id", profile.company_id)
-      .limit(1)
-      .single();
-    validPartnerId = (firstPartner as unknown as { id: string } | null)?.id ?? null;
-  }
-
-  if (!validPartnerId) throw new Error("Ortak kaydı bulunamadı.");
-
-  const notePayload = JSON.stringify({
+  const metaNotes = JSON.stringify({
     is_note: true,
     partner_id,
     partner_name,
@@ -390,26 +393,32 @@ export async function addPartnerNote(formData: FormData) {
     is_completed: false,
   });
 
+  let safePartnerId = partner_id;
+  if (!safePartnerId) {
+    const { data: p } = await supabase.from("partners").select("id").eq("company_id", profile.company_id).limit(1).single();
+    safePartnerId = (p as any)?.id;
+  }
+
+  if (!safePartnerId) throw new Error("Kayıtlı ortak bulunamadı.");
+
   const { error } = await supabase.from("partner_ledger").insert({
     company_id: profile.company_id,
-    partner_id: validPartnerId,
+    partner_id: safePartnerId,
     direction: "partner_to_company",
-    amount: 0, // Notlar finansal bakiyeyi etkilemez
+    amount: 0,
     transaction_date: due_date || new Date().toISOString().split("T")[0],
     reason: `[NOT] ${title}`,
-    notes: notePayload,
+    notes: metaNotes,
     doc_no: "NOTE",
     created_by: user.id,
   } as never);
 
   if (error) throw error;
+
   revalidatePath("/ortak-cari");
 }
 
-/**
- * Ortaklar Arası Notu Tamamlandı Olarak İşaretle / Geri Al
- */
-export async function togglePartnerNote(noteId: string, currentCompleted: boolean) {
+export async function togglePartnerNote(noteId: string, currentStatus?: boolean) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
@@ -422,34 +431,33 @@ export async function togglePartnerNote(noteId: string, currentCompleted: boolea
   const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id || profile.role !== "admin") throw new Error("Unauthorized");
 
-  const { data: recordData } = await supabase
+  const { data: noteData } = await supabase
     .from("partner_ledger")
-    .select("notes")
+    .select("*")
     .eq("id", noteId)
     .eq("company_id", profile.company_id)
     .single();
 
-  const record = recordData as { notes: string } | null;
-  if (!record?.notes) return;
+  if (!noteData) throw new Error("Not bulunamadı");
+  const note = noteData as any;
 
+  let meta: any = {};
   try {
-    const parsed = JSON.parse(record.notes);
-    parsed.is_completed = !currentCompleted;
-    await supabase
-      .from("partner_ledger")
-      .update({ notes: JSON.stringify(parsed) } as never)
-      .eq("id", noteId)
-      .eq("company_id", profile.company_id);
-  } catch {
-    // ignore json error
-  }
+    meta = note.notes ? JSON.parse(note.notes) : {};
+  } catch {}
+
+  meta.is_completed = currentStatus !== undefined ? !currentStatus : !meta.is_completed;
+
+  await supabase
+    .from("partner_ledger")
+    .update({ notes: JSON.stringify(meta) } as never)
+    .eq("id", noteId);
 
   revalidatePath("/ortak-cari");
 }
 
-/**
- * Ortak Notunu Sil
- */
+export const togglePartnerNoteStatus = togglePartnerNote;
+
 export async function deletePartnerNote(noteId: string) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();

@@ -8,7 +8,6 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Plus,
-  TrendingUp,
   FileText,
   UserCheck,
   Fuel,
@@ -17,22 +16,16 @@ import {
   Users2,
   Landmark,
   Wallet,
+  Gem,
+  ArrowRight
 } from "lucide-react";
-
-const CATEGORY_ICONS: Record<string, any> = {
-  akaryakit: Fuel,
-  malzeme: Boxes,
-  kira: Building2,
-  personel: Users2,
-  sermaye: Landmark,
-  sahsi_avans: Wallet,
-};
 
 export function PartnerCard({
   partner,
   partners,
   verdi,
   aldi,
+  sahsiGelir = 0,
   net,
   p2pNet,
   otherPartnerName,
@@ -42,8 +35,9 @@ export function PartnerCard({
   partners: Array<{ id: string; name: string }>;
   verdi: number;
   aldi: number;
+  sahsiGelir?: number;
   net: number;
-  p2pNet: number; // >0: this partner gave personal debt to the other partner; <0: owes other partner
+  p2pNet: number;
   otherPartnerName?: string;
   recentMovements: Array<{
     id: string;
@@ -51,6 +45,7 @@ export function PartnerCard({
     amount: number;
     reason: string;
     notes?: string | null;
+    doc_no?: string | null;
   }>;
 }) {
   const [showModal, setShowModal] = useState(false);
@@ -95,72 +90,63 @@ export function PartnerCard({
                   ? "Firma Alacaklısı"
                   : isOrtakBorclu
                   ? "Firmaya Borçlu"
-                  : "Bakiye Sıfır"}
+                  : "Bakiye Dengede"}
               </span>
             </div>
           </div>
 
-          {/* Büyük Vurgulu Net Bakiye Kartı */}
-          <div
-            className={`my-4 p-4 rounded-2xl border ${
-              isFirmaBorclu
-                ? "bg-emerald-50/60 border-emerald-200"
-                : isOrtakBorclu
-                ? "bg-rose-50/60 border-rose-200"
-                : "bg-surface border-border"
-            }`}
-          >
-            <div className="flex items-center justify-between mb-1">
-              <span className="text-xs font-semibold text-text uppercase tracking-wider">
-                Şirket ile Net Bakiye:
-              </span>
-              <span className="text-[11px] font-medium text-text-muted">
-                {isFirmaBorclu
-                  ? `Firma ${partner.name}'a Borçlu`
-                  : isOrtakBorclu
-                  ? `${partner.name} Firmaya Borçlu`
-                  : "Hesap Kapalı"}
-              </span>
-            </div>
-            <div
-              className={`text-2xl font-black tabular-nums ${
-                isFirmaBorclu
-                  ? "text-emerald-700"
-                  : isOrtakBorclu
-                  ? "text-rose-700"
-                  : "text-text-muted"
-              }`}
-            >
-              {formatCurrency(Math.abs(net))}
-            </div>
-          </div>
-
-          {/* İstatistik Kırılımları */}
-          <div className="grid grid-cols-2 gap-2.5 pt-1 text-xs">
+          {/* 3 Başlık Metrikleri (Firmaya Verdiği, Firmadan Aldığı, Şahsi Gelir) */}
+          <div className="grid grid-cols-3 gap-2 mt-4 text-xs">
+            {/* 1. Firmaya Verdiği */}
             <div className="p-3 bg-surface rounded-xl border border-border">
-              <div className="flex items-center gap-1 text-text-muted mb-1">
-                <ArrowUpRight size={14} className="text-emerald-600" />
+              <div className="flex items-center gap-1 text-emerald-800 font-semibold mb-1 text-[11px]">
+                <ArrowUpRight size={13} className="text-emerald-600" />
                 <span>Firmaya Verdiği:</span>
               </div>
-              <div className="text-sm font-bold text-emerald-700 tabular-nums">
+              <div className="text-sm font-black text-emerald-700 tabular-nums">
                 {formatCurrency(verdi)}
               </div>
             </div>
 
+            {/* 2. Firmadan Aldığı */}
             <div className="p-3 bg-surface rounded-xl border border-border">
-              <div className="flex items-center gap-1 text-text-muted mb-1">
-                <ArrowDownLeft size={14} className="text-rose-600" />
+              <div className="flex items-center gap-1 text-rose-800 font-semibold mb-1 text-[11px]">
+                <ArrowDownLeft size={13} className="text-rose-600" />
                 <span>Firmadan Aldığı:</span>
               </div>
-              <div className="text-sm font-bold text-rose-700 tabular-nums">
+              <div className="text-sm font-black text-rose-700 tabular-nums">
                 {formatCurrency(aldi)}
+              </div>
+            </div>
+
+            {/* 3. Şahsi Gelir & Kâr (Kira vb.) */}
+            <div className="p-3 bg-purple-50/70 rounded-xl border border-purple-200">
+              <div className="flex items-center gap-1 text-purple-950 font-semibold mb-1 text-[11px]">
+                <Gem size={13} className="text-purple-600" />
+                <span>Şahsi Gelir / Kira:</span>
+              </div>
+              <div className="text-sm font-black text-purple-900 tabular-nums">
+                {formatCurrency(sahsiGelir)}
               </div>
             </div>
           </div>
 
+          {/* Net Bakiye Özeti */}
+          <div className="mt-3 p-3 bg-surface/70 rounded-xl border border-border flex items-center justify-between text-xs">
+            <span className="font-bold text-text">Firma ile Net Cari Bakiye:</span>
+            <span className={`font-black text-base tabular-nums ${
+              net > 0 ? "text-emerald-700" : net < 0 ? "text-rose-700" : "text-text"
+            }`}>
+              {formatCurrency(Math.abs(net))}
+              <span className="text-[10px] font-normal ml-1 text-text-muted">
+                {net > 0 ? "(Alacaklı)" : net < 0 ? "(Borçlu)" : "(Dengede)"}
+              </span>
+            </span>
+          </div>
+
           {/* Ortaklar Arası Şahsi Borç Durumu */}
           {otherPartnerName && (
-            <div className="mt-3 p-3 bg-cyan-50/50 rounded-xl border border-cyan-200/80 text-xs">
+            <div className="mt-2.5 p-3 bg-cyan-50/50 rounded-xl border border-cyan-200/80 text-xs">
               <div className="flex items-center justify-between">
                 <span className="font-semibold text-cyan-900">
                   {otherPartnerName} ile Şahsi Bakiye:
@@ -185,30 +171,55 @@ export function PartnerCard({
             </div>
           )}
 
-          {/* Son Hareketler Mini Özeti */}
+          {/* Son Hareketler Bölümü (4 Adet Gösterilir + Tümünü Gör Linki) */}
           {recentMovements.length > 0 && (
             <div className="pt-3 space-y-1.5">
-              <div className="text-[11px] font-bold text-text-muted uppercase tracking-wider">
-                Son Hareketler
+              <div className="flex items-center justify-between text-[11px] font-bold text-text-muted uppercase tracking-wider">
+                <span>Son Hareketler</span>
+                <Link
+                  href={`/ortak-cari/${partner.id}`}
+                  className="text-brand-navy hover:underline lowercase font-semibold flex items-center gap-1 normal-case text-xs"
+                >
+                  Tümünü Gör ({recentMovements.length}) <ArrowRight size={12} />
+                </Link>
               </div>
               <div className="space-y-1">
-                {recentMovements.slice(0, 2).map((m) => {
+                {recentMovements.slice(0, 4).map((m) => {
+                  let meta: any = {};
+                  try {
+                    meta = m.notes ? JSON.parse(m.notes) : {};
+                  } catch {}
+
+                  const isIncome = meta.is_personal_income || m.doc_no === "SAHSI_GELIR" || meta.category === "kira" || meta.category === "kar_dagitimi";
+
                   return (
                     <div
                       key={m.id}
-                      className="flex items-center justify-between text-xs py-1 px-2 rounded-lg bg-surface/60 border border-border/50"
+                      className="flex items-center justify-between text-xs py-1.5 px-2.5 rounded-lg bg-surface/60 border border-border/50"
                     >
-                      <span className="text-text truncate max-w-[180px] font-medium">
-                        {m.reason}
-                      </span>
+                      <div className="flex items-center gap-1.5 min-w-0 pr-2">
+                        {isIncome ? (
+                          <Gem size={13} className="text-purple-600 shrink-0" />
+                        ) : m.direction === "partner_to_company" ? (
+                          <ArrowUpRight size={13} className="text-emerald-600 shrink-0" />
+                        ) : (
+                          <ArrowDownLeft size={13} className="text-rose-600 shrink-0" />
+                        )}
+                        <span className="text-text truncate font-medium">
+                          {m.reason}
+                        </span>
+                      </div>
+
                       <span
-                        className={`font-bold tabular-nums ${
-                          m.direction === "partner_to_company"
-                            ? "text-emerald-700"
-                            : "text-rose-700"
+                        className={`font-bold tabular-nums shrink-0 ${
+                          isIncome 
+                            ? "text-purple-800" 
+                            : m.direction === "partner_to_company"
+                              ? "text-emerald-700"
+                              : "text-rose-700"
                         }`}
                       >
-                        {m.direction === "partner_to_company" ? "+" : "-"}
+                        {isIncome || m.direction === "partner_to_company" ? "+" : "-"}
                         {formatCurrency(m.amount)}
                       </span>
                     </div>
@@ -223,14 +234,14 @@ export function PartnerCard({
         <div className="flex gap-2.5 pt-4 border-t border-border">
           <Link
             href={`/ortak-cari/${partner.id}`}
-            className="flex-1 text-center bg-surface hover:bg-gray-200 border border-border py-2.5 rounded-xl text-xs font-bold text-text transition flex items-center justify-center gap-1.5"
+            className="flex-1 text-center bg-surface hover:bg-gray-200 border border-border py-2.5 rounded-xl text-xs font-bold text-text transition flex items-center justify-center gap-1.5 cursor-pointer"
           >
-            <FileText size={14} /> Ekstre / Detaylar
+            <FileText size={14} /> Tüm Ekstre / Detaylar
           </Link>
           <button
             type="button"
             onClick={() => setShowModal(true)}
-            className="flex-1 flex items-center justify-center gap-1.5 bg-brand-navy hover:bg-brand-navy-2 text-white py-2.5 rounded-xl text-xs font-bold transition shadow-xs"
+            className="flex-1 flex items-center justify-center gap-1.5 bg-brand-navy hover:bg-brand-navy-2 text-white py-2.5 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
           >
             <Plus size={15} /> Hareket Ekle
           </button>

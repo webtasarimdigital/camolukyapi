@@ -1,33 +1,32 @@
 import { createClient } from "@/lib/supabase/server";
-import { redirect } from "next/navigation";
 import { formatCurrency } from "@/lib/formatters";
-import { PartnerCard } from "./PartnerCard";
-import { PartnerNotesSection, NoteItem } from "./PartnerNotesSection";
 import {
   Handshake,
-  ShieldCheck,
-  Building2,
-  TrendingUp,
-  StickyNote,
-  Users2,
+  ArrowUpRight,
+  ArrowDownLeft,
   ArrowRightLeft,
+  TrendingUp,
+  Gem
 } from "lucide-react";
+import { PartnerCard } from "./PartnerCard";
+import { PartnerNotesSection, NoteItem } from "./PartnerNotesSection";
 
 export default async function OrtakCariPage() {
   const supabase = await createClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
-  if (!user) redirect("/login");
 
   const { data: profileData } = await supabase
     .from("profiles")
     .select("company_id")
-    .eq("id", user.id)
+    .eq("id", user!.id)
     .single();
 
   const profile = profileData as { company_id: string } | null;
-  if (!profile?.company_id) redirect("/login");
+  if (!profile?.company_id) {
+    return <div>Şirket bulunamadı.</div>;
+  }
 
   // Ortakları çek
   let { data: partnersData } = await supabase
@@ -42,7 +41,6 @@ export default async function OrtakCariPage() {
     phone?: string | null;
   }>;
 
-  // Eğer sistemde ortak yoksa varsayılan ortakları (Ahmet ve Mehmet) ekle
   if (partners.length === 0) {
     await supabase.from("partners").insert([
       { company_id: profile.company_id, name: "Ahmet", is_active: true },
@@ -100,141 +98,130 @@ export default async function OrtakCariPage() {
     };
   });
 
-  // Partner bazında finansal hesaplamalar
+  // Partner bazında 3 ana başlık hesaplamaları:
+  // 1. Firmaya Verdiği (Alacak)
+  // 2. Firmadan Aldığı (Borç)
+  // 3. Şahsi Gelir & Kâr (Kira vb.)
   let totalCompanyDebtToPartners = 0;
   let totalPartnersDebtToCompany = 0;
-  let totalProfitDistributed = 0;
-  let totalLossCovered = 0;
-
-  // Ortaklar arası şahsi borçlaşma (Ahmet ↔ Mehmet)
-  // P2P hareketlerinde: from_partner verdi (+), to_partner borçlandı (-)
+  let totalPersonalIncome = 0;
   let p2pAhmetToMehmet = 0;
 
   const partnerMetrics = partners.map((p) => {
     const pMovements = movements.filter((m) => m.partner_id === p.id);
-    const verdi = pMovements
-      .filter((m) => m.direction === "partner_to_company")
-      .reduce((sum, m) => sum + Number(m.amount), 0);
-    const aldi = pMovements
-      .filter((m) => m.direction === "company_to_partner")
-      .reduce((sum, m) => sum + Number(m.amount), 0);
+    
+    let verdi = 0;
+    let aldi = 0;
+    let sahsiGelir = 0;
+
+    pMovements.forEach((m) => {
+      let meta: any = {};
+      try {
+        meta = m.notes ? JSON.parse(m.notes) : {};
+      } catch {}
+
+      const isIncome = meta.is_personal_income || m.doc_no === "SAHSI_GELIR" || meta.category === "kira" || meta.category === "kar_dagitimi";
+
+      if (isIncome) {
+        sahsiGelir += Number(m.amount) || 0;
+      } else if (m.direction === "partner_to_company") {
+        verdi += Number(m.amount) || 0;
+      } else {
+        aldi += Number(m.amount) || 0;
+      }
+    });
+
     const net = verdi - aldi;
 
-    if (net > 0) totalCompanyDebtToPartners += net;
-    if (net < 0) totalPartnersDebtToCompany += Math.abs(net);
-
-    // Kâr / Zarar kayıtları
-    pMovements.forEach((m) => {
-      try {
-        const meta = m.notes ? JSON.parse(m.notes) : {};
-        if (meta.is_profit_dist) totalProfitDistributed += Number(m.amount);
-        if (meta.is_loss_coverage) totalLossCovered += Number(m.amount);
-      } catch {}
-    });
+    totalCompanyDebtToPartners += verdi;
+    totalPartnersDebtToCompany += aldi;
+    totalPersonalIncome += sahsiGelir;
 
     return {
       partner: p,
       verdi,
       aldi,
+      sahsiGelir,
       net,
-      recentMovements: pMovements.slice(0, 3),
+      recentMovements: pMovements,
     };
   });
 
-  // P2P net hesaplama:
-  // Eğer iki ortak varsa (Ahmet ve Mehmet), aralarındaki P2P transferleri tara
-  let partnerAP2PNet = 0;
-  let partnerBP2PNet = 0;
+  // Ortaklar arası P2P hesaplama
+  const p2pRecords = movements.filter((m) => {
+    let meta: any = {};
+    try {
+      meta = m.notes ? JSON.parse(m.notes) : {};
+    } catch {}
+    return meta.is_p2p && m.doc_no === "P2P_GIVER";
+  });
 
-  if (partners.length >= 2) {
-    const pA = partners[0];
-    const pB = partners[1];
+  p2pRecords.forEach((m) => {
+    let meta: any = {};
+    try {
+      meta = m.notes ? JSON.parse(m.notes) : {};
+    } catch {}
+    if (partners.length >= 2) {
+      if (m.partner_id === partners[0].id) {
+        p2pAhmetToMehmet += Number(m.amount);
+      } else if (m.partner_id === partners[1].id) {
+        p2pAhmetToMehmet -= Number(m.amount);
+      }
+    }
+  });
 
-    movements.forEach((m) => {
-      try {
-        const meta = m.notes ? JSON.parse(m.notes) : {};
-        if (meta.is_p2p) {
-          if (meta.from_partner_id === pA.id && meta.to_partner_id === pB.id && m.doc_no === "P2P_GIVER") {
-            p2pAhmetToMehmet += Number(m.amount);
-          } else if (meta.from_partner_id === pB.id && meta.to_partner_id === pA.id && m.doc_no === "P2P_GIVER") {
-            p2pAhmetToMehmet -= Number(m.amount);
-          }
-        }
-      } catch {}
-    });
-
-    partnerAP2PNet = p2pAhmetToMehmet;
-    partnerBP2PNet = -p2pAhmetToMehmet;
-  }
+  const partnerAP2PNet = p2pAhmetToMehmet;
+  const partnerBP2PNet = -p2pAhmetToMehmet;
 
   return (
-    <div className="space-y-6 max-w-7xl">
+    <div className="space-y-6 max-w-6xl mx-auto pb-16">
       {/* Üst Başlık */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <div className="flex items-center gap-2.5">
-            <div className="p-2.5 bg-amber-500/10 text-amber-700 rounded-xl">
-              <Handshake size={24} />
-            </div>
-            <div>
-              <h1 className="text-xl font-black text-text">
-                Ortak Finans (Cari Hesaplar & Not Defteri)
-              </h1>
-              <p className="text-xs text-text-muted">
-                Ahmet ve Mehmet ortaklığına özel şahsi borçlar, borç sebepleri, kâr dağıtımı ve notlar.
-              </p>
-            </div>
-          </div>
+          <h1 className="text-xl font-bold text-text flex items-center gap-2">
+            <Handshake className="text-brand-navy" size={22} />
+            Ortak Finans (Cari Hesaplar)
+          </h1>
+          <p className="text-xs text-text-muted mt-0.5">
+            Ahmet & Mehmet — Firmaya verilen/alınan borçlar, şahsi kira & kâr gelirleri
+          </p>
         </div>
       </div>
 
-      {/* Finansal İzolasyon Güvence Rozeti */}
-      <div className="bg-gradient-to-r from-amber-50 via-amber-50/70 to-emerald-50/50 border border-amber-200/80 rounded-2xl p-4 flex items-start gap-3.5 shadow-2xs">
-        <ShieldCheck className="text-emerald-700 shrink-0 mt-0.5" size={20} />
-        <div className="text-xs text-amber-950 leading-relaxed">
-          <span className="font-bold text-emerald-900">
-            %100 Bağımsız Finansal İzolasyon Garantisi:
-          </span>{" "}
-          Bu alanda eklenen kâr/zarar, borç verme/alma ve ortak notları tamamen Ahmet ve Mehmet&apos;in
-          şahsi takibine aittir. Firmanın genel cirosunu, günlük satış tahsilatlarını veya kasa
-          defterini <strong>kesinlikle etkilemez</strong>.
-        </div>
-      </div>
-
-      {/* ÜST KPI KARTLARI (Şık Yönetici Özeti) */}
+      {/* 4 ÖZET KART */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Kart 1: Firmanın Ortaklara Toplam Borcu */}
         <div className="bg-white p-5 rounded-2xl border border-border shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-text-muted mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">
-              Firmanın Ortaklara Borcu
+            <span className="text-xs font-bold uppercase tracking-wider text-emerald-800">
+              Firmaya Verilen Borç
             </span>
             <div className="p-2 bg-emerald-50 text-emerald-700 rounded-xl">
-              <Building2 size={16} />
+              <ArrowUpRight size={16} />
             </div>
           </div>
           <div>
-            <div className="text-xl font-black text-emerald-700 tabular-nums">
+            <div className="text-xl font-black text-emerald-800 tabular-nums">
               {formatCurrency(totalCompanyDebtToPartners)}
             </div>
             <p className="text-[11px] text-text-muted mt-1">
-              Ortakların firmaya verdiği net alacak toplamı
+              Ortakların cebinden firmaya koyduğu toplam tutar
             </p>
           </div>
         </div>
 
-        {/* Kart 2: Ortakların Firmaya Borcu */}
+        {/* Kart 2: Ortakların Firmaya Toplam Borcu */}
         <div className="bg-white p-5 rounded-2xl border border-border shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-text-muted mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">
-              Ortakların Firmaya Borcu
+            <span className="text-xs font-bold uppercase tracking-wider text-rose-800">
+              Firmadan Alınan Borç
             </span>
             <div className="p-2 bg-rose-50 text-rose-700 rounded-xl">
-              <Users2 size={16} />
+              <ArrowDownLeft size={16} />
             </div>
           </div>
           <div>
-            <div className="text-xl font-black text-rose-700 tabular-nums">
+            <div className="text-xl font-black text-rose-800 tabular-nums">
               {formatCurrency(totalPartnersDebtToCompany)}
             </div>
             <p className="text-[11px] text-text-muted mt-1">
@@ -243,11 +230,31 @@ export default async function OrtakCariPage() {
           </div>
         </div>
 
-        {/* Kart 3: Ortaklar Arası Şahsi Borçlaşma (Ahmet ↔ Mehmet) */}
+        {/* Kart 3: Şahsi Gelir & Kâr Toplamı (Kira vb.) */}
+        <div className="bg-purple-50/70 p-5 rounded-2xl border border-purple-200 shadow-xs flex flex-col justify-between">
+          <div className="flex items-center justify-between text-purple-950 mb-2">
+            <span className="text-xs font-bold uppercase tracking-wider text-purple-900">
+              Şahsi Gelir / Kira
+            </span>
+            <div className="p-2 bg-purple-100 text-purple-700 rounded-xl">
+              <Gem size={16} />
+            </div>
+          </div>
+          <div>
+            <div className="text-xl font-black text-purple-950 tabular-nums">
+              {formatCurrency(totalPersonalIncome)}
+            </div>
+            <p className="text-[11px] text-purple-800/90 mt-1 font-medium">
+              Ortakların elde ettiği kira & şahsi kâr kazancı
+            </p>
+          </div>
+        </div>
+
+        {/* Kart 4: Ortaklar Arası Şahsi Borçlaşma (Ahmet ↔ Mehmet) */}
         <div className="bg-white p-5 rounded-2xl border border-border shadow-xs flex flex-col justify-between">
           <div className="flex items-center justify-between text-text-muted mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">
-              Ortaklar Arası Şahsi Bakiye
+            <span className="text-xs font-bold uppercase tracking-wider text-cyan-800">
+              Ortaklar Arası Bakiye
             </span>
             <div className="p-2 bg-cyan-50 text-cyan-700 rounded-xl">
               <ArrowRightLeft size={16} />
@@ -272,26 +279,6 @@ export default async function OrtakCariPage() {
             </p>
           </div>
         </div>
-
-        {/* Kart 4: Bağımsız Kâr / Zarar & Not Havuzu */}
-        <div className="bg-white p-5 rounded-2xl border border-border shadow-xs flex flex-col justify-between">
-          <div className="flex items-center justify-between text-text-muted mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">
-              Bağımsız Kâr / Zarar
-            </span>
-            <div className="p-2 bg-purple-50 text-purple-700 rounded-xl">
-              <TrendingUp size={16} />
-            </div>
-          </div>
-          <div>
-            <div className="text-xl font-black text-purple-900 tabular-nums">
-              {formatCurrency(totalProfitDistributed)}
-            </div>
-            <p className="text-[11px] text-text-muted mt-1">
-              Paylaşılan kâr ({rawNotes.filter((n) => !n.is_completed).length} aktif not)
-            </p>
-          </div>
-        </div>
       </div>
 
       {/* ORTAK PROFİL KARTLARI (Ahmet ve Mehmet) */}
@@ -308,6 +295,7 @@ export default async function OrtakCariPage() {
               partners={partners}
               verdi={pm.verdi}
               aldi={pm.aldi}
+              sahsiGelir={pm.sahsiGelir}
               net={pm.net}
               p2pNet={p2pNet}
               otherPartnerName={other?.name}

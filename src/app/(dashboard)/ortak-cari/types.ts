@@ -1,6 +1,7 @@
 export type PartnerMovementType =
-  | "partner_to_company" // Ortağın Firmaya Borç Vermesi
-  | "company_to_partner" // Firmanın Ortağa Borç Ödemesi / Avans
+  | "partner_to_company" // Firmaya Verdiği (Ortağın Firmaya Borç / Sermaye Vermesi)
+  | "company_to_partner" // Firmadan Aldığı (Firmanın Ortağa Avans / Borç Vermesi)
+  | "sahsi_gelir"        // Şahsi Gelir & Kâr (Kira geliri, kâr payı, hak ediş vb.)
   | "partner_to_partner" // Ortaklar Arası Şahsi Borç (Ahmet ↔ Mehmet)
   | "profit_distribution" // Bağımsız Kâr Payı Dağıtımı
   | "loss_coverage"; // Bağımsız Zarar / Sermaye Karşılama
@@ -15,32 +16,18 @@ export interface MovementCategoryDef {
 
 export const MOVEMENT_CATEGORIES: MovementCategoryDef[] = [
   {
-    key: "akaryakit",
-    label: "Akaryakıt & Araç",
-    icon: "Fuel",
-    color: "amber",
-    description: "Mazot, benzin, araç bakımı, lastik masrafları",
-  },
-  {
-    key: "malzeme",
-    label: "Acil Malzeme Alımı",
-    icon: "Boxes",
-    color: "blue",
-    description: "Toptancıya nakit ödeme, seramik, yapıştırıcı, profil",
-  },
-  {
     key: "kira",
-    label: "Kira & Fatura & Harç",
+    label: "Kira Geliri (Dükkan / Mülk)",
     icon: "Building2",
     color: "purple",
-    description: "Dükkan/depo kirası, elektrik, su, resmi harçlar",
+    description: "Mülklerden veya dükkandan gelen kira ödemesi",
   },
   {
-    key: "personel",
-    label: "Usta & Personel & Nakliye",
-    icon: "Users2",
-    color: "indigo",
-    description: "İşçilik, şantiye ustası, vinç, tır nakliyesi",
+    key: "kar_dagitimi",
+    label: "Şahsi Kâr Payı & Hak Ediş",
+    icon: "TrendingUp",
+    color: "teal",
+    description: "Dönem kârından veya projeden ortaklara düşen kâr payı",
   },
   {
     key: "sermaye",
@@ -50,25 +37,32 @@ export const MOVEMENT_CATEGORIES: MovementCategoryDef[] = [
     description: "Kasaya nakit aktarımı, işletme sermayesi desteği",
   },
   {
+    key: "malzeme",
+    label: "Acil Malzeme Alımı",
+    icon: "Boxes",
+    color: "blue",
+    description: "Toptancıya nakit ödeme, seramik, yapıştırıcı, profil",
+  },
+  {
+    key: "akaryakit",
+    label: "Akaryakıt & Araç",
+    icon: "Fuel",
+    color: "amber",
+    description: "Mazot, benzin, araç bakımı, lastik masrafları",
+  },
+  {
     key: "sahsi_avans",
-    label: "Şahsi Borç / Avans",
+    label: "Şahsi Çekim / Avans",
     icon: "Wallet",
     color: "rose",
     description: "Ortağın şahsi harcaması veya kasadan çektiği avans",
   },
   {
-    key: "kar_dagitimi",
-    label: "Bağımsız Kâr Dağıtımı",
-    icon: "TrendingUp",
-    color: "teal",
-    description: "Dönem sonu ortaklar arası bağımsız kâr payı paylaşımı",
-  },
-  {
-    key: "zarar_karsilama",
-    label: "Zarar / Masraf Karşılama",
-    icon: "TrendingDown",
-    color: "orange",
-    description: "Ortaklarca cepten karşılanan zarar veya masraf",
+    key: "personel",
+    label: "Usta & Personel & Nakliye",
+    icon: "Users2",
+    color: "indigo",
+    description: "İşçilik, şantiye ustası, vinç, tır nakliyesi",
   },
   {
     key: "ortaklar_arasi",
@@ -82,7 +76,7 @@ export const MOVEMENT_CATEGORIES: MovementCategoryDef[] = [
     label: "Diğer / Özel Sebep",
     icon: "FileText",
     color: "gray",
-    description: "Belirtilmeyen diğer borç ve alacak hareketleri",
+    description: "Belirtilmeyen diğer gelir, borç ve alacak hareketleri",
   },
 ];
 
