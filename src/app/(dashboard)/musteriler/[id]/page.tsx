@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import Link from "next/link";
-import { toggleCustomerActive } from "../actions";
+import { CustomerDetailActions } from "../CustomerDetailActions";
 
 export default async function MusteriDetayPage({
   params,
@@ -53,13 +53,7 @@ export default async function MusteriDetayPage({
             {customer.type === "kurumsal" ? "Kurumsal Müşteri" : "Bireysel Müşteri"} | {customer.is_active ? 'Aktif' : 'Pasif'}
           </p>
         </div>
-        <div className="flex gap-2">
-          <form action={async () => { "use server"; await toggleCustomerActive(customer.id, !customer.is_active); }}>
-            <button type="submit" className="bg-brand-red text-white px-4 py-2 rounded-lg text-sm font-semibold hover:bg-red-800 transition">
-              {customer.is_active ? 'Pasife Al' : 'Aktife Al'}
-            </button>
-          </form>
-        </div>
+        <CustomerDetailActions customer={customer} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

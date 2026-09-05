@@ -1,6 +1,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { CustomerRowActions } from "./CustomerRowActions";
 
 export default async function MusterilerPage({
   searchParams,
@@ -115,9 +116,7 @@ export default async function MusterilerPage({
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <Link href={`/musteriler/${c.id}`} className="text-brand-navy hover:underline">
-                      Görüntüle
-                    </Link>
+                    <CustomerRowActions customer={c} />
                   </td>
                 </tr>
               ))

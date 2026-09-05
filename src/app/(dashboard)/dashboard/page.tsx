@@ -9,6 +9,7 @@ import {
   Clock,
   Package,
 } from "lucide-react";
+import { DashboardCharts } from "./DashboardCharts";
 
 interface DashboardKPI {
   today_revenue: number;
@@ -58,15 +59,42 @@ export default async function DashboardPage() {
   } as never);
   const kpi = kpiData as DashboardKPI | null;
 
-  // Son satışlar
+  // Completed sales with items for charts
+  const { data: salesData } = await supabase
+    .from("sales")
+    .select("id, grand_total, net_total, sale_date, created_at, status, items:sale_items(product_name_snapshot, unit_snapshot, quantity, line_total, line_cost_total)")
+    .eq("company_id", profile.company_id)
+    .order("created_at", { ascending: false })
+    .limit(100);
+
+  const allSales = (salesData ?? []) as any[];
+
+  // Partners with ledger for finance balance
+  const { data: partnersData } = await supabase
+    .from("partners")
+    .select("id, name, phone, ledger:partner_ledger(direction, amount)")
+    .eq("company_id", profile.company_id)
+    .eq("is_active", true);
+
+  const partners = (partnersData ?? []) as any[];
+
+  // Financial transactions for profit/loss calculation
+  const { data: financialsData } = await supabase
+    .from("financial_transactions")
+    .select("transaction_type, amount, category")
+    .eq("company_id", profile.company_id)
+    .limit(200);
+
+  const financials = (financialsData ?? []) as any[];
+
+  // Son satışlar (widget)
   const { data: recentSalesData } = await supabase
     .from("sales")
     .select(
       "id, sale_code, grand_total, sale_date, payment_status, customer_snapshot"
     )
     .eq("company_id", profile.company_id)
-    .eq("status", "completed")
-    .order("completed_at", { ascending: false })
+    .order("created_at", { ascending: false })
     .limit(5);
 
   const recentSales = (recentSalesData ?? []) as Array<{
@@ -78,7 +106,7 @@ export default async function DashboardPage() {
     customer_snapshot: { company_name?: string; contact_name?: string } | null;
   }>;
 
-  // Son teklifler
+  // Son teklifler (widget)
   const { data: recentQuotesData } = await supabase
     .from("quotes")
     .select(
@@ -166,6 +194,7 @@ export default async function DashboardPage() {
       label: "Satışa Döndü",
       cls: "bg-purple-100 text-purple-700",
     },
+    completed: { label: "Tamamlandı", cls: "bg-green-100 text-green-700" },
     cancelled: { label: "İptal", cls: "bg-gray-100 text-gray-500" },
     paid: { label: "Ödendi", cls: "bg-green-100 text-green-700" },
     partial: { label: "Kısmi", cls: "bg-yellow-100 text-yellow-700" },
@@ -173,13 +202,15 @@ export default async function DashboardPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 max-w-7xl mx-auto pb-12">
       {/* Başlık */}
-      <div>
-        <h1 className="text-xl font-bold text-text">Dashboard</h1>
-        <p className="text-sm text-text-muted mt-0.5">
-          Hoş geldiniz, {profile.full_name || "Kullanıcı"}
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-xl font-bold text-text">Operasyon Paneli</h1>
+          <p className="text-xs text-text-muted mt-0.5">
+            Hoş geldiniz, <strong className="text-text">{profile.full_name || "Yönetici"}</strong> • Çamoluk Yapı
+          </p>
+        </div>
       </div>
 
       {/* KPI Kartları */}
@@ -189,7 +220,7 @@ export default async function DashboardPage() {
           return (
             <div
               key={card.label}
-              className="bg-white rounded-xl border border-border p-5 flex items-start gap-4"
+              className="bg-white rounded-xl border border-border p-5 flex items-start gap-4 shadow-xs"
             >
               <div className={`${card.bg} p-2.5 rounded-lg flex-shrink-0`}>
                 <Icon size={20} className={card.color} />
@@ -205,15 +236,22 @@ export default async function DashboardPage() {
         })}
       </div>
 
+      {/* Graphical Dashboard & Analytics Charts */}
+      <DashboardCharts
+        sales={allSales}
+        partners={partners}
+        financials={financials}
+      />
+
       {/* Son Satışlar + Son Teklifler */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Son Satışlar */}
-        <div className="bg-white rounded-xl border border-border">
+        <div className="bg-white rounded-2xl border border-border shadow-xs">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <h2 className="font-semibold text-text text-sm">Son Satışlar</h2>
+            <h2 className="font-bold text-text text-sm">Son Satışlar</h2>
             <a
               href="/satislar"
-              className="text-xs text-brand-gold hover:underline"
+              className="text-xs text-brand-gold hover:underline font-semibold"
             >
               Tümü →
             </a>
@@ -233,19 +271,19 @@ export default async function DashboardPage() {
                     className="flex items-center px-5 py-3 hover:bg-surface transition gap-3"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-text truncate">
+                      <p className="text-sm font-semibold text-text truncate">
                         {sale.customer_snapshot?.company_name ||
                           sale.customer_snapshot?.contact_name ||
-                          "Müşterisiz"}
+                          "Perakende Müşteri"}
                       </p>
-                      <p className="text-xs text-text-muted">{sale.sale_code}</p>
+                      <p className="text-xs text-text-muted font-mono">{sale.sale_code}</p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-semibold text-text tabular-nums">
+                      <p className="text-sm font-bold text-text tabular-nums">
                         {formatCurrency(sale.grand_total)}
                       </p>
                       <span
-                        className={`text-xs px-1.5 py-0.5 rounded-full ${status.cls}`}
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${status.cls}`}
                       >
                         {status.label}
                       </span>
@@ -254,20 +292,20 @@ export default async function DashboardPage() {
                 );
               })
             ) : (
-              <div className="px-5 py-8 text-center text-sm text-text-muted">
-                Henüz satış yok.
+              <div className="px-5 py-8 text-center text-xs text-text-muted">
+                Henüz satış kaydı yok.
               </div>
             )}
           </div>
         </div>
 
         {/* Son Teklifler */}
-        <div className="bg-white rounded-xl border border-border">
+        <div className="bg-white rounded-2xl border border-border shadow-xs">
           <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-            <h2 className="font-semibold text-text text-sm">Son Teklifler</h2>
+            <h2 className="font-bold text-text text-sm">Son Teklifler</h2>
             <a
               href="/teklifler"
-              className="text-xs text-brand-gold hover:underline"
+              className="text-xs text-brand-gold hover:underline font-semibold"
             >
               Tümü →
             </a>
@@ -287,7 +325,7 @@ export default async function DashboardPage() {
                     className="flex items-center px-5 py-3 hover:bg-surface transition gap-3"
                   >
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-text truncate">
+                      <p className="text-sm font-semibold text-text truncate">
                         {quote.customer_snapshot?.company_name ||
                           quote.customer_snapshot?.contact_name ||
                           "Müşterisiz"}
@@ -297,11 +335,11 @@ export default async function DashboardPage() {
                       </p>
                     </div>
                     <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-semibold text-text tabular-nums">
+                      <p className="text-sm font-bold text-text tabular-nums">
                         {formatCurrency(quote.grand_total)}
                       </p>
                       <span
-                        className={`text-xs px-1.5 py-0.5 rounded-full ${status.cls}`}
+                        className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${status.cls}`}
                       >
                         {status.label}
                       </span>
@@ -310,7 +348,7 @@ export default async function DashboardPage() {
                 );
               })
             ) : (
-              <div className="px-5 py-8 text-center text-sm text-text-muted">
+              <div className="px-5 py-8 text-center text-xs text-text-muted">
                 Henüz teklif yok.
               </div>
             )}

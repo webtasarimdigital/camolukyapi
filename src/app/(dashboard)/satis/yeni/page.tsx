@@ -15,10 +15,31 @@ export default async function NewSalePage() {
   const profile = profileData as { company_id: string; full_name: string } | null;
   if (!profile?.company_id) redirect("/login");
 
+  // Fetch active customers
+  const { data: customersData } = await supabase
+    .from("customers")
+    .select("id, company_name, contact_name, phone, type, tax_office, tax_number, address")
+    .eq("company_id", profile.company_id)
+    .eq("is_active", true)
+    .order("company_name", { ascending: true });
+
+  // Fetch active products
+  const { data: productsData } = await supabase
+    .from("products")
+    .select("id, product_code, product_name, unit, default_sale_price, cost_price, stock_qty, product_group")
+    .eq("company_id", profile.company_id)
+    .eq("is_active", true)
+    .is("deleted_at", null)
+    .order("product_name", { ascending: true })
+    .limit(200);
+
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-text">Yeni Satış</h1>
-      <SaleForm creatorName={profile.full_name} />
+      <SaleForm
+        customers={customersData || []}
+        products={productsData || []}
+        creatorName={profile.full_name || "Yetkili"}
+      />
     </div>
   );
 }

@@ -192,6 +192,149 @@ export async function voidPartnerMovement(id: string, reason: string) {
   revalidatePath("/ortak-cari");
 }
 
+export async function updatePartnerMovement(id: string, formData: FormData) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data: profileData } = await supabase
+    .from("profiles")
+    .select("company_id, role")
+    .eq("id", user.id)
+    .single();
+  const profile = profileData as { company_id: string; role: string } | null;
+  if (!profile?.company_id || profile.role !== "admin") throw new Error("Unauthorized");
+
+  const amount = Math.abs(parseFloat(formData.get("amount") as string));
+  const transaction_date = (formData.get("transaction_date") as string) || new Date().toISOString().split("T")[0];
+  const category = (formData.get("category") as string) || "diger";
+  const reason = (formData.get("reason") as string) || "Cari Hareket";
+  const customNotes = (formData.get("notes") as string) || "";
+
+  if (isNaN(amount) || amount <= 0) {
+    throw new Error("Lütfen geçerli bir tutar girin.");
+  }
+
+  // Mevcut hareketi çek
+  const { data: currentMovData } = await supabase
+    .from("partner_ledger")
+    .select("*")
+    .eq("id", id)
+    .eq("company_id", profile.company_id)
+    .single();
+
+  const currentMov = currentMovData as any;
+  if (!currentMov) throw new Error("Kayıt bulunamadı.");
+
+  let meta: any = {};
+  try {
+    meta = currentMov.notes ? JSON.parse(currentMov.notes) : {};
+  } catch {}
+
+  meta.category = category;
+  meta.custom_notes = customNotes;
+
+  const updatedNotes = JSON.stringify(meta);
+
+  // Güncelle
+  const { error } = await supabase
+    .from("partner_ledger")
+    .update({
+      amount,
+      transaction_date,
+      reason,
+      notes: updatedNotes,
+    } as never)
+    .eq("id", id)
+    .eq("company_id", profile.company_id);
+
+  if (error) throw error;
+
+  // Eğer P2P hareketi ise eşleşen diğer kaydı da güncelle
+  if (meta.is_p2p && (currentMov.doc_no === "P2P_GIVER" || currentMov.doc_no === "P2P_RECEIVER")) {
+    const pairDoc = currentMov.doc_no === "P2P_GIVER" ? "P2P_RECEIVER" : "P2P_GIVER";
+    const pairPartnerId = currentMov.doc_no === "P2P_GIVER" ? meta.to_partner_id : meta.from_partner_id;
+
+    if (pairPartnerId) {
+      await supabase
+        .from("partner_ledger")
+        .update({
+          amount,
+          transaction_date,
+          reason: currentMov.doc_no === "P2P_GIVER" 
+            ? `[Şahsi Borç Alındı] ${reason.replace("[Şahsi Borç Verildi] ", "")}`
+            : `[Şahsi Borç Verildi] ${reason.replace("[Şahsi Borç Alındı] ", "")}`,
+          notes: updatedNotes,
+        } as never)
+        .eq("company_id", profile.company_id)
+        .eq("partner_id", pairPartnerId)
+        .eq("doc_no", pairDoc)
+        .eq("amount", currentMov.amount);
+    }
+  }
+
+  revalidatePath("/ortak-cari");
+  revalidatePath(`/ortak-cari/${currentMov.partner_id}`);
+  return { success: true };
+}
+
+export async function deletePartnerMovement(id: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data: profileData } = await supabase
+    .from("profiles")
+    .select("company_id, role")
+    .eq("id", user.id)
+    .single();
+  const profile = profileData as { company_id: string; role: string } | null;
+  if (!profile?.company_id || profile.role !== "admin") throw new Error("Unauthorized");
+
+  const { data: currentMovData } = await supabase
+    .from("partner_ledger")
+    .select("*")
+    .eq("id", id)
+    .eq("company_id", profile.company_id)
+    .single();
+
+  const currentMov = currentMovData as any;
+  if (!currentMov) throw new Error("Kayıt bulunamadı.");
+
+  let meta: any = {};
+  try {
+    meta = currentMov.notes ? JSON.parse(currentMov.notes) : {};
+  } catch {}
+
+  // P2P ise eş kaydı da sil
+  if (meta.is_p2p && (currentMov.doc_no === "P2P_GIVER" || currentMov.doc_no === "P2P_RECEIVER")) {
+    const pairDoc = currentMov.doc_no === "P2P_GIVER" ? "P2P_RECEIVER" : "P2P_GIVER";
+    const pairPartnerId = currentMov.doc_no === "P2P_GIVER" ? meta.to_partner_id : meta.from_partner_id;
+
+    if (pairPartnerId) {
+      await supabase
+        .from("partner_ledger")
+        .delete()
+        .eq("company_id", profile.company_id)
+        .eq("partner_id", pairPartnerId)
+        .eq("doc_no", pairDoc)
+        .eq("amount", currentMov.amount);
+    }
+  }
+
+  const { error } = await supabase
+    .from("partner_ledger")
+    .delete()
+    .eq("id", id)
+    .eq("company_id", profile.company_id);
+
+  if (error) throw error;
+
+  revalidatePath("/ortak-cari");
+  revalidatePath(`/ortak-cari/${currentMov.partner_id}`);
+  return { success: true };
+}
+
 /**
  * Ortaklar Arası Özel Not Ekleme (Projeden Bağımsız Defter)
  */

@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowUpRight, ArrowDownLeft, Trash2, Tag, Handshake, Trendin
 import { voidPartnerMovement } from "../actions";
 import { MOVEMENT_CATEGORIES } from "../types";
 import { PartnerDetailActions } from "../PartnerDetailActions";
+import { MovementRowActions } from "../MovementRowActions";
 
 export default async function OrtakDetayPage({
   params,
@@ -241,21 +242,10 @@ export default async function OrtakDetayPage({
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right whitespace-nowrap">
-                      {!isVoided && (
-                        <form
-                          action={async () => {
-                            "use server";
-                            await voidPartnerMovement(m.id, "Kullanıcı tarafından iptal edildi");
-                          }}
-                        >
-                          <button
-                            type="submit"
-                            title="Hareketi İptal Et"
-                            className="text-text-muted hover:text-rose-600 text-xs p-1.5 rounded-lg hover:bg-rose-50 transition"
-                          >
-                            <Trash2 size={15} />
-                          </button>
-                        </form>
+                      {!isVoided ? (
+                        <MovementRowActions movement={m} partnerName={partner.name} />
+                      ) : (
+                        <span className="text-[10px] text-text-muted bg-gray-100 px-2 py-0.5 rounded-full">İptal Edildi</span>
                       )}
                     </td>
                   </tr>
