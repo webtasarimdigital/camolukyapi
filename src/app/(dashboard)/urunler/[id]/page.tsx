@@ -3,15 +3,19 @@
 import Link from 'next/link';
 import { updateProduct, deactivateProduct } from '../actions';
 import { toast } from 'sonner';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
+import { Loader2, CheckCircle2, Trash2 } from 'lucide-react';
 
 export default function DuzenleUrunPage() {
   const routeParams = useParams();
+  const router = useRouter();
   const id = routeParams?.id as string;
   const [product, setProduct] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const supabase = createClient();
 
   useEffect(() => {
@@ -28,20 +32,30 @@ export default function DuzenleUrunPage() {
     loadProduct();
   }, [id]);
 
-  async function handleSubmit(formData: FormData) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSaving(true);
+    const formData = new FormData(e.currentTarget);
     try {
       await updateProduct(id, formData);
+      toast.success('Ürün başarıyla güncellendi!');
+      router.push('/urunler');
     } catch (error: any) {
       toast.error('Hata: ' + error.message);
+      setSaving(false);
     }
   }
 
   async function handleDelete() {
     if (confirm('Bu ürünü silmek istediğinize emin misiniz?')) {
+      setDeleting(true);
       try {
         await deactivateProduct(id);
+        toast.success('Ürün silindi.');
+        router.push('/urunler');
       } catch (error: any) {
         toast.error('Hata: ' + error.message);
+        setDeleting(false);
       }
     }
   }
@@ -58,12 +72,25 @@ export default function DuzenleUrunPage() {
           </Link>
           <h1 className="text-xl font-bold text-text">Ürün Düzenle</h1>
         </div>
-        <button type="button" onClick={handleDelete} className="bg-brand-red text-white px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90">
-          Sil
+        <button
+          type="button"
+          disabled={deleting || saving}
+          onClick={handleDelete}
+          className="bg-brand-red text-white px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition flex items-center gap-1.5 disabled:opacity-50"
+        >
+          {deleting ? (
+            <>
+              <Loader2 size={14} className="animate-spin" /> Siliniyor...
+            </>
+          ) : (
+            <>
+              <Trash2 size={14} /> Ürünü Sil
+            </>
+          )}
         </button>
       </div>
 
-      <form action={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl border border-border">
+      <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl border border-border">
         {/* Temel Bilgiler */}
         <section>
           <h2 className="text-lg font-semibold mb-4">Temel Bilgiler</h2>
@@ -165,11 +192,25 @@ export default function DuzenleUrunPage() {
         </section>
 
         <div className="flex justify-end gap-3 pt-4 border-t border-border">
-          <Link href="/urunler" className="px-4 py-2 text-sm font-medium text-text-muted hover:text-text">
+          <Link href="/urunler" className="px-4 py-2.5 text-sm font-medium text-text-muted hover:text-text rounded-lg">
             İptal
           </Link>
-          <button type="submit" className="bg-brand-gold text-brand-navy px-6 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition">
-            Güncelle
+          <button
+            type="submit"
+            disabled={saving || deleting}
+            className="bg-brand-gold text-brand-navy px-6 py-2.5 rounded-lg text-sm font-bold hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50 shadow-xs"
+          >
+            {saving ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                <span>Güncelleniyor...</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={16} />
+                <span>Güncelle ve Kaydet</span>
+              </>
+            )}
           </button>
         </div>
       </form>

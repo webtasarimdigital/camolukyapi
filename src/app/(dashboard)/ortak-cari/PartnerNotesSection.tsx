@@ -486,14 +486,18 @@ export function PartnerNotesSection({
                 <button
                   type="submit"
                   disabled={submitting}
-                  className="px-5 py-2 rounded-xl text-xs font-bold bg-brand-navy hover:bg-brand-navy-2 text-white flex items-center gap-1.5 transition disabled:opacity-50"
+                  className="px-5 py-2.5 rounded-xl text-xs font-bold bg-brand-navy hover:bg-brand-navy-2 text-white flex items-center gap-2 transition disabled:opacity-50 shadow-sm"
                 >
                   {submitting ? (
                     <>
-                      <Loader2 size={13} className="animate-spin" /> Kaydediliyor...
+                      <Loader2 size={15} className="animate-spin text-brand-gold" />
+                      <span>Kaydediliyor...</span>
                     </>
                   ) : (
-                    "Notu Kaydet"
+                    <>
+                      <CheckCircle2 size={15} />
+                      <span>Notu Kaydet</span>
+                    </>
                   )}
                 </button>
               </div>

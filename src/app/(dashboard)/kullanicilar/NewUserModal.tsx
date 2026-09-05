@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { toast } from 'sonner';
+import { Loader2, UserPlus } from 'lucide-react';
 
 export default function NewUserModal({ companyId }: { companyId: string }) {
   const [isOpen, setIsOpen] = useState(false);
@@ -62,8 +63,22 @@ export default function NewUserModal({ companyId }: { companyId: string }) {
           
           <div className="flex justify-end gap-3 pt-4 mt-4 border-t border-border">
             <button type="button" onClick={() => setIsOpen(false)} className="px-4 py-2 text-sm font-medium text-text-muted">İptal</button>
-            <button type="submit" disabled={loading} className="bg-brand-gold text-brand-navy px-4 py-2 rounded-lg text-sm font-semibold">
-              {loading ? 'Ekleniyor...' : 'Ekle'}
+            <button
+              type="submit"
+              disabled={loading}
+              className="bg-brand-gold text-brand-navy px-5 py-2.5 rounded-lg text-sm font-bold flex items-center gap-2 transition hover:opacity-90 disabled:opacity-50 shadow-xs"
+            >
+              {loading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Kullanıcı Ekleniyor...</span>
+                </>
+              ) : (
+                <>
+                  <UserPlus size={16} />
+                  <span>Kullanıcı Ekle</span>
+                </>
+              )}
             </button>
           </div>
         </form>

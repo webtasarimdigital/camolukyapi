@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/formatters";
 import { calculateLine, calculateTotals } from "@/lib/calculations";
 import { saveQuote } from "./actions";
+import { Loader2, FileCheck, Printer } from "lucide-react";
 
 interface QuoteLineItem {
   id: string;
@@ -256,11 +257,41 @@ export function QuoteForm({ creatorName, defaultSettings }: { creatorName: strin
       </div>
 
       <div className="flex justify-end gap-4">
-        <button onClick={() => handleSave(false)} disabled={loading || items.length === 0} className="bg-surface text-brand-navy px-6 py-3 rounded-lg text-sm font-semibold border border-border hover:bg-gray-200 disabled:opacity-50">
-          {loading ? "Kaydediliyor..." : "Taslak Kaydet"}
+        <button
+          type="button"
+          onClick={() => handleSave(false)}
+          disabled={loading || items.length === 0}
+          className="bg-surface text-brand-navy px-6 py-3 rounded-lg text-sm font-semibold border border-border hover:bg-gray-200 transition disabled:opacity-50 flex items-center gap-2 shadow-2xs"
+        >
+          {loading ? (
+            <>
+              <Loader2 size={16} className="animate-spin" />
+              <span>Kaydediliyor...</span>
+            </>
+          ) : (
+            <>
+              <FileCheck size={16} />
+              <span>Taslak Kaydet</span>
+            </>
+          )}
         </button>
-        <button onClick={() => handleSave(true)} disabled={loading || items.length === 0} className="bg-brand-gold text-brand-navy px-6 py-3 rounded-lg text-sm font-semibold hover:bg-brand-gold-light disabled:opacity-50">
-          {loading ? "Kaydediliyor..." : "Kaydet ve Yazdır"}
+        <button
+          type="button"
+          onClick={() => handleSave(true)}
+          disabled={loading || items.length === 0}
+          className="bg-brand-gold text-brand-navy px-6 py-3 rounded-lg text-sm font-bold hover:bg-brand-gold-light transition disabled:opacity-50 flex items-center gap-2 shadow-sm"
+        >
+          {loading ? (
+            <>
+              <Loader2 size={16} className="animate-spin" />
+              <span>Kaydediliyor...</span>
+            </>
+          ) : (
+            <>
+              <Printer size={16} />
+              <span>Kaydet ve Yazdır</span>
+            </>
+          )}
         </button>
       </div>
     </div>

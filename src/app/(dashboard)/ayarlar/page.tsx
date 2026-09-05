@@ -5,11 +5,14 @@ import { updateCompanyInfo, updateQuoteSettings } from './actions';
 import { toast } from 'sonner';
 import { createClient } from '@/lib/supabase/client';
 import { useRouter } from 'next/navigation';
+import { Loader2, CheckCircle2 } from 'lucide-react';
 
 export default function AyarlarPage() {
   const [activeTab, setActiveTab] = useState('company');
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [companySaving, setCompanySaving] = useState(false);
+  const [quoteSaving, setQuoteSaving] = useState(false);
   const supabase = createClient();
   const router = useRouter();
 
@@ -20,13 +23,14 @@ export default function AyarlarPage() {
 
       const { data: profileData } = await supabase.from('profiles').select('company_id, role').eq('id', authData.user.id).single();
       const profile = profileData as { company_id: string; role: string } | null;
-      if (profile?.role !== 'admin') {
-        toast.error('Bu sayfaya erişim yetkiniz yok.');
+      if (!profile?.company_id || profile.role !== 'admin') {
+        toast.error('Bu sayfaya erişim yetkiniz yok');
         return router.push('/dashboard');
       }
 
       const { data: companyData } = await supabase.from('companies').select('*').eq('id', profile.company_id).single();
       const company = companyData as any;
+
       const { data: settingsData } = await supabase.from('company_settings').select('*').eq('company_id', profile.company_id).single();
       const settings = settingsData as any;
       
@@ -38,23 +42,29 @@ export default function AyarlarPage() {
 
   async function handleCompanySubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setCompanySaving(true);
     const formData = new FormData(e.currentTarget);
     try {
       await updateCompanyInfo(formData, data.company.id);
-      toast.success('Şirket bilgileri güncellendi');
+      toast.success('Şirket bilgileri başarıyla kaydedildi!');
     } catch (error: any) {
       toast.error('Hata: ' + error.message);
+    } finally {
+      setCompanySaving(false);
     }
   }
 
   async function handleQuoteSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    setQuoteSaving(true);
     const formData = new FormData(e.currentTarget);
     try {
       await updateQuoteSettings(formData, data.settings.id);
-      toast.success('Teklif ayarları güncellendi');
+      toast.success('Teklif ayarları başarıyla kaydedildi!');
     } catch (error: any) {
       toast.error('Hata: ' + error.message);
+    } finally {
+      setQuoteSaving(false);
     }
   }
 
@@ -98,7 +108,23 @@ export default function AyarlarPage() {
             </div>
           </div>
           <div className="flex justify-end pt-4">
-            <button type="submit" className="bg-brand-gold text-brand-navy px-6 py-2 rounded-lg text-sm font-semibold">Kaydet</button>
+            <button
+              type="submit"
+              disabled={companySaving}
+              className="bg-brand-gold text-brand-navy px-6 py-2.5 rounded-lg text-sm font-bold hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50 shadow-xs"
+            >
+              {companySaving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Kaydediliyor...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={16} />
+                  <span>Ayarları Kaydet</span>
+                </>
+              )}
+            </button>
           </div>
         </form>
       )}
@@ -128,7 +154,23 @@ export default function AyarlarPage() {
             </div>
           </div>
           <div className="flex justify-end pt-4">
-            <button type="submit" className="bg-brand-gold text-brand-navy px-6 py-2 rounded-lg text-sm font-semibold">Kaydet</button>
+            <button
+              type="submit"
+              disabled={quoteSaving}
+              className="bg-brand-gold text-brand-navy px-6 py-2.5 rounded-lg text-sm font-bold hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50 shadow-xs"
+            >
+              {quoteSaving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Kaydediliyor...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={16} />
+                  <span>Teklif Ayarlarını Kaydet</span>
+                </>
+              )}
+            </button>
           </div>
         </form>
       )}

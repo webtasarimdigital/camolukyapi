@@ -4,15 +4,24 @@ import Link from 'next/link';
 import { createProduct } from '../actions';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { Loader2, CheckCircle2 } from 'lucide-react';
 
 export default function YeniUrunPage() {
   const router = useRouter();
+  const [loading, setLoading] = useState(false);
 
-  async function handleSubmit(formData: FormData) {
+  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setLoading(true);
+    const formData = new FormData(e.currentTarget);
     try {
       await createProduct(formData);
+      toast.success('Ürün başarıyla kaydedildi!');
+      router.push('/urunler');
     } catch (error: any) {
       toast.error('Hata: ' + error.message);
+      setLoading(false);
     }
   }
 
@@ -25,7 +34,7 @@ export default function YeniUrunPage() {
         <h1 className="text-xl font-bold text-text">Yeni Ürün Ekle</h1>
       </div>
 
-      <form action={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl border border-border">
+      <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl border border-border">
         {/* Temel Bilgiler */}
         <section>
           <h2 className="text-lg font-semibold mb-4">Temel Bilgiler</h2>
@@ -127,11 +136,25 @@ export default function YeniUrunPage() {
         </section>
 
         <div className="flex justify-end gap-3 pt-4 border-t border-border">
-          <Link href="/urunler" className="px-4 py-2 text-sm font-medium text-text-muted hover:text-text">
+          <Link href="/urunler" className="px-4 py-2.5 text-sm font-medium text-text-muted hover:text-text rounded-lg">
             İptal
           </Link>
-          <button type="submit" className="bg-brand-gold text-brand-navy px-6 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition">
-            Kaydet
+          <button
+            type="submit"
+            disabled={loading}
+            className="bg-brand-gold text-brand-navy px-6 py-2.5 rounded-lg text-sm font-bold hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50 shadow-xs"
+          >
+            {loading ? (
+              <>
+                <Loader2 size={16} className="animate-spin" />
+                <span>Kaydediliyor...</span>
+              </>
+            ) : (
+              <>
+                <CheckCircle2 size={16} />
+                <span>Ürünü Kaydet</span>
+              </>
+            )}
           </button>
         </div>
       </form>

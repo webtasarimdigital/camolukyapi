@@ -38,6 +38,7 @@ yarn-error.log*
 
 # temp
 logo_source.png
+*.pdf
 camolukyapi_tmp/
 scripts/
 

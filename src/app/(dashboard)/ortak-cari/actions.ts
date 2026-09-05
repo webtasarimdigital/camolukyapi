@@ -30,6 +30,21 @@ export async function addPartnerMovement(formData: FormData) {
     throw new Error("Lütfen geçerli bir tutar girin.");
   }
 
+  // Çift tıklama ve mükerrer kayıt kontrolü (Son 15 saniyede aynı işlem girildiyse tekrar ekleme)
+  const fifteenSecAgo = new Date(Date.now() - 15000).toISOString();
+  const { data: recentDup } = await supabase
+    .from("partner_ledger")
+    .select("id")
+    .eq("company_id", profile.company_id)
+    .eq("partner_id", partner_id)
+    .eq("amount", amount)
+    .gte("created_at", fifteenSecAgo)
+    .limit(1);
+
+  if (recentDup && recentDup.length > 0) {
+    return { success: true, duplicateIgnored: true };
+  }
+
   // 1. Ortaklar Arası Şahsi Borç (Ahmet ↔ Mehmet)
   if (movement_type === "partner_to_partner" && target_partner_id && target_partner_id !== partner_id) {
     const p2pNotes = JSON.stringify({
@@ -144,6 +159,7 @@ export async function addPartnerMovement(formData: FormData) {
 
   revalidatePath("/ortak-cari");
   revalidatePath(`/ortak-cari/${partner_id}`);
+  return { success: true, duplicateIgnored: false };
 }
 
 export async function voidPartnerMovement(id: string, reason: string) {

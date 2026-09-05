@@ -1,7 +1,7 @@
 'use server';
 
 import { createClient } from '@/lib/supabase/server';
-import { redirect } from 'next/navigation';
+import { revalidatePath } from 'next/cache';
 import { parseCurrencyInput } from '@/lib/formatters';
 
 export async function createProduct(formData: FormData) {
@@ -50,7 +50,8 @@ export async function createProduct(formData: FormData) {
     throw new Error(error.message);
   }
 
-  redirect('/urunler');
+  revalidatePath('/urunler');
+  return { success: true };
 }
 
 export async function updateProduct(id: string, formData: FormData) {
@@ -80,12 +81,15 @@ export async function updateProduct(id: string, formData: FormData) {
     throw new Error(error.message);
   }
 
-  redirect('/urunler');
+  revalidatePath('/urunler');
+  revalidatePath(`/urunler/${id}`);
+  return { success: true };
 }
 
 export async function deactivateProduct(id: string) {
   const supabase = await createClient();
   const { error } = await supabase.from('products').update({ deleted_at: new Date().toISOString() } as never).eq('id', id);
   if (error) throw new Error(error.message);
-  redirect('/urunler');
+  revalidatePath('/urunler');
+  return { success: true };
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, ArrowUpRight, ArrowDownLeft, Trash2, Tag, Handshake, TrendingUp } from "lucide-react";
 import { voidPartnerMovement } from "../actions";
 import { MOVEMENT_CATEGORIES } from "../types";
+import { PartnerDetailActions } from "../PartnerDetailActions";
 
 export default async function OrtakDetayPage({
   params,
@@ -57,6 +58,14 @@ export default async function OrtakDetayPage({
 
   const allRecords = (rawData || []) as any[];
 
+  // Ortakları çek (modal için)
+  const { data: allPartnersData } = await supabase
+    .from("partners")
+    .select("id, name")
+    .eq("company_id", profile.company_id)
+    .order("created_at", { ascending: true });
+  const allPartners = (allPartnersData || []) as Array<{ id: string; name: string }>;
+
   // Yalnızca finansal hareketler (notlar hariç)
   const movements = allRecords.filter((m) => m.doc_no !== "NOTE");
 
@@ -73,7 +82,7 @@ export default async function OrtakDetayPage({
   return (
     <div className="space-y-6 max-w-6xl">
       {/* Üst Bar */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Link
             href="/ortak-cari"
@@ -90,6 +99,12 @@ export default async function OrtakDetayPage({
             </p>
           </div>
         </div>
+
+        {/* Yeni Hareket Ekle Butonu */}
+        <PartnerDetailActions
+          partners={allPartners}
+          currentPartnerId={partner.id}
+        />
       </div>
 
       {/* Bakiye Özeti Kartı */}
