@@ -5,7 +5,6 @@ import {
   ShoppingCart,
   FileText,
   Wallet,
-  AlertCircle,
   Clock,
   Package,
 } from "lucide-react";
@@ -86,6 +85,13 @@ export default async function DashboardPage() {
     .limit(200);
 
   const financials = (financialsData ?? []) as any[];
+
+  // Toplam kayıtlı ürün sayısı
+  const { count: productCount } = await supabase
+    .from("products")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", profile.company_id)
+    .is("deleted_at", null);
 
   // Son satışlar (widget)
   const { data: recentSalesData } = await supabase
@@ -170,16 +176,16 @@ export default async function DashboardPage() {
       bg: "bg-orange-50",
     },
     {
-      label: "Kritik Stok",
-      value: `${kpi?.critical_stock ?? 0} ürün`,
-      icon: AlertCircle,
-      color: "text-brand-red",
-      bg: "bg-red-50",
+      label: "Kayıtlı Ürün",
+      value: `${productCount ?? 0} ürün`,
+      icon: Package,
+      color: "text-teal-600",
+      bg: "bg-teal-50",
     },
     {
       label: "Yıllık Ciro",
       value: formatCurrency(kpi?.year_revenue ?? 0),
-      icon: Package,
+      icon: TrendingUp,
       color: "text-purple-600",
       bg: "bg-purple-50",
     },
