@@ -231,16 +231,24 @@ export default function ImportWizardPage() {
       formData.set("file", pdfFile);
 
       const res = await extractProductsFromPdf(formData);
+      if (!res.success) {
+        toast.error("PDF okunamadı: " + (res.error || "Ayrıştırma hatası"));
+        return;
+      }
+
       if (!res.products || res.products.length === 0) {
         toast.warning(
-          "PDF metninden otomatik fiyat satırı tespit edilemedi. Belgeyi arşiv olarak kaydetmek için 'Sadece Belge Olarak Arşivle' butonunu kullanabilirsiniz."
+          "PDF metninden otomatik ürün/fiyat satırı tespit edilemedi. Dosya taranmış resim olabilir. Belgeyi arşivlemek için 'Sadece Belge Olarak Arşivle' butonunu kullanabilirsiniz."
         );
       } else {
         setParsedRows(res.products);
         setSelectedSheet("PDF_PARSED");
         setActiveType("excel");
         setStep(2);
-        toast.success(`PDF içinden ${res.products.length} ürün ve fiyat bilgisi ayrıştırıldı!`);
+        const matchInfo = res.matchedWithExisting
+          ? ` (${res.matchedWithExisting} adet mevcut ürünümüz ile eşleşti)`
+          : "";
+        toast.success(`PDF içinden ${res.products.length} ürün ve fiyat ayrıştırıldı!${matchInfo}`);
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "PDF ayrıştırma hatası";
