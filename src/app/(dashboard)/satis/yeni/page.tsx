@@ -23,15 +23,15 @@ export default async function NewSalePage() {
     .eq("is_active", true)
     .order("company_name", { ascending: true });
 
-  // Fetch active products
+  // Fetch active products (all ceramic and catalog items)
   const { data: productsData } = await supabase
     .from("products")
-    .select("id, product_code, product_name, unit, default_sale_price, cost_price, stock_qty, product_group")
+    .select("id, product_code, product_name, unit, default_sale_price, cost_price, stock_qty, product_group, series_name, size, price_quality_1, price_quality_2, price_commercial")
     .eq("company_id", profile.company_id)
     .eq("is_active", true)
     .is("deleted_at", null)
     .order("product_name", { ascending: true })
-    .limit(200);
+    .limit(1000);
 
   return (
     <div className="space-y-6">

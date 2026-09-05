@@ -37,7 +37,7 @@ export default async function UrunlerPage({
     .range(from, to);
 
   if (q) {
-    query = query.or(`product_code.ilike.%${q}%,product_name.ilike.%${q}%,series_name.ilike.%${q}%`);
+    query = query.or(`product_code.ilike.%${q}%,product_name.ilike.%${q}%,series_name.ilike.%${q}%,size.ilike.%${q}%,product_group.ilike.%${q}%`);
   }
 
   const { data: rawProducts, count } = await query;
@@ -47,21 +47,26 @@ export default async function UrunlerPage({
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-text">Ürünler</h1>
-          <p className="text-sm text-text-muted">Tüm ürünlerinizi buradan yönetebilirsiniz.</p>
+          <div className="flex items-center gap-3">
+            <h1 className="text-xl font-bold text-text">Ürün Kataloğu</h1>
+            <span className="bg-brand-navy/10 text-brand-navy font-bold text-xs px-2.5 py-0.5 rounded-full">
+              Toplam {count ?? 0} Ürün
+            </span>
+          </div>
+          <p className="text-sm text-text-muted mt-0.5">PDF ve Excel katalog ürünleri ile manuel eklenen tüm ürünler</p>
         </div>
         <div className="flex gap-2">
           <Link
             href="/import"
-            className="bg-surface border border-border text-text px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-100 transition"
+            className="bg-surface border border-border text-text px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-100 transition flex items-center gap-1.5"
           >
-            Excel Yükle
+            📄 PDF / Excel Yükle
           </Link>
           <Link
             href="/urunler/yeni"
-            className="bg-brand-gold text-brand-navy px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition"
+            className="bg-brand-gold text-brand-navy px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition flex items-center gap-1.5"
           >
-            + Yeni Ürün
+            + Yeni Ürün Ekle
           </Link>
         </div>
       </div>
