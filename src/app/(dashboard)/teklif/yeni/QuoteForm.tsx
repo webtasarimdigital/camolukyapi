@@ -316,6 +316,7 @@ export function QuoteForm({
         warrantyTerms: "",
         returnTerms: "",
         notes,
+        creatorName,
       });
       toast.success("Teklif başarıyla kaydedildi!");
       if (print) {

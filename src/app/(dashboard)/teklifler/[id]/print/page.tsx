@@ -98,7 +98,9 @@ export default async function PrintQuotePage({
   const salesRepName = creator?.full_name || quote.creator_name || "Ahmet Duvarbaşı";
   const salesRepPhone = creator?.phone || company?.phone || "0555 997 29 14";
 
-  const qrIbanUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(primaryBank.iban || "")}`;
+  const currentOrigin = process.env.NEXT_PUBLIC_APP_URL || "https://camolukyapi.com";
+  const quoteDirectUrl = `${currentOrigin}/teklif-onizleme/${quote.id}`;
+  const qrIbanUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(quoteDirectUrl)}`;
 
   const partners = [
     { name: "NG KÜTAHYA", sub: "SERAMİK", bold: true },
@@ -337,7 +339,7 @@ export default async function PrintQuotePage({
                   loading="eager"
                 />
                 <span className="text-[6.5px] font-bold text-neutral-700 leading-tight mt-1 uppercase tracking-tight">
-                  IBAN İÇİN QR KODU OKUTUNUZ
+                  TEKLİFİ GÖRMEK İÇİN QR KODU OKUTUNUZ
                 </span>
               </div>
             </div>

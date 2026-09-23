@@ -2,6 +2,7 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 
 export interface SaleItemInput {
   productId?: string | null;
@@ -52,6 +53,9 @@ export async function createSaleWithItems(input: CreateSaleInput) {
   if (!profile?.company_id) {
     throw new Error("Kullanıcı şirket bilgisi bulunamadı.");
   }
+
+  const cookieStore = await cookies();
+  const activeUserName = cookieStore.get("app_user_name")?.value || profile?.full_name || "Yetkili";
 
   if (!input.items || input.items.length === 0) {
     throw new Error("En az 1 adet ürün veya kalem eklemelisiniz.");
@@ -123,7 +127,11 @@ export async function createSaleWithItems(input: CreateSaleInput) {
       paid_amount: input.paidAmount || 0,
       remaining_amount: remainingAmount,
       due_date: input.dueDate || null,
-      notes: input.notes || null,
+      notes: input.notes
+        ? (input.notes.includes(activeUserName)
+            ? input.notes
+            : `${input.notes} [İşlem Yapan: ${activeUserName}]`)
+        : `[İşlem Yapan: ${activeUserName}]`,
       created_by: userData.user.id,
     } as any)
     .select()

@@ -99,27 +99,33 @@ export default function ImportWizardPage() {
     let colSeries = -1;
     let colSize = -1;
     let colUnit = -1;
+    let colStockQty = -1;
     let colQ1 = -1;
     let colQ2 = -1;
     let colQCommercial = -1;
 
     headers.forEach((h, idx) => {
-      const upper = h.toUpperCase();
-      if (upper.includes("KOD") && colCode === -1) colCode = idx;
+      const upper = h.toUpperCase().trim();
+      if ((upper.includes("KOD") || upper === "STOK KODU") && colCode === -1) colCode = idx;
       else if (
-        (upper.includes("ÜRÜN AD") || upper.includes("MALZEME") || upper.includes("AÇIKLAMA")) &&
+        (upper.includes("ÜRÜN AD") || upper.includes("MALZEME") || upper.includes("AÇIKLAMA") || upper === "STOK ADI") &&
         colName === -1
       )
         colName = idx;
-      else if (upper.includes("GRUP") && colGroup === -1) colGroup = idx;
+      else if ((upper.includes("GRUP") || upper === "STOK GRUBU") && colGroup === -1) colGroup = idx;
       else if (upper.includes("SERİ") && colSeries === -1) colSeries = idx;
       else if (upper.includes("EBAT") && colSize === -1) colSize = idx;
       else if ((upper.includes("BİRİM") || upper.includes("BRM")) && colUnit === -1) colUnit = idx;
-      else if (upper.includes("1.") || upper.includes("1.KALİTE") || upper.includes("1. KALİTE"))
+      else if ((upper.includes("KALAN") || upper.includes("STOK MİKTAR") || upper.includes("MEVCUT") || upper === "KALAN MİKTAR") && colStockQty === -1)
+        colStockQty = idx;
+      else if (
+        (upper === "STANDART" || upper.includes("STANDART FİYAT") || upper.includes("1.LİSTE") || upper.includes("1. LİSTE") || upper.includes("1.KALİTE") || upper.includes("1. KALİTE")) &&
+        colQ1 === -1
+      )
         colQ1 = idx;
-      else if (upper.includes("2.") || upper.includes("2.KALİTE") || upper.includes("2. KALİTE"))
+      else if ((upper.includes("2.LİSTE") || upper.includes("2. LİSTE") || upper.includes("2.KALİTE") || upper.includes("2. KALİTE")) && colQ2 === -1)
         colQ2 = idx;
-      else if (upper.includes("TİCARİ") || upper.includes("TICARI"))
+      else if ((upper.includes("TİCARİ") || upper.includes("TICARI")) && colQCommercial === -1)
         colQCommercial = idx;
     });
 
@@ -141,6 +147,8 @@ export default function ImportWizardPage() {
       const p2Val = colQ2 !== -1 ? parseTurkishNumber(row[colQ2] as string | number) : null;
       const pCVal =
         colQCommercial !== -1 ? parseTurkishNumber(row[colQCommercial] as string | number) : null;
+      const stockVal =
+        colStockQty !== -1 ? parseTurkishNumber(row[colStockQty] as string | number) : null;
 
       products.push({
         product_code: codeVal,
@@ -153,11 +161,12 @@ export default function ImportWizardPage() {
         price_quality_2: p2Val,
         price_commercial: pCVal,
         default_sale_price: p1Val,
+        stock_qty: stockVal,
       });
     }
 
     setParsedRows(products);
-    toast.success(`${products.length} ürün başarıyla okundu.`);
+    toast.success(`${products.length} ürün ve stok bilgisi başarıyla okundu.`);
   }
 
   // Excel Aktarımını Başlat

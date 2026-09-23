@@ -1,7 +1,8 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
-import { Sidebar } from "@/components/layout/Sidebar";
-import { TopBar } from "@/components/layout/TopBar";
+import { cookies } from "next/headers";
+import { DashboardShell } from "@/components/layout/DashboardShell";
+import { type UserRole } from "@/lib/auth/role-constants";
 
 export default async function DashboardLayout({
   children,
@@ -25,17 +26,17 @@ export default async function DashboardLayout({
 
   const profile = profileData as { full_name: string | null; role: string } | null;
 
-  return (
-    <div className="flex h-screen overflow-hidden bg-surface">
-      <Sidebar userRole={profile?.role} />
+  // Çerezden aktif rolü veya veritabanı profilini oku
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get("app_active_role")?.value as UserRole | undefined;
+  const cookieName = cookieStore.get("app_user_name")?.value;
 
-      <div className="flex-1 flex flex-col min-w-0 overflow-auto">
-        <TopBar
-          userName={profile?.full_name || user.email}
-          userRole={profile?.role}
-        />
-        <main className="flex-1 p-6">{children}</main>
-      </div>
-    </div>
+  const activeRole = cookieRole || profile?.role || "admin";
+  const activeName = cookieName || profile?.full_name || user.email?.split("@")[0] || "Çamoluk Yönetici";
+
+  return (
+    <DashboardShell userName={activeName} userRole={activeRole}>
+      {children}
+    </DashboardShell>
   );
 }

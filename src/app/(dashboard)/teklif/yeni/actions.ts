@@ -54,7 +54,11 @@ export async function saveQuote(data: any) {
       valid_until: data.validUntil,
       delivery_terms: data.deliveryTerms,
       payment_terms: data.paymentTerms,
-      notes: data.notes,
+      notes: data.notes
+        ? (data.creatorName && !data.notes.includes(data.creatorName)
+            ? `${data.notes} [Hazırlayan: ${data.creatorName}]`
+            : data.notes)
+        : (data.creatorName ? `[Hazırlayan: ${data.creatorName}]` : null),
       created_by: userData.user.id,
     } as never)
     .select()

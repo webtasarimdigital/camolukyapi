@@ -57,6 +57,7 @@ export default async function SalesPage() {
               <th className="text-left px-4 py-3">Satış No</th>
               <th className="text-left px-4 py-3">Tarih</th>
               <th className="text-left px-4 py-3">Müşteri</th>
+              <th className="text-left px-4 py-3">Temsilci</th>
               <th className="text-right px-4 py-3">Genel Toplam</th>
               <th className="text-right px-4 py-3">Tahsil Edilen</th>
               <th className="text-right px-4 py-3">Kalan Alacak</th>
@@ -68,7 +69,7 @@ export default async function SalesPage() {
           <tbody className="divide-y divide-border">
             {(!sales || sales.length === 0) ? (
               <tr>
-                <td colSpan={9} className="text-center py-10 text-text-muted">
+                <td colSpan={10} className="text-center py-10 text-text-muted">
                   Henüz kaydedilmiş bir satış bulunmuyor.
                   <div className="mt-2">
                     <Link href="/satis/yeni" className="text-brand-navy font-bold hover:underline">
@@ -83,6 +84,7 @@ export default async function SalesPage() {
                 const totalAmount = sale.grand_total ?? sale.total_amount ?? 0;
                 const paidAmount = sale.paid_amount ?? 0;
                 const remaining = sale.remaining_amount ?? Math.max(0, totalAmount - paidAmount);
+                const creatorName = salesProfileMap.get(sale.created_by) || "Yetkili";
 
                 return (
                   <tr key={sale.id} className="hover:bg-surface/50 transition">
@@ -94,6 +96,11 @@ export default async function SalesPage() {
                     </td>
                     <td className="px-4 py-3 font-medium text-text">
                       {customerName}
+                    </td>
+                    <td className="px-4 py-3 text-text-muted text-[11px]">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded bg-gray-100 font-medium text-gray-700">
+                        {creatorName}
+                      </span>
                     </td>
                     <td className="px-4 py-3 text-right tabular-nums font-bold text-text">
                       {formatCurrency(totalAmount)}

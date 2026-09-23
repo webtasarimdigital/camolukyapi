@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { SaleForm } from "./SaleForm";
 
 export default async function NewSalePage() {
@@ -33,12 +34,15 @@ export default async function NewSalePage() {
     .order("product_name", { ascending: true })
     .limit(1000);
 
+  const cookieStore = await cookies();
+  const activeName = cookieStore.get("app_user_name")?.value || profile.full_name || "Yetkili";
+
   return (
     <div className="space-y-6">
       <SaleForm
         customers={customersData || []}
         products={productsData || []}
-        creatorName={profile.full_name || "Yetkili"}
+        creatorName={activeName}
       />
     </div>
   );

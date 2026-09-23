@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { QuoteForm } from "./QuoteForm";
 
 export default async function NewQuotePage() {
@@ -39,6 +40,9 @@ export default async function NewQuotePage() {
     .order("product_name", { ascending: true })
     .limit(1000);
 
+  const cookieStore = await cookies();
+  const activeName = cookieStore.get("app_user_name")?.value || profile.full_name || "Yetkili";
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -48,7 +52,7 @@ export default async function NewQuotePage() {
         </div>
       </div>
       <QuoteForm
-        creatorName={profile.full_name}
+        creatorName={activeName}
         defaultSettings={settings}
         customers={(customersData as any[]) || []}
         products={(productsData as any[]) || []}

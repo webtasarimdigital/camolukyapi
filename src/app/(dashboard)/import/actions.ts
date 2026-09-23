@@ -14,6 +14,7 @@ export interface ParsedProductRow {
   price_quality_2?: number | null;
   price_commercial?: number | null;
   default_sale_price?: number | null;
+  stock_qty?: number | null;
 }
 
 export async function saveExcelProducts(payload: {
@@ -94,6 +95,7 @@ export async function saveExcelProducts(payload: {
           price_quality_2: item.price_quality_2 ?? existing.price_quality_2,
           price_commercial: item.price_commercial ?? existing.price_commercial,
           default_sale_price: item.default_sale_price ?? item.price_quality_1,
+          stock_qty: item.stock_qty !== undefined && item.stock_qty !== null ? item.stock_qty : existing.stock_qty,
           last_import_id: importId,
           updated_at: new Date().toISOString(),
           updated_by: user.id,
@@ -135,7 +137,7 @@ export async function saveExcelProducts(payload: {
         price_quality_2: item.price_quality_2 ?? null,
         price_commercial: item.price_commercial ?? null,
         default_sale_price: item.default_sale_price ?? item.price_quality_1 ?? 0,
-        stock_qty: 0,
+        stock_qty: item.stock_qty ?? 0,
         min_stock_qty: 0,
         allows_decimal_qty: true,
         last_import_id: importId,
