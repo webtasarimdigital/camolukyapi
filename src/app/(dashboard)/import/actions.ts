@@ -69,7 +69,7 @@ export async function saveExcelProducts(payload: {
     // Mevcut ürün var mı?
     const { data: existingData } = await supabase
       .from("products")
-      .select("id, price_quality_1, price_quality_2, price_commercial")
+      .select("id, price_quality_1, price_quality_2, price_commercial, stock_qty")
       .eq("company_id", companyId)
       .eq("product_code", item.product_code.trim())
       .single();
@@ -79,6 +79,7 @@ export async function saveExcelProducts(payload: {
       price_quality_1: number | null;
       price_quality_2: number | null;
       price_commercial: number | null;
+      stock_qty?: number | null;
     } | null;
 
     if (existing) {

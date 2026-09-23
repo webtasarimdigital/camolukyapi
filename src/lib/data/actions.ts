@@ -37,11 +37,12 @@ async function getCurrentUserName(): Promise<string> {
     const supabase = await createClient();
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return "Çamoluk Kullanıcısı";
-    const { data: profile } = await supabase
+    const { data: profileData } = await supabase
       .from("profiles")
       .select("full_name, role")
       .eq("id", user.id)
       .single();
+    const profile = profileData as { full_name?: string; role?: string } | null;
     if (profile?.full_name) return profile.full_name;
     if (profile?.role) {
       if (profile.role === "muhasebe1") return "Muhasebe 1";

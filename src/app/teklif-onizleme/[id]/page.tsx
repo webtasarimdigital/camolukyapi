@@ -12,6 +12,7 @@ import {
   CreditCard,
   RotateCcw,
   Landmark,
+  Clock,
 } from "lucide-react";
 import Image from "next/image";
 import { PublicPrintButton } from "./PublicPrintButton";
@@ -46,11 +47,11 @@ export default async function PublicQuotePreviewPage({
 
   let creator: { full_name: string | null; phone: string | null } | null = null;
   if (quote.created_by) {
-    const { data: creatorProfile } = await supabase
+    const { data: creatorProfile } = (await supabase
       .from("profiles")
       .select("full_name, phone")
       .eq("id", quote.created_by)
-      .single();
+      .single()) as { data: { full_name?: string | null; phone?: string | null } | null };
     if (creatorProfile) creator = creatorProfile as any;
   }
 
