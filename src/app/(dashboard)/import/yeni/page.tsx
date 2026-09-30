@@ -200,7 +200,7 @@ export default function ImportWizardPage() {
   // PDF Belgesi Kaydet
   async function handlePdfSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!pdfTitle) {
+    if (!pdfTitle.trim()) {
       toast.error("Lütfen belge başlığını girin.");
       return;
     }
@@ -208,14 +208,19 @@ export default function ImportWizardPage() {
     setLoading(true);
     try {
       const formData = new FormData();
-      formData.set("title", pdfTitle);
+      formData.set("title", pdfTitle.trim());
       formData.set("category", pdfCategory);
       formData.set("notes", pdfNotes);
       if (pdfFile) {
-        formData.set("file", pdfFile);
+        formData.set("fileName", pdfFile.name);
       }
 
-      await savePdfDocument(formData);
+      const res = await savePdfDocument(formData);
+      if (!res.success) {
+        toast.error("PDF kaydetme hatası: " + (res.error || "Bilinmeyen hata"));
+        return;
+      }
+
       toast.success("PDF belgesi başarıyla arşivlendi!");
       router.push("/import");
       router.refresh();
@@ -234,6 +239,13 @@ export default function ImportWizardPage() {
       return;
     }
 
+    if (pdfFile.size > 4.5 * 1024 * 1024) {
+      toast.error(
+        `PDF dosyanız ${(pdfFile.size / (1024 * 1024)).toFixed(1)} MB boyutundadır. Sunucu limiti nedeniyle 4.5 MB üzerindeki dosyalar doğrudan ayıklanamaz. Lütfen bu belgeyi 'Sadece Belge Olarak Arşivle' butonuyla kaydedin veya ürünleri Excel listesi ile içe aktarın.`
+      );
+      return;
+    }
+
     setLoading(true);
     try {
       const formData = new FormData();
@@ -247,7 +259,7 @@ export default function ImportWizardPage() {
 
       if (!res.products || res.products.length === 0) {
         toast.warning(
-          "PDF metninden otomatik ürün/fiyat satırı tespit edilemedi. Dosya taranmış resim olabilir. Belgeyi arşivlemek için 'Sadece Belge Olarak Arşivle' butonunu kullanabilirsiniz."
+          "PDF metninden otomatik ürün/fiyat satırı tespit edilemedi. Belge taranmış resim/fotoğraf olabilir. Belgeyi arşivlemek için 'Sadece Belge Olarak Arşivle' butonunu kullanabilirsiniz."
         );
       } else {
         setParsedRows(res.products);

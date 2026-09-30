@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Rent } from "@/lib/data/store";
+import { Rent } from "@/lib/data/types";
 import { actionSaveRent, actionDeleteRent } from "@/lib/data/actions";
 import { formatCurrency } from "@/lib/formatters";
 import { toast } from "sonner";

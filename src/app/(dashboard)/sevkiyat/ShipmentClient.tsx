@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Shipment } from "@/lib/data/store";
+import { Shipment } from "@/lib/data/types";
 import {
   actionSaveShipment,
   actionUpdateShipmentStatus,

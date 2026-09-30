@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Employee } from "@/lib/data/store";
+import { Employee } from "@/lib/data/types";
 import { actionSaveEmployee, actionDeleteEmployee } from "@/lib/data/actions";
 import { formatCurrency } from "@/lib/formatters";
 import { toast } from "sonner";

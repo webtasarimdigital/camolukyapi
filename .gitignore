@@ -41,6 +41,8 @@ logo_source.png
 *.pdf
 camolukyapi_tmp/
 scripts/
+scratch/
+check-vehicles.js
 
 # vercel
 .vercel

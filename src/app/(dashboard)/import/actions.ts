@@ -173,53 +173,58 @@ export async function saveExcelProducts(payload: {
 }
 
 export async function savePdfDocument(formData: FormData) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Oturum açılmamış.");
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Oturum açılmamış." };
 
-  const { data: profileData } = await supabase
-    .from("profiles")
-    .select("company_id")
-    .eq("id", user.id)
-    .single();
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", user.id)
+      .single();
 
-  const profile = profileData as { company_id: string } | null;
-  if (!profile?.company_id) throw new Error("Şirket profili bulunamadı.");
+    const profile = profileData as { company_id: string } | null;
+    if (!profile?.company_id) return { success: false, error: "Şirket profili bulunamadı." };
 
-  const title = formData.get("title") as string;
-  const category = (formData.get("category") as string) || "Fiyat Listesi";
-  const notes = (formData.get("notes") as string) || "";
-  const file = formData.get("file") as File | null;
+    const title = formData.get("title") as string;
+    const category = (formData.get("category") as string) || "Fiyat Listesi";
+    const notes = (formData.get("notes") as string) || "";
+    const file = formData.get("file") as File | null;
+    const fileNameParam = formData.get("fileName") as string | null;
 
-  if (!title) throw new Error("Belge başlığı gereklidir.");
+    if (!title) return { success: false, error: "Belge başlığı gereklidir." };
 
-  const fileName = file?.name || `${title}.pdf`;
-  const storagePath = `pdf/${Date.now()}_${fileName}`;
+    const fileName = fileNameParam || file?.name || `${title}.pdf`;
+    const storagePath = `pdf/${Date.now()}_${fileName}`;
 
-  // product_imports tablosunda belge kaydı oluştur
-  const { data: importRecord, error } = await supabase
-    .from("product_imports")
-    .insert({
-      company_id: profile.company_id,
-      file_name: `[PDF - ${category}] ${title} (${fileName})`,
-      storage_path: storagePath,
-      sheet_name: "PDF_KATALOG",
-      status: "completed",
-      total_rows: 1,
-      inserted_rows: 1,
-      updated_rows: 0,
-      error_rows: 0,
-      summary: `PDF Belgesi: ${category}. Notlar: ${notes}`,
-      created_by: user.id,
-      completed_at: new Date().toISOString(),
-    } as never)
-    .select("id")
-    .single();
+    // product_imports tablosunda belge kaydı oluştur
+    const { data: importRecord, error } = await supabase
+      .from("product_imports")
+      .insert({
+        company_id: profile.company_id,
+        file_name: `[PDF - ${category}] ${title} (${fileName})`,
+        storage_path: storagePath,
+        sheet_name: "PDF_KATALOG",
+        status: "completed",
+        total_rows: 1,
+        inserted_rows: 1,
+        updated_rows: 0,
+        error_rows: 0,
+        summary: `PDF Belgesi: ${category}. Notlar: ${notes}`,
+        created_by: user.id,
+        completed_at: new Date().toISOString(),
+      } as never)
+      .select("id")
+      .single();
 
-  if (error) throw new Error(error.message);
+    if (error) return { success: false, error: error.message };
 
-  revalidatePath("/import");
-  return { success: true, id: (importRecord as { id: string })?.id };
+    revalidatePath("/import");
+    return { success: true, id: (importRecord as { id: string })?.id };
+  } catch (err: unknown) {
+    return { success: false, error: (err as Error)?.message || "Kayıt hatası" };
+  }
 }
 
 /**

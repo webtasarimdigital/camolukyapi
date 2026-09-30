@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useMemo } from "react";
-import { PaymentFollowup } from "@/lib/data/store";
+import { PaymentFollowup } from "@/lib/data/types";
 import {
   actionSavePaymentFollowup,
   actionDeletePaymentFollowup,

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useMemo } from "react";
-import { Transporter, calculateDueDate12 } from "@/lib/data/store";
+import { Transporter, calculateDueDate12 } from "@/lib/data/types";
 import { actionSaveTransporter, actionDeleteTransporter } from "@/lib/data/actions";
 import { formatCurrency } from "@/lib/formatters";
 import { toast } from "sonner";
