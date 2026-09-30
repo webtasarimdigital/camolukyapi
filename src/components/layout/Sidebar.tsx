@@ -26,6 +26,7 @@ import {
   LogOut,
   ChevronRight,
   X,
+  MapPin,
 } from "lucide-react";
 
 interface NavItem {
@@ -45,9 +46,16 @@ const navItems: NavItem[] = [
   },
   {
     href: "/sevkiyat",
-    label: "Sevkiyat & GPS",
+    label: "Sevkiyat & Yükleme",
     icon: Truck,
     badge: "Canlı",
+    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat"],
+  },
+  {
+    href: "/otobil-gps",
+    label: "Otobil GPS Takip",
+    icon: MapPin,
+    badge: "GPS",
     allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat"],
   },
   {
