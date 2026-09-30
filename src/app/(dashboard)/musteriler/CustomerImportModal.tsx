@@ -3,7 +3,8 @@
 import { useState, useRef } from "react";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
-import { importCustomersBatch, finishCustomerImport, CustomerImportRow } from "./actions";
+import { importCustomersBatch, finishCustomerImport } from "./actions";
+import type { CustomerImportRow } from "./types";
 import { useRouter } from "next/navigation";
 import {
   FileSpreadsheet,

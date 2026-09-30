@@ -182,17 +182,7 @@ export async function toggleCustomerActive(id: string, isActive: boolean) {
 }
 
 // ──────────────────── EXCEL TOPLU İÇE AKTARMA ────────────────────
-export interface CustomerImportRow {
-  type: "bireysel" | "kurumsal";
-  company_name?: string | null;
-  contact_name: string;
-  phone?: string | null;
-  email?: string | null;
-  address?: string | null;
-  tax_office?: string | null;
-  tax_number?: string | null;
-  notes?: string | null;
-}
+import type { CustomerImportRow } from "./types";
 
 export async function importCustomersBatch(rows: CustomerImportRow[]): Promise<{
   success: boolean;

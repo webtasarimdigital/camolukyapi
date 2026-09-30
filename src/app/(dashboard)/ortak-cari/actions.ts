@@ -332,7 +332,9 @@ export async function deletePartnerMovementPermanently(id: string) {
   }
 }
 
-export const deletePartnerMovement = deletePartnerMovementPermanently;
+export async function deletePartnerMovement(id: string) {
+  return deletePartnerMovementPermanently(id);
+}
 
 export async function addPartnerNote(formData: FormData) {
   try {
@@ -435,7 +437,9 @@ export async function togglePartnerNote(noteId: string, currentStatus?: boolean)
   }
 }
 
-export const togglePartnerNoteStatus = togglePartnerNote;
+export async function togglePartnerNoteStatus(noteId: string, currentStatus?: boolean) {
+  return togglePartnerNote(noteId, currentStatus);
+}
 
 export async function deletePartnerNote(noteId: string) {
   try {

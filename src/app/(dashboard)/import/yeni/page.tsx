@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
-import { saveExcelProducts, savePdfDocument, extractProductsFromPdf, ParsedProductRow } from "../actions";
+import { saveExcelProducts, savePdfDocument, extractProductsFromPdf } from "../actions";
+import type { ParsedProductRow } from "../types";
 import { parseTurkishNumber, formatCurrency } from "@/lib/formatters";
 import {
   UploadCloud,

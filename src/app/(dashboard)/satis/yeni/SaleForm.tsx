@@ -2,7 +2,8 @@
 
 import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { createSaleWithItems, quickCreateCustomer, SaleItemInput } from "./actions";
+import { createSaleWithItems, quickCreateCustomer } from "./actions";
+import type { SaleItemInput } from "./types";
 import { formatCurrency } from "@/lib/formatters";
 import { toast } from "sonner";
 import { 

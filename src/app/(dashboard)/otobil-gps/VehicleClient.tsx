@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { Vehicle, saveVehicle, updateVehicleStatus, deleteVehicle } from "./actions";
+import type { Vehicle } from "./types";
+import { saveVehicle, updateVehicleStatus, deleteVehicle } from "./actions";
 import { toast } from "sonner";
 import {
   Truck, Plus, MapPin, Phone, User, Edit3, Trash2,

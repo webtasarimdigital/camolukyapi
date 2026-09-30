@@ -4,10 +4,6 @@ import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
 import { UserRole, ROLE_DEFINITIONS } from "./role-constants";
 
-// Re-export so existing imports still work
-export type { UserRole };
-export { ROLE_DEFINITIONS };
-
 export async function setActiveUserRole(role: UserRole, customName?: string) {
   const cookieStore = await cookies();
   cookieStore.set("app_active_role", role, {
