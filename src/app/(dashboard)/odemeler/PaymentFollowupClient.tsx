@@ -317,7 +317,14 @@ export function PaymentFollowupClient({ initialItems, userName }: Props) {
                       <td className="py-3 px-4 text-text-muted">{item.contact_date}</td>
                       <td className="py-3 px-4 font-bold text-text">{item.contact_name}</td>
                       <td className="py-3 px-4 max-w-xs truncate text-text-muted">{item.description || "-"}</td>
-                      <td className="py-3 px-4 text-text-muted">{item.personnel || "-"}</td>
+                      <td className="py-3 px-4">
+                        <div className="font-semibold text-text">{item.personnel || "-"}</div>
+                        {item.created_by_name && (
+                          <div className="text-[10px] text-brand-navy font-medium flex items-center gap-0.5 mt-0.5">
+                            <User size={10} /> {item.created_by_name}
+                          </div>
+                        )}
+                      </td>
                       <td className="py-3 px-4">
                         <span className="font-medium bg-surface px-2 py-0.5 rounded border border-border">
                           {item.payment_method}
