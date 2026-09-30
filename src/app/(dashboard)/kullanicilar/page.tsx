@@ -40,6 +40,7 @@ const DEFAULT_ACCOUNTS = [
 
 import { cookies } from "next/headers";
 import { AccountCredentialsCard } from "./AccountCredentialsCard";
+import { UserRowActions } from "./UserRowActions";
 
 export default async function KullanicilarPage() {
   const supabase = await createClient();
@@ -117,6 +118,9 @@ export default async function KullanicilarPage() {
               <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase">
                 Durum
               </th>
+              <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase">
+                İşlem
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-border">
@@ -128,6 +132,8 @@ export default async function KullanicilarPage() {
                     ? "camoluk@camolukyapi.com"
                     : `${p.role}@camolukyapi.com`);
                 const roleInfo = ROLE_CONFIG[p.role] || ROLE_CONFIG.staff;
+                const isSelf = p.id === userData.user.id;
+                const isProtected = email === "camoluk@camolukyapi.com";
                 return (
                   <tr key={p.id} className="hover:bg-surface transition">
                     <td className="px-4 py-3">
@@ -153,15 +159,23 @@ export default async function KullanicilarPage() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                        <CheckCircle2 size={12} /> Aktif
+                        <CheckCircle2 size={12} /> {p.is_active ? "Aktif" : "Pasif"}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <UserRowActions
+                        userId={p.id}
+                        userEmail={email}
+                        isSelf={isSelf}
+                        isProtected={isProtected}
+                      />
                     </td>
                   </tr>
                 );
               })
             ) : (
               <tr>
-                <td colSpan={5} className="px-4 py-6 text-center text-text-muted">
+                <td colSpan={6} className="px-4 py-6 text-center text-text-muted">
                   Kayıtlı profil bulunamadı.
                 </td>
               </tr>

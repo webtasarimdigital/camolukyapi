@@ -58,13 +58,23 @@ export function ShipmentClient({ initialShipments }: Props) {
   const countTeslim = shipments.filter((s) => s.status === "Teslim Edildi").length;
 
   async function handleStatusChange(id: string, newStatus: Shipment["status"]) {
+    // Anında arayüzde göster (Optimistic update)
+    setShipments((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, status: newStatus } : item))
+    );
     startTransition(async () => {
-      const res = await actionUpdateShipmentStatus(id, newStatus);
-      if (res.success && res.shipment) {
-        setShipments((prev) =>
-          prev.map((item) => (item.id === id ? res.shipment! : item))
-        );
-        toast.success(`Sevkiyat durumu "${newStatus}" olarak güncellendi!`);
+      try {
+        const res = await actionUpdateShipmentStatus(id, newStatus);
+        if (res.success && res.shipment) {
+          setShipments((prev) =>
+            prev.map((item) => (item.id === id ? res.shipment! : item))
+          );
+          toast.success(`Sevkiyat durumu "${newStatus}" olarak güncellendi!`);
+        } else {
+          toast.error(res.error || "Sevkiyat durumu güncellenemedi.");
+        }
+      } catch (err: any) {
+        toast.error("İşlem sırasında bağlantı hatası oluştu.");
       }
     });
   }
@@ -72,9 +82,17 @@ export function ShipmentClient({ initialShipments }: Props) {
   async function handleDelete(id: string) {
     if (!confirm("Bu sevkiyat kaydını silmek istediğinize emin misiniz?")) return;
     startTransition(async () => {
-      await actionDeleteShipment(id);
-      setShipments((prev) => prev.filter((item) => item.id !== id));
-      toast.success("Sevkiyat kaydı silindi.");
+      try {
+        const res = await actionDeleteShipment(id);
+        if (res.success) {
+          setShipments((prev) => prev.filter((item) => item.id !== id));
+          toast.success("Sevkiyat kaydı silindi.");
+        } else {
+          toast.error(res.error || "Sevkiyat silinemedi.");
+        }
+      } catch {
+        toast.error("Sevkiyat silinirken hata oluştu.");
+      }
     });
   }
 
@@ -84,12 +102,18 @@ export function ShipmentClient({ initialShipments }: Props) {
     const formData = new FormData(form);
 
     startTransition(async () => {
-      const res = await actionSaveShipment(formData);
-      if (res.success && res.shipment) {
-        setShipments((prev) => [res.shipment!, ...prev]);
-        toast.success("Yeni sevkiyat başarıyla oluşturuldu!");
-        setIsModalOpen(false);
-        form.reset();
+      try {
+        const res = await actionSaveShipment(formData);
+        if (res.success && res.shipment) {
+          setShipments((prev) => [res.shipment!, ...prev]);
+          toast.success("Yeni sevkiyat başarıyla oluşturuldu!");
+          setIsModalOpen(false);
+          form.reset();
+        } else {
+          toast.error(res.error || "Sevkiyat oluşturulamadı.");
+        }
+      } catch {
+        toast.error("Sevkiyat kaydedilirken hata oluştu.");
       }
     });
   }

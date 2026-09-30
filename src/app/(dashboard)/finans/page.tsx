@@ -59,9 +59,9 @@ export default async function FinansPage() {
     .eq("company_id", profile.company_id);
   const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p.full_name]));
 
-  // Lokal veri deposundan ödemeleri al
-  const followups = getPaymentFollowups();
-  const rents = getRents();
+  // Supabase veri deposundan ödemeleri al
+  const followups = await getPaymentFollowups();
+  const rents = await getRents();
 
   // 1. Genel Finansal Toplamlar
   const totalCiro = sales.reduce((sum, s) => sum + (Number(s.grand_total) || 0), 0);
