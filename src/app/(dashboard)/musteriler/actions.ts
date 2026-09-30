@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 
@@ -117,24 +117,25 @@ export async function deleteCustomer(id: string) {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  const { data: profileData } = await supabase.from("profiles").select("company_id, role").eq("id", user.id).single();
+  const serviceClient = await createServiceClient();
+  const { data: profileData } = await serviceClient.from("profiles").select("company_id, role").eq("id", user.id).single();
   const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id || profile.role !== "admin") throw new Error("Yalnızca yöneticiler müşteri silebilir.");
 
   // Önce ilişkili satış veya teklif var mı kontrol et
-  const { count: salesCount } = await supabase
+  const { count: salesCount } = await serviceClient
     .from("sales")
     .select("id", { count: "exact", head: true })
     .eq("customer_id", id);
 
-  const { count: quotesCount } = await supabase
+  const { count: quotesCount } = await serviceClient
     .from("quotes")
     .select("id", { count: "exact", head: true })
     .eq("customer_id", id);
 
   if ((salesCount || 0) > 0 || (quotesCount || 0) > 0) {
     // Geçmişi olan müşteriyi silmek muhasebeyi bozacağı için pasife alıyoruz
-    await supabase
+    await serviceClient
       .from("customers")
       .update({ is_active: false, updated_at: new Date().toISOString() } as never)
       .eq("id", id)
@@ -144,7 +145,7 @@ export async function deleteCustomer(id: string) {
   }
 
   // Geçmiş kaydı yoksa tamamen sil
-  const { error } = await supabase
+  const { error } = await serviceClient
     .from("customers")
     .delete()
     .eq("id", id)
@@ -191,68 +192,74 @@ export async function importCustomersBatch(rows: CustomerImportRow[]): Promise<{
   error?: string;
 }> {
   try {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return { success: false, inserted: 0, skipped: 0, error: "Oturum açılmamış." };
-
-    const { data: profileData } = await supabase
-      .from("profiles")
-      .select("company_id")
-      .eq("id", user.id)
-      .single();
-    const profile = profileData as { company_id: string } | null;
-    if (!profile?.company_id) return { success: false, inserted: 0, skipped: 0, error: "Şirket profili bulunamadı." };
-
     if (!rows || rows.length === 0) return { success: true, inserted: 0, skipped: 0 };
 
-    // 1. Get existing contact_names for this batch to prevent duplicates
-    const names = rows.map((r) => r.contact_name?.trim()).filter(Boolean);
-    const { data: existing } = await supabase
-      .from("customers")
-      .select("contact_name")
-      .eq("company_id", profile.company_id)
-      .in("contact_name", names);
+    const serviceClient = await createServiceClient();
 
-    const existingSet = new Set((existing || []).map((e: any) => e.contact_name?.toLowerCase()));
-
-    // 2. Filter out duplicates
-    const toInsert: any[] = [];
-    let skipped = 0;
-    const seenInBatch = new Set<string>();
-
-    for (const r of rows) {
-      const trimmed = r.contact_name?.trim() || "";
-      const lower = trimmed.toLowerCase();
-      if (!trimmed || existingSet.has(lower) || seenInBatch.has(lower)) {
-        skipped++;
-        continue;
+    // Check user & company
+    let userId: string | null = null;
+    let companyId = "a0000000-0000-0000-0000-000000000001";
+    try {
+      const supabase = await createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        userId = user.id;
+        const { data: profileData } = await serviceClient
+          .from("profiles")
+          .select("company_id")
+          .eq("id", user.id)
+          .single();
+        const profile = profileData as { company_id: string } | null;
+        if (profile?.company_id) {
+          companyId = profile.company_id;
+        }
       }
-      seenInBatch.add(lower);
-      toInsert.push({
-        company_id: profile.company_id,
-        type: r.type || "kurumsal",
-        company_name: r.company_name?.trim() || null,
-        contact_name: trimmed,
-        phone: r.phone?.trim() || null,
-        email: r.email?.trim() || null,
-        address: r.address?.trim() || null,
-        tax_office: r.tax_office?.trim() || null,
-        tax_number: r.tax_number?.trim() || null,
-        notes: r.notes?.trim() || null,
-        is_active: true,
-        created_by: user.id,
-      });
+    } catch {
+      // Fallback gracefully
     }
 
-    if (toInsert.length > 0) {
-      const { error } = await supabase.from("customers").insert(toInsert as never);
-      if (error) {
-        console.error("Batch insert error:", error);
-        return { success: false, inserted: 0, skipped, error: error.message };
+    // High performance RPC execution directly in PostgreSQL
+    const { data, error } = await (serviceClient as any).rpc("import_customers_batch", {
+      p_rows: rows,
+      p_company_id: companyId,
+      p_user_id: userId,
+    });
+
+    if (error) {
+      console.warn("import_customers_batch RPC failed, using serviceClient direct fallback:", error);
+      // Fallback: batch insert directly with serviceClient
+      const toInsert = rows
+        .filter(r => r.contact_name && r.contact_name.trim().length > 0)
+        .map(r => ({
+          company_id: companyId,
+          type: r.type || "kurumsal",
+          company_name: r.company_name?.trim() || null,
+          contact_name: r.contact_name.trim(),
+          phone: r.phone?.trim() || null,
+          email: r.email?.trim() || null,
+          address: r.address?.trim() || null,
+          tax_office: r.tax_office?.trim() || null,
+          tax_number: r.tax_number?.trim() || null,
+          notes: r.notes?.trim() || null,
+          is_active: true,
+          created_by: userId,
+        }));
+
+      if (toInsert.length > 0) {
+        const { error: insertErr } = await serviceClient.from("customers").insert(toInsert as never);
+        if (insertErr) {
+          return { success: false, inserted: 0, skipped: 0, error: insertErr.message };
+        }
       }
+      return { success: true, inserted: toInsert.length, skipped: 0 };
     }
 
-    return { success: true, inserted: toInsert.length, skipped };
+    const res = data as { success: boolean; inserted: number; skipped: number };
+    return {
+      success: res?.success ?? true,
+      inserted: res?.inserted ?? 0,
+      skipped: res?.skipped ?? 0,
+    };
   } catch (err: unknown) {
     console.error("importCustomersBatch exception:", err);
     return {

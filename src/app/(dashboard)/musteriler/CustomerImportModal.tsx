@@ -233,7 +233,7 @@ export function CustomerImportModal() {
     if (rows.length === 0 || importing) return;
     setImporting(true);
 
-    const BATCH_SIZE = 150;
+    const BATCH_SIZE = 250;
     const total = rows.length;
     let totalInserted = 0;
     let totalSkipped = 0;
