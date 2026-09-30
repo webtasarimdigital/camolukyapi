@@ -77,22 +77,30 @@ export interface Rent {
   created_at: string;
 }
 
-const DATA_DIR = path.join(process.cwd(), "data");
+// Vercel'de process.cwd() read-only; /tmp yazılabilir
+const IS_VERCEL = process.env.VERCEL === "1" || process.env.NODE_ENV === "production";
+const DATA_DIR = IS_VERCEL
+  ? path.join("/tmp", "camolukyapi_data")
+  : path.join(process.cwd(), "data");
 
 function ensureDir() {
-  if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+  } catch {
+    // ignore — read-only fs
   }
 }
 
 function readJson<T>(fileName: string, defaultData: T[] = []): T[] {
-  ensureDir();
-  const filePath = path.join(DATA_DIR, fileName);
-  if (!fs.existsSync(filePath)) {
-    fs.writeFileSync(filePath, JSON.stringify(defaultData, null, 2), "utf8");
-    return defaultData;
-  }
   try {
+    ensureDir();
+    const filePath = path.join(DATA_DIR, fileName);
+    if (!fs.existsSync(filePath)) {
+      try { fs.writeFileSync(filePath, JSON.stringify(defaultData, null, 2), "utf8"); } catch { /* ignore */ }
+      return defaultData;
+    }
     const raw = fs.readFileSync(filePath, "utf8");
     return JSON.parse(raw) as T[];
   } catch {
@@ -101,9 +109,13 @@ function readJson<T>(fileName: string, defaultData: T[] = []): T[] {
 }
 
 function writeJson<T>(fileName: string, data: T[]) {
-  ensureDir();
-  const filePath = path.join(DATA_DIR, fileName);
-  fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+  try {
+    ensureDir();
+    const filePath = path.join(DATA_DIR, fileName);
+    fs.writeFileSync(filePath, JSON.stringify(data, null, 2), "utf8");
+  } catch {
+    // ignore — read-only fs on Vercel
+  }
 }
 
 // ──────────────────── SEVKİYAT ────────────────────
