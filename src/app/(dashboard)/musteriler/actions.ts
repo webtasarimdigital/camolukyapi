@@ -180,3 +180,69 @@ export async function toggleCustomerActive(id: string, isActive: boolean) {
   revalidatePath(`/musteriler/${id}`);
   return { success: true };
 }
+
+// ──────────────────── EXCEL TOPLU İÇE AKTARMA ────────────────────
+export interface CustomerImportRow {
+  type: "bireysel" | "kurumsal";
+  company_name?: string | null;
+  contact_name: string;
+  phone?: string | null;
+  email?: string | null;
+  address?: string | null;
+  tax_office?: string | null;
+  tax_number?: string | null;
+  notes?: string | null;
+}
+
+export async function importCustomersFromExcel(rows: CustomerImportRow[]) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Unauthorized");
+
+  const { data: profileData } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  const profile = profileData as { company_id: string } | null;
+  if (!profile?.company_id) throw new Error("Company not found");
+
+  let inserted = 0;
+  let skipped = 0;
+  const errors: string[] = [];
+
+  for (const row of rows) {
+    if (!row.contact_name?.trim()) { skipped++; continue; }
+
+    // Mükerrer kontrolü — telefon veya ad eşleşmesi
+    const { data: existing } = await supabase
+      .from("customers")
+      .select("id")
+      .eq("company_id", profile.company_id)
+      .ilike("contact_name", row.contact_name.trim())
+      .limit(1);
+
+    if (existing && existing.length > 0) { skipped++; continue; }
+
+    const { error } = await supabase.from("customers").insert({
+      company_id: profile.company_id,
+      type: row.type || "bireysel",
+      company_name: row.company_name?.trim() || null,
+      contact_name: row.contact_name.trim(),
+      phone: row.phone?.trim() || null,
+      email: row.email?.trim() || null,
+      address: row.address?.trim() || null,
+      tax_office: row.tax_office?.trim() || null,
+      tax_number: row.tax_number?.trim() || null,
+      notes: row.notes?.trim() || null,
+      is_active: true,
+      created_by: user.id,
+    } as never);
+
+    if (error) {
+      errors.push(`${row.contact_name}: ${error.message}`);
+    } else {
+      inserted++;
+    }
+  }
+
+  revalidatePath("/musteriler");
+  return { inserted, skipped, errors };
+}
+

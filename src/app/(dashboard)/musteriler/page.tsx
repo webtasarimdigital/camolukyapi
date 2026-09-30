@@ -2,6 +2,7 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { CustomerRowActions } from "./CustomerRowActions";
+import { CustomerImportModal } from "./CustomerImportModal";
 
 export default async function MusterilerPage({
   searchParams,
@@ -51,12 +52,15 @@ export default async function MusterilerPage({
           <h1 className="text-xl font-bold text-text">Müşteriler</h1>
           <p className="text-sm text-text-muted">Müşteri listesi ve yönetimi</p>
         </div>
-        <Link
-          href="/musteriler/yeni"
-          className="bg-brand-gold text-brand-navy px-4 py-2 rounded-lg text-sm font-semibold hover:bg-brand-gold-light transition"
-        >
-          + Yeni Müşteri
-        </Link>
+        <div className="flex items-center gap-2">
+          <CustomerImportModal />
+          <Link
+            href="/musteriler/yeni"
+            className="bg-brand-gold text-brand-navy px-4 py-2 rounded-lg text-sm font-semibold hover:bg-brand-gold-light transition"
+          >
+            + Yeni Müşteri
+          </Link>
+        </div>
       </div>
 
       <div className="bg-white p-4 rounded-xl border border-border flex gap-4">
