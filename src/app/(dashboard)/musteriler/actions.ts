@@ -194,66 +194,84 @@ export interface CustomerImportRow {
   notes?: string | null;
 }
 
-export async function importCustomersBatch(rows: CustomerImportRow[]) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
+export async function importCustomersBatch(rows: CustomerImportRow[]): Promise<{
+  success: boolean;
+  inserted: number;
+  skipped: number;
+  error?: string;
+}> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, inserted: 0, skipped: 0, error: "Oturum açılmamış." };
 
-  const { data: profileData } = await supabase
-    .from("profiles")
-    .select("company_id")
-    .eq("id", user.id)
-    .single();
-  const profile = profileData as { company_id: string } | null;
-  if (!profile?.company_id) throw new Error("Company not found");
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", user.id)
+      .single();
+    const profile = profileData as { company_id: string } | null;
+    if (!profile?.company_id) return { success: false, inserted: 0, skipped: 0, error: "Şirket profili bulunamadı." };
 
-  if (!rows || rows.length === 0) return { inserted: 0, skipped: 0 };
+    if (!rows || rows.length === 0) return { success: true, inserted: 0, skipped: 0 };
 
-  // 1. Get existing contact_names for this batch to prevent duplicates
-  const names = rows.map((r) => r.contact_name.trim()).filter(Boolean);
-  const { data: existing } = await supabase
-    .from("customers")
-    .select("contact_name")
-    .eq("company_id", profile.company_id)
-    .in("contact_name", names);
+    // 1. Get existing contact_names for this batch to prevent duplicates
+    const names = rows.map((r) => r.contact_name?.trim()).filter(Boolean);
+    const { data: existing } = await supabase
+      .from("customers")
+      .select("contact_name")
+      .eq("company_id", profile.company_id)
+      .in("contact_name", names);
 
-  const existingSet = new Set((existing || []).map((e: any) => e.contact_name?.toLowerCase()));
+    const existingSet = new Set((existing || []).map((e: any) => e.contact_name?.toLowerCase()));
 
-  // 2. Filter out duplicates
-  const toInsert: any[] = [];
-  let skipped = 0;
-  const seenInBatch = new Set<string>();
+    // 2. Filter out duplicates
+    const toInsert: any[] = [];
+    let skipped = 0;
+    const seenInBatch = new Set<string>();
 
-  for (const r of rows) {
-    const trimmed = r.contact_name?.trim() || "";
-    const lower = trimmed.toLowerCase();
-    if (!trimmed || existingSet.has(lower) || seenInBatch.has(lower)) {
-      skipped++;
-      continue;
+    for (const r of rows) {
+      const trimmed = r.contact_name?.trim() || "";
+      const lower = trimmed.toLowerCase();
+      if (!trimmed || existingSet.has(lower) || seenInBatch.has(lower)) {
+        skipped++;
+        continue;
+      }
+      seenInBatch.add(lower);
+      toInsert.push({
+        company_id: profile.company_id,
+        type: r.type || "kurumsal",
+        company_name: r.company_name?.trim() || null,
+        contact_name: trimmed,
+        phone: r.phone?.trim() || null,
+        email: r.email?.trim() || null,
+        address: r.address?.trim() || null,
+        tax_office: r.tax_office?.trim() || null,
+        tax_number: r.tax_number?.trim() || null,
+        notes: r.notes?.trim() || null,
+        is_active: true,
+        created_by: user.id,
+      });
     }
-    seenInBatch.add(lower);
-    toInsert.push({
-      company_id: profile.company_id,
-      type: r.type || "kurumsal",
-      company_name: r.company_name?.trim() || null,
-      contact_name: trimmed,
-      phone: r.phone?.trim() || null,
-      email: r.email?.trim() || null,
-      address: r.address?.trim() || null,
-      tax_office: r.tax_office?.trim() || null,
-      tax_number: r.tax_number?.trim() || null,
-      notes: r.notes?.trim() || null,
-      is_active: true,
-      created_by: user.id,
-    });
-  }
 
-  if (toInsert.length > 0) {
-    const { error } = await supabase.from("customers").insert(toInsert as never);
-    if (error) throw new Error(error.message);
-  }
+    if (toInsert.length > 0) {
+      const { error } = await supabase.from("customers").insert(toInsert as never);
+      if (error) {
+        console.error("Batch insert error:", error);
+        return { success: false, inserted: 0, skipped, error: error.message };
+      }
+    }
 
-  return { inserted: toInsert.length, skipped };
+    return { success: true, inserted: toInsert.length, skipped };
+  } catch (err: unknown) {
+    console.error("importCustomersBatch exception:", err);
+    return {
+      success: false,
+      inserted: 0,
+      skipped: 0,
+      error: (err as Error)?.message || "İçe aktarım sırasında beklenmeyen bir hata oluştu.",
+    };
+  }
 }
 
 export async function finishCustomerImport() {

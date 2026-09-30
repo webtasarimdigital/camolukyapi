@@ -250,6 +250,10 @@ export function CustomerImportModal() {
         });
 
         const res = await importCustomersBatch(chunk);
+        if (!res.success) {
+          toast.error("İçe aktarım durduruldu: " + (res.error || "Bilinmeyen hata"));
+          break;
+        }
         totalInserted += res.inserted;
         totalSkipped += res.skipped;
       }
