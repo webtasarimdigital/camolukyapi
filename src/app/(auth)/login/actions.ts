@@ -2,7 +2,22 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
-import { type UserRole, ROLE_DEFINITIONS } from "@/lib/auth/role-constants";
+import type { UserRole } from "@/lib/auth/role-constants";
+
+function getDefaultName(role: UserRole): string {
+  switch (role) {
+    case "admin":
+      return "Çamoluk Yönetici";
+    case "muhasebe1":
+      return "Muhasebe 1 Personeli";
+    case "muhasebe2":
+      return "Muhasebe 2 Personeli";
+    case "sevkiyat":
+      return "Sevkiyat Sorumlusu";
+    default:
+      return "Kullanıcı";
+  }
+}
 
 export async function quickRoleLogin(role: UserRole) {
   const supabase = await createClient();
@@ -27,7 +42,7 @@ export async function quickRoleLogin(role: UserRole) {
     maxAge: 60 * 60 * 24 * 30,
   });
 
-  const userName = ROLE_DEFINITIONS[role]?.defaultName || "Kullanıcı";
+  const userName = getDefaultName(role);
   cookieStore.set("app_user_name", userName, {
     path: "/",
     maxAge: 60 * 60 * 24 * 30,

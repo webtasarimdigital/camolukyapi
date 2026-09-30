@@ -2,7 +2,22 @@
 
 import { cookies } from "next/headers";
 import { revalidatePath } from "next/cache";
-import { UserRole, ROLE_DEFINITIONS } from "./role-constants";
+import type { UserRole } from "./role-constants";
+
+function getDefaultName(role: UserRole): string {
+  switch (role) {
+    case "admin":
+      return "Çamoluk Yönetici";
+    case "muhasebe1":
+      return "Muhasebe 1 Personeli";
+    case "muhasebe2":
+      return "Muhasebe 2 Personeli";
+    case "sevkiyat":
+      return "Sevkiyat Sorumlusu";
+    default:
+      return "Kullanıcı";
+  }
+}
 
 export async function setActiveUserRole(role: UserRole, customName?: string) {
   const cookieStore = await cookies();
@@ -11,7 +26,7 @@ export async function setActiveUserRole(role: UserRole, customName?: string) {
     maxAge: 60 * 60 * 24 * 30, // 30 days
   });
 
-  const name = customName || ROLE_DEFINITIONS[role]?.defaultName || "Kullanıcı";
+  const name = customName || getDefaultName(role);
   cookieStore.set("app_user_name", name, {
     path: "/",
     maxAge: 60 * 60 * 24 * 30,
@@ -24,9 +39,6 @@ export async function setActiveUserRole(role: UserRole, customName?: string) {
 export async function getActiveUserSession(): Promise<{ role: UserRole; name: string }> {
   const cookieStore = await cookies();
   const role = (cookieStore.get("app_active_role")?.value as UserRole) || "admin";
-  const name =
-    cookieStore.get("app_user_name")?.value ||
-    ROLE_DEFINITIONS[role]?.defaultName ||
-    "Çamoluk Yönetici";
+  const name = cookieStore.get("app_user_name")?.value || getDefaultName(role);
   return { role, name };
 }

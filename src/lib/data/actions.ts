@@ -2,12 +2,14 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import {
+import type {
   Shipment,
   PaymentFollowup,
   Transporter,
   Employee,
   Rent,
+} from "./types";
+import {
   getShipments,
   saveShipment,
   updateShipmentStatus,
