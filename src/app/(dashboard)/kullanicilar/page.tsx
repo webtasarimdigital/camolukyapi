@@ -38,6 +38,9 @@ const DEFAULT_ACCOUNTS = [
   { email: "sevkiyat@camolukyapi.com", pass: "camoluk123", role: "sevkiyat", note: "Sevkiyat, GPS & Stok" },
 ];
 
+import { cookies } from "next/headers";
+import { AccountCredentialsCard } from "./AccountCredentialsCard";
+
 export default async function KullanicilarPage() {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
@@ -50,7 +53,13 @@ export default async function KullanicilarPage() {
     .single();
 
   const profile = profileData as { company_id: string; role: string } | null;
-  if (!profile?.company_id || profile.role !== "admin") redirect("/dashboard");
+  const cookieStore = await cookies();
+  const activeRole = cookieStore.get("app_active_role")?.value || profile?.role;
+
+  // STRICT ACCESS CONTROL: Only admin can see this page
+  if (!profile?.company_id || profile.role !== "admin" || activeRole !== "admin") {
+    redirect("/dashboard");
+  }
 
   // Fetch profiles
   const { data: profiles } = await supabase
@@ -79,41 +88,14 @@ export default async function KullanicilarPage() {
         <div>
           <h1 className="text-xl font-bold text-text">Kullanıcılar & Roller</h1>
           <p className="text-sm text-text-muted">
-            Sistem kullanıcıları, rolleri ve oturum açma yetkileri
+            Sistem kullanıcıları, rolleri ve oturum açma yetkileri (Yalnızca Yönetici Görür)
           </p>
         </div>
         <NewUserModal companyId={profile.company_id} />
       </div>
 
-      {/* Hazır Hesaplar Bilgi Kartı */}
-      <div className="bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-2xl p-5">
-        <div className="flex items-center gap-2 mb-3 text-brand-navy font-bold text-sm">
-          <Key size={16} />
-          <span>Sistemde Tanımlı Kullanıcı Hesapları & Giriş Bilgileri</span>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-          {DEFAULT_ACCOUNTS.map((acc) => (
-            <div
-              key={acc.email}
-              className="bg-white rounded-xl p-3 border border-blue-100 shadow-xs space-y-1.5"
-            >
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-text">{acc.role.toUpperCase()}</span>
-                <span className="px-1.5 py-0.5 rounded bg-blue-100 text-blue-700 text-[10px] font-bold">
-                  Aktif
-                </span>
-              </div>
-              <div className="text-text-muted">
-                <span className="font-mono text-text block truncate">{acc.email}</span>
-                <span className="font-mono text-emerald-700">Şifre: {acc.pass}</span>
-              </div>
-              <p className="text-[11px] text-text-muted italic border-t border-border pt-1">
-                {acc.note}
-              </p>
-            </div>
-          ))}
-        </div>
-      </div>
+      {/* Hazır Hesaplar Bilgi Kartı (Şifre Göster/Gizle Butonlu, Yalnızca Admin) */}
+      <AccountCredentialsCard accounts={DEFAULT_ACCOUNTS} />
 
       {/* Veritabanı Kullanıcı Listesi */}
       <div className="bg-white rounded-xl border border-border overflow-hidden shadow-xs">
