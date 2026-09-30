@@ -194,55 +194,70 @@ export interface CustomerImportRow {
   notes?: string | null;
 }
 
-export async function importCustomersFromExcel(rows: CustomerImportRow[]) {
+export async function importCustomersBatch(rows: CustomerImportRow[]) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  const { data: profileData } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
+  const { data: profileData } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
   const profile = profileData as { company_id: string } | null;
   if (!profile?.company_id) throw new Error("Company not found");
 
-  let inserted = 0;
+  if (!rows || rows.length === 0) return { inserted: 0, skipped: 0 };
+
+  // 1. Get existing contact_names for this batch to prevent duplicates
+  const names = rows.map((r) => r.contact_name.trim()).filter(Boolean);
+  const { data: existing } = await supabase
+    .from("customers")
+    .select("contact_name")
+    .eq("company_id", profile.company_id)
+    .in("contact_name", names);
+
+  const existingSet = new Set((existing || []).map((e: any) => e.contact_name?.toLowerCase()));
+
+  // 2. Filter out duplicates
+  const toInsert: any[] = [];
   let skipped = 0;
-  const errors: string[] = [];
+  const seenInBatch = new Set<string>();
 
-  for (const row of rows) {
-    if (!row.contact_name?.trim()) { skipped++; continue; }
-
-    // Mükerrer kontrolü — telefon veya ad eşleşmesi
-    const { data: existing } = await supabase
-      .from("customers")
-      .select("id")
-      .eq("company_id", profile.company_id)
-      .ilike("contact_name", row.contact_name.trim())
-      .limit(1);
-
-    if (existing && existing.length > 0) { skipped++; continue; }
-
-    const { error } = await supabase.from("customers").insert({
+  for (const r of rows) {
+    const trimmed = r.contact_name?.trim() || "";
+    const lower = trimmed.toLowerCase();
+    if (!trimmed || existingSet.has(lower) || seenInBatch.has(lower)) {
+      skipped++;
+      continue;
+    }
+    seenInBatch.add(lower);
+    toInsert.push({
       company_id: profile.company_id,
-      type: row.type || "bireysel",
-      company_name: row.company_name?.trim() || null,
-      contact_name: row.contact_name.trim(),
-      phone: row.phone?.trim() || null,
-      email: row.email?.trim() || null,
-      address: row.address?.trim() || null,
-      tax_office: row.tax_office?.trim() || null,
-      tax_number: row.tax_number?.trim() || null,
-      notes: row.notes?.trim() || null,
+      type: r.type || "kurumsal",
+      company_name: r.company_name?.trim() || null,
+      contact_name: trimmed,
+      phone: r.phone?.trim() || null,
+      email: r.email?.trim() || null,
+      address: r.address?.trim() || null,
+      tax_office: r.tax_office?.trim() || null,
+      tax_number: r.tax_number?.trim() || null,
+      notes: r.notes?.trim() || null,
       is_active: true,
       created_by: user.id,
-    } as never);
-
-    if (error) {
-      errors.push(`${row.contact_name}: ${error.message}`);
-    } else {
-      inserted++;
-    }
+    });
   }
 
+  if (toInsert.length > 0) {
+    const { error } = await supabase.from("customers").insert(toInsert as never);
+    if (error) throw new Error(error.message);
+  }
+
+  return { inserted: toInsert.length, skipped };
+}
+
+export async function finishCustomerImport() {
   revalidatePath("/musteriler");
-  return { inserted, skipped, errors };
+  return { success: true };
 }
 
