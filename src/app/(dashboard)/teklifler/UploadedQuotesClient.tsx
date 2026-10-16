@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useMemo } from "react";
+import { uploadToStorage } from "@/lib/storage-upload";
 import type { UploadedQuote } from "./uploaded-quotes-actions";
 import { saveUploadedQuote, deleteUploadedQuote } from "./uploaded-quotes-actions";
 import { formatCurrency, formatDate } from "@/lib/formatters";
@@ -48,23 +49,23 @@ export function UploadedQuotesClient({ initialQuotes }: Props) {
 
   const totalAmount = quotes.reduce((sum, q) => sum + (Number(q.amount) || 0), 0);
 
+  const [uploadingPdf, setUploadingPdf] = useState(false);
+
   function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.includes("pdf")) {
+    if (!file.type.includes("pdf") && !file.name.toLowerCase().endsWith(".pdf")) {
       toast.error("Lütfen sadece PDF formatında dosya seçin.");
       return;
     }
 
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error("Dosya boyutu 50MB sınırını aşıyor.");
+      return;
+    }
+
     setSelectedFile(file);
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setFileDataUrl(reader.result);
-      }
-    };
-    reader.readAsDataURL(file);
   }
 
   function handleOpenNew() {
@@ -89,19 +90,31 @@ export function UploadedQuotesClient({ initialQuotes }: Props) {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!fileDataUrl || !selectedFile) {
+    if (!selectedFile) {
       toast.error("Lütfen bir PDF dosyası seçin.");
       return;
     }
 
     const form = e.currentTarget;
     const formData = new FormData(form);
-    formData.set("file_url", fileDataUrl);
+
+    setUploadingPdf(true);
+    const month = new Date().toISOString().slice(0, 7);
+    const uploadRes = await uploadToStorage("quote-pdfs", selectedFile, month, 50);
+
+    if (!uploadRes.success || !uploadRes.url) {
+      setUploadingPdf(false);
+      toast.error(uploadRes.error || "PDF dosyası depolama alanına yüklenemedi.");
+      return;
+    }
+
+    formData.set("file_url", uploadRes.url);
     formData.set("file_name", selectedFile.name);
     formData.set("file_size", String(selectedFile.size));
 
     startTransition(async () => {
       const res = await saveUploadedQuote(formData);
+      setUploadingPdf(false);
       if (res.success && res.quote) {
         setQuotes((prev) => [res.quote!, ...prev]);
         toast.success("PDF teklifi başarıyla yüklendi ve arşivlendi!");
@@ -156,7 +169,8 @@ export function UploadedQuotesClient({ initialQuotes }: Props) {
 
       {/* Tablo */}
       <div className="bg-white rounded-2xl border border-border shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* MASAÜSTÜ TABLO */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs min-w-[850px]">
             <thead className="bg-surface border-b border-border text-text-muted uppercase font-semibold">
               <tr>
@@ -236,6 +250,68 @@ export function UploadedQuotesClient({ initialQuotes }: Props) {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* MOBİL GÖRÜNÜM (Kartlar) */}
+        <div className="block md:hidden divide-y divide-border">
+          {filtered.length === 0 ? (
+            <div className="py-10 text-center text-text-muted text-xs">
+              Arşivlenmiş PDF teklifi bulunamadı.
+            </div>
+          ) : (
+            filtered.map((item) => (
+              <div key={item.id} className="p-4 space-y-2">
+                <div className="flex items-start justify-between gap-2">
+                  <div className="space-y-0.5">
+                    <span className="text-[11px] text-text-muted block">
+                      {item.quote_date || formatDate(item.created_at)}
+                    </span>
+                    <h4 className="font-bold text-sm text-text flex items-center gap-1.5">
+                      <FileText size={15} className="text-brand-navy shrink-0" />
+                      <span>{item.title}</span>
+                    </h4>
+                    {item.customer_name && (
+                      <p className="text-xs text-text-muted font-medium">Müşteri: {item.customer_name}</p>
+                    )}
+                  </div>
+                  {item.amount && item.amount > 0 && (
+                    <span className="font-mono font-black text-sm text-brand-navy whitespace-nowrap">
+                      {formatCurrency(item.amount)}
+                    </span>
+                  )}
+                </div>
+
+                <div className="flex items-center justify-between text-xs text-text-muted pt-1 border-t border-border/50">
+                  <span className="truncate max-w-[180px] font-mono text-[11px]">
+                    📎 {item.file_name}
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      onClick={() => setPreviewPdf(item)}
+                      className="px-2.5 py-1 text-xs font-bold text-brand-navy bg-surface hover:bg-neutral-200 rounded-lg border border-border transition flex items-center gap-1"
+                    >
+                      <Eye size={12} /> Gör
+                    </button>
+                    <a
+                      href={item.file_url}
+                      download={item.file_name}
+                      className="p-1 text-emerald-700 bg-surface hover:bg-emerald-50 rounded-lg border border-border transition"
+                      title="İndir"
+                    >
+                      <Download size={14} />
+                    </a>
+                    <button
+                      onClick={() => handleDelete(item.id, item.title)}
+                      className="p-1 text-rose-500 hover:text-rose-700 bg-surface rounded-lg border border-border transition"
+                      title="Sil"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              </div>
+            ))
+          )}
         </div>
       </div>
 
@@ -340,10 +416,10 @@ export function UploadedQuotesClient({ initialQuotes }: Props) {
                 </button>
                 <button
                   type="submit"
-                  disabled={isPending || !fileDataUrl}
+                  disabled={isPending || uploadingPdf || !selectedFile}
                   className="bg-brand-navy text-white px-5 py-2 rounded-lg font-bold hover:bg-brand-navy/90 transition shadow-xs disabled:opacity-50"
                 >
-                  {isPending ? "Yükleniyor..." : "PDF Teklifi Kaydet"}
+                  {uploadingPdf ? "Depolamaya Yükleniyor..." : isPending ? "Kaydediliyor..." : "PDF Teklifi Kaydet"}
                 </button>
               </div>
             </form>

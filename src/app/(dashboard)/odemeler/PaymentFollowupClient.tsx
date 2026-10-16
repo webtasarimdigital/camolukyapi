@@ -293,7 +293,8 @@ export function PaymentFollowupClient({ initialItems, userName }: Props) {
 
       {/* Tablo */}
       <div className="bg-white rounded-2xl border border-border shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* MASAÜSTÜ TABLO */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs min-w-[950px]">
             <thead className="bg-surface border-b border-border text-text-muted uppercase font-semibold">
               <tr>
@@ -454,6 +455,124 @@ export function PaymentFollowupClient({ initialItems, userName }: Props) {
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* MOBİL GÖRÜNÜM (Kartlar) */}
+        <div className="block md:hidden divide-y divide-border">
+          {filtered.length === 0 ? (
+            <div className="py-10 text-center text-text-muted text-xs">
+              Kayıtlı ödeme takibi bulunamadı.
+            </div>
+          ) : (
+            filtered.map((item) => {
+              const remaining = Math.max(0, item.total_amount - (item.paid_amount || 0));
+              const isOverdue = remaining > 0 && item.due_date < todayStr;
+              const isToday = remaining > 0 && item.due_date === todayStr;
+
+              return (
+                <div
+                  key={item.id}
+                  className={`p-4 space-y-2.5 ${
+                    isOverdue ? "bg-rose-50/25" : isToday ? "bg-amber-50/25" : ""
+                  }`}
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span
+                      className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                        item.type === "alacak"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-rose-100 text-rose-800"
+                      }`}
+                    >
+                      {item.type === "alacak" ? "Alacak (Toplanacak)" : "Borç (Yapılacak)"}
+                    </span>
+                    <span className="font-mono font-black text-sm text-brand-navy">
+                      Kalan: {formatCurrency(remaining)}
+                    </span>
+                  </div>
+
+                  <div>
+                    <h4 className="font-bold text-sm text-text">{item.contact_name}</h4>
+                    {item.description && (
+                      <p className="text-xs text-text-muted mt-0.5">{item.description}</p>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 border-t border-border/50 text-text-muted">
+                    <div className="flex items-center gap-1.5">
+                      <span>Vade:</span>
+                      <strong className={isOverdue ? "text-rose-600 font-black" : isToday ? "text-amber-700 font-black" : "text-text"}>
+                        {item.due_date}
+                      </strong>
+                      {isOverdue && (
+                        <span className="bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded">
+                          GECİKTİ
+                        </span>
+                      )}
+                      {isToday && (
+                        <span className="bg-amber-500 text-white text-[9px] font-black px-1.5 py-0.2 rounded">
+                          BUGÜN
+                        </span>
+                      )}
+                    </div>
+                    <span>Toplam: <strong className="text-text">{formatCurrency(item.total_amount)}</strong></span>
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1">
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={item.status}
+                        disabled={isPending}
+                        onChange={(e) => handleQuickStatusChange(item, e.target.value as any)}
+                        className={`px-2 py-1 rounded-lg font-bold text-xs border outline-none ${
+                          item.status === "Ödendi"
+                            ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                            : item.status === "Kısmi Ödendi"
+                            ? "bg-amber-100 text-amber-800 border-amber-300"
+                            : item.status === "Ertelendi"
+                            ? "bg-purple-100 text-purple-800 border-purple-300"
+                            : "bg-gray-100 text-gray-800 border-gray-300"
+                        }`}
+                      >
+                        <option value="Bekliyor">Bekliyor</option>
+                        <option value="Kısmi Ödendi">Kısmi Ödendi</option>
+                        <option value="Ödendi">Ödendi</option>
+                        <option value="Ertelendi">Ertelendi</option>
+                      </select>
+
+                      {item.status !== "Ödendi" && (
+                        <button
+                          type="button"
+                          onClick={() => handleQuickStatusChange(item, "Ödendi")}
+                          disabled={isPending}
+                          className="text-xs font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-2.5 py-1 rounded-lg transition"
+                        >
+                          ✓ Ödendi Yap
+                        </button>
+                      )}
+                    </div>
+
+                    <div className="flex items-center gap-1.5">
+                      <button
+                        onClick={() => handleEdit(item)}
+                        className="p-1.5 rounded-lg bg-surface hover:bg-neutral-200 text-brand-navy transition"
+                        title="Düzenle"
+                      >
+                        <Edit3 size={15} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        className="p-1.5 rounded-lg bg-surface hover:bg-rose-100 text-rose-600 transition"
+                        title="Sil"
+                      >
+                        <Trash2 size={15} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
 

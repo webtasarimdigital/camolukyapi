@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useMemo, useRef } from "react";
+import { uploadToStorage, uploadMultipleToStorage } from "@/lib/storage-upload";
 import { Transporter, calculateDueDate12 } from "@/lib/data/types";
 import {
   actionSaveTransporter,
@@ -61,6 +62,7 @@ export function TransporterClient({ initialItems, userName }: Props) {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [isPending, startTransition] = useTransition();
+  const [docUploading, setDocUploading] = useState(false);
 
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
 
@@ -136,26 +138,36 @@ export function TransporterClient({ initialItems, userName }: Props) {
     setTimeout(() => setCopiedIban(null), 2000);
   }
 
-  function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleFileUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          setModalDocs((prev) => [
-            ...prev,
-            {
-              name: file.name,
-              url: reader.result as string,
-              type: file.type.includes("pdf") ? "pdf" : "image",
-            },
-          ]);
-        }
-      };
-      reader.readAsDataURL(file);
-    });
+    setDocUploading(true);
+    const month = new Date().toISOString().slice(0, 7);
+
+    for (const file of Array.from(files)) {
+      if (file.size > 25 * 1024 * 1024) {
+        toast.error(`${file.name} 25MB sınırını aşıyor.`);
+        continue;
+      }
+      const isPdf = file.type.includes("pdf") || file.name.toLowerCase().endsWith(".pdf");
+      const res = await uploadToStorage("transporter-docs", file, month, 25);
+      if (res.success && res.url) {
+        setModalDocs((prev) => [
+          ...prev,
+          {
+            name: file.name,
+            url: res.url!,
+            type: isPdf ? "pdf" : "image",
+          },
+        ]);
+        toast.success(`${file.name} başarıyla yüklendi!`);
+      } else {
+        toast.error(`${file.name} yüklenemedi: ${res.error || "Bilinmeyen hata"}`);
+      }
+    }
+    setDocUploading(false);
+    e.target.value = "";
   }
 
   function handleRemoveDoc(idx: number) {
@@ -507,7 +519,8 @@ export function TransporterClient({ initialItems, userName }: Props) {
 
       {/* Tablo */}
       <div className="bg-white rounded-2xl border border-border shadow-xs overflow-hidden">
-        <div className="overflow-x-auto">
+        {/* MASAÜSTÜ TABLO */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full text-left text-xs min-w-[950px]">
             <thead className="bg-surface border-b border-border text-text-muted uppercase font-semibold">
               <tr>
@@ -651,6 +664,119 @@ export function TransporterClient({ initialItems, userName }: Props) {
             </tbody>
           </table>
         </div>
+
+        {/* MOBİL GÖRÜNÜM (Kartlar) */}
+        <div className="block md:hidden divide-y divide-border">
+          {filtered.length === 0 ? (
+            <div className="py-10 text-center text-text-muted text-xs">
+              Kayıtlı nakliye ödemesi bulunamadı.
+            </div>
+          ) : (
+            filtered.map((item) => {
+              const isDue = item.status !== "Ödendi" && item.due_date <= todayStr;
+              const docs = Array.isArray(item.documents) ? item.documents : [];
+              const hasDoc = Boolean(item.document_url) || docs.length > 0;
+
+              return (
+                <div key={item.id} className={`p-4 space-y-2.5 ${isDue ? "bg-rose-50/25" : ""}`}>
+                  <div className="flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-1.5 font-bold text-sm text-text">
+                      <Truck size={14} className="text-brand-navy shrink-0" />
+                      <span>{item.transporter_name}</span>
+                    </div>
+                    <span className="font-mono font-black text-sm text-brand-navy">
+                      {formatCurrency(item.amount)}
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-text-muted">
+                    <span>Taşıma: <strong className="text-text">{item.transport_date}</strong></span>
+                    {item.invoice_no && <span>Fatura: <strong className="font-mono text-text">{item.invoice_no}</strong></span>}
+                  </div>
+
+                  <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 border-t border-border/50">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-text-muted">Vade (12 Gün):</span>
+                      <span className={`font-bold ${isDue ? "text-rose-600 font-black" : "text-text"}`}>
+                        {item.due_date}
+                      </span>
+                      {isDue && (
+                        <span className="bg-rose-600 text-white text-[9px] font-black px-1.5 py-0.2 rounded animate-pulse">
+                          DOLDU!
+                        </span>
+                      )}
+                    </div>
+
+                    {hasDoc && (
+                      <button
+                        onClick={() => {
+                          const list = [...docs];
+                          if (item.document_url && !list.some((d: any) => d.url === item.document_url)) {
+                            list.unshift({ name: "Fatura Belgesi", url: item.document_url, type: "pdf" });
+                          }
+                          setViewingDocs({
+                            title: `${item.transporter_name} - Nakliye Belgeleri`,
+                            docs: list,
+                          });
+                        }}
+                        className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[11px] font-bold border border-blue-200"
+                      >
+                        <FileText size={11} /> {docs.length > 0 ? `${docs.length} Belge` : "PDF Gör"}
+                      </button>
+                    )}
+                  </div>
+
+                  {item.iban && (
+                    <div className="flex items-center justify-between bg-surface/70 px-2.5 py-1 rounded-lg border border-border">
+                      <span className="font-mono text-[11px] text-text-muted truncate">
+                        {item.iban}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={(e) => handleCopyIban(item.iban, e)}
+                        className="text-xs font-bold text-brand-navy flex items-center gap-1"
+                      >
+                        {copiedIban === item.iban ? <Check size={12} className="text-emerald-600" /> : <Copy size={12} />}
+                        <span className="text-[10px]">{copiedIban === item.iban ? "Kopyalandı" : "Kopyala"}</span>
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-between pt-1">
+                    <button
+                      onClick={() => handleToggleStatus(item)}
+                      disabled={isPending}
+                      className={`px-3 py-1 rounded-full text-xs font-bold transition shadow-2xs ${
+                        item.status === "Ödendi"
+                          ? "bg-emerald-100 text-emerald-800"
+                          : "bg-rose-100 text-rose-800"
+                      }`}
+                    >
+                      {item.status === "Ödendi" ? "✓ Ödendi" : "✕ Ödenmedi"}
+                    </button>
+
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleEdit(item)}
+                        className="p-1.5 rounded-lg bg-surface hover:bg-neutral-200 text-brand-navy transition"
+                        title="Düzenle"
+                      >
+                        <Edit3 size={16} />
+                      </button>
+                      <button
+                        onClick={() => handleDelete(item.id)}
+                        className="p-1.5 rounded-lg bg-surface hover:bg-rose-100 text-rose-600 transition"
+                        title="Sil"
+                      >
+                        <Trash2 size={16} />
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* YENİ / DÜZENLE MODALI (PDF / Dekont Ekli) */}
@@ -743,8 +869,13 @@ export function TransporterClient({ initialItems, userName }: Props) {
                   <label className="font-bold text-text flex items-center gap-1.5">
                     <Paperclip size={14} className="text-brand-navy" />
                     PDF Fatura / Dekont Ekleri ({modalDocs.length})
+                    {docUploading && (
+                      <span className="text-xs text-brand-navy font-normal flex items-center gap-1">
+                        <Clock size={12} className="animate-spin" /> Yükleniyor...
+                      </span>
+                    )}
                   </label>
-                  <label className="bg-brand-navy text-white px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer hover:bg-brand-navy/90 transition flex items-center gap-1">
+                  <label className={`bg-brand-navy text-white px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer hover:bg-brand-navy/90 transition flex items-center gap-1 ${docUploading ? "opacity-50 pointer-events-none" : ""}`}>
                     <Upload size={12} /> Belge / PDF Seç
                     <input
                       type="file"
@@ -752,6 +883,7 @@ export function TransporterClient({ initialItems, userName }: Props) {
                       multiple
                       onChange={handleFileUpload}
                       className="hidden"
+                      disabled={docUploading}
                     />
                   </label>
                 </div>

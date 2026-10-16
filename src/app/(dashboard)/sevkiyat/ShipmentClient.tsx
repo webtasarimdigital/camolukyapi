@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useMemo } from "react";
+import { uploadMultipleToStorage } from "@/lib/storage-upload";
 import { Shipment } from "@/lib/data/types";
 import type { Vehicle } from "../otobil-gps/types";
 import {
@@ -58,6 +59,7 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
   const [modalPhotos, setModalPhotos] = useState<string[]>([]);
   const [selectedVehiclePlate, setSelectedVehiclePlate] = useState<string>("");
   const [driverNameInput, setDriverNameInput] = useState<string>("");
+  const [photoUploading, setPhotoUploading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   // Otobil URL
@@ -161,22 +163,38 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
     }
   }
 
-  function handleAddPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleAddPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
     const files = e.target.files;
     if (!files || files.length === 0) return;
-    Array.from(files).forEach((file) => {
-      if (!file.type.startsWith("image/")) {
-        toast.error("Lütfen sadece fotoğraf dosyası yükleyin.");
-        return;
+
+    const imageFiles = Array.from(files).filter((f) => {
+      if (!f.type.startsWith("image/")) {
+        toast.error(`${f.name} bir fotoğraf dosyası değil.`);
+        return false;
       }
-      const reader = new FileReader();
-      reader.onload = () => {
-        if (typeof reader.result === "string") {
-          setModalPhotos((prev) => [...prev, reader.result as string]);
-        }
-      };
-      reader.readAsDataURL(file);
+      if (f.size > 20 * 1024 * 1024) {
+        toast.error(`${f.name} dosyası 20MB sınırını aşıyor.`);
+        return false;
+      }
+      return true;
     });
+
+    if (imageFiles.length === 0) return;
+
+    setPhotoUploading(true);
+    const month = new Date().toISOString().slice(0, 7);
+    const { urls, errors } = await uploadMultipleToStorage("shipment-photos", imageFiles, month, 20);
+
+    if (errors.length > 0) {
+      toast.error(`${errors.length} dosya yüklenemedi: ${errors[0]}`);
+    }
+    if (urls.length > 0) {
+      setModalPhotos((prev) => [...prev, ...urls]);
+      toast.success(`${urls.length} fotoğraf başarıyla yüklendi!`);
+    }
+    setPhotoUploading(false);
+    // input'u sıfırla
+    e.target.value = "";
   }
 
   function handleRemovePhoto(index: number) {
@@ -565,7 +583,8 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
 
           {/* Tablo */}
           <div className="bg-white rounded-2xl border border-border shadow-xs overflow-hidden">
-            <div className="overflow-x-auto">
+            {/* MASAÜSTÜ TABLO */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs min-w-[950px]">
                 <thead className="bg-surface border-b border-border text-text-muted uppercase font-semibold">
                   <tr>
@@ -634,8 +653,8 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
                             <span
                               className={`px-2 py-0.5 rounded font-semibold text-[10px] ${
                                 item.is_official === "Resmi"
-                                  ? "bg-blue-100 text-blue-800 border border-blue-200"
-                                  : "bg-purple-100 text-purple-800 border border-purple-200"
+                                    ? "bg-blue-100 text-blue-800 border border-blue-200"
+                                    : "bg-purple-100 text-purple-800 border border-purple-200"
                               }`}
                             >
                               {item.is_official}
@@ -707,6 +726,112 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* MOBİL GÖRÜNÜM (Kartlar) */}
+            <div className="block md:hidden divide-y divide-border">
+              {filtered.length === 0 ? (
+                <div className="py-10 text-center text-text-muted text-xs">
+                  Kayıtlı sevkiyat bulunamadı.
+                </div>
+              ) : (
+                filtered.map((item) => {
+                  const photoCount = Array.isArray(item.photos) ? item.photos.length : 0;
+                  return (
+                    <div key={item.id} className="p-4 space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="font-mono font-bold text-xs text-brand-navy">
+                          #{item.receipt_no || "Fişsiz"}
+                        </span>
+                        <div className="flex items-center gap-2">
+                          <span className={`px-2 py-0.5 rounded font-bold text-[10px] ${
+                            item.is_official === "Resmi"
+                              ? "bg-blue-100 text-blue-800"
+                              : "bg-purple-100 text-purple-800"
+                          }`}>
+                            {item.is_official}
+                          </span>
+                          <span className="text-[11px] text-text-muted font-medium">
+                            {item.shipment_date || (item.created_at ? item.created_at.split("T")[0] : "-")}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div>
+                        <h4 className="font-bold text-sm text-text">{item.customer_name}</h4>
+                        <p className="text-xs text-text-muted flex items-center gap-1 mt-0.5">
+                          <MapPin size={12} className="text-brand-navy shrink-0" />
+                          <span className="truncate">{item.destination}</span>
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 border-t border-border/50">
+                        <div className="flex items-center gap-2">
+                          {item.vehicle_plate && (
+                            <span className="font-mono font-bold text-[10px] bg-brand-navy/10 text-brand-navy px-1.5 py-0.5 rounded">
+                              {item.vehicle_plate}
+                            </span>
+                          )}
+                          <span className="font-bold text-text">{item.m2} m²</span>
+                          <span className="text-text-muted">({item.pallet_count} Palet)</span>
+                        </div>
+
+                        {photoCount > 0 && (
+                          <button
+                            onClick={() =>
+                              setViewingPhotos({
+                                title: `${item.customer_name} - ${item.receipt_no || "Sevkiyat"} Fotoğrafları`,
+                                photos: item.photos || [],
+                              })
+                            }
+                            className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 px-2 py-1 rounded text-[11px] font-bold border border-blue-200"
+                          >
+                            <Camera size={12} /> {photoCount} Foto
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                        <select
+                          value={item.status}
+                          disabled={isPending}
+                          onChange={(e) =>
+                            handleStatusChange(item.id, e.target.value as Shipment["status"])
+                          }
+                          className={`px-2.5 py-1 rounded-lg font-bold text-xs border outline-none ${
+                            item.status === "Depoya Gitti"
+                              ? "bg-amber-100 text-amber-900 border-amber-300"
+                              : item.status === "Sevkiyata Çıktı"
+                              ? "bg-blue-100 text-blue-900 border-blue-300"
+                              : "bg-emerald-100 text-emerald-900 border-emerald-300"
+                          }`}
+                        >
+                          <option value="Depoya Gitti">Depoya Gitti</option>
+                          <option value="Sevkiyata Çıktı">Sevkiyata Çıktı</option>
+                          <option value="Teslim Edildi">Teslim Edildi</option>
+                        </select>
+
+                        <div className="flex items-center gap-2">
+                          <button
+                            onClick={() => handleOpenEdit(item)}
+                            className="p-1.5 rounded-lg bg-surface hover:bg-neutral-200 text-brand-navy transition"
+                            title="Düzenle"
+                          >
+                            <Edit3 size={16} />
+                          </button>
+                          <button
+                            onClick={() => handleDelete(item.id)}
+                            className="p-1.5 rounded-lg bg-surface hover:bg-rose-100 text-rose-600 transition"
+                            title="Sil"
+                          >
+                            <Trash2 size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </>
@@ -900,32 +1025,50 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
 
               {/* FOTOĞRAFLAR (Madde 14) */}
               <div className="space-y-2 bg-surface/70 p-3 rounded-xl border border-border">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between flex-wrap gap-2">
                   <label className="font-bold text-text flex items-center gap-1.5">
                     <Camera size={14} className="text-brand-navy" />
                     Sevkiyat / İrsaliye Fotoğrafları ({modalPhotos.length})
+                    {photoUploading && (
+                      <span className="text-xs text-brand-navy font-normal flex items-center gap-1">
+                        <Eye size={12} className="animate-pulse" /> Yükleniyor...
+                      </span>
+                    )}
                   </label>
-                  <label className="bg-brand-navy text-white px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer hover:bg-brand-navy/90 transition flex items-center gap-1">
-                    <Plus size={12} /> Fotoğraf Ekle
-                    <input
-                      type="file"
-                      accept="image/*"
-                      multiple
-                      onChange={handleAddPhotoFile}
-                      className="hidden"
-                    />
-                  </label>
+                  <div className="flex gap-2">
+                    <label className="bg-brand-navy text-white px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer hover:bg-brand-navy/90 transition flex items-center gap-1">
+                      <ImageIcon size={12} /> Galeriden
+                      <input
+                        type="file"
+                        accept="image/*"
+                        multiple
+                        onChange={handleAddPhotoFile}
+                        className="hidden"
+                        disabled={photoUploading}
+                      />
+                    </label>
+                    <label className="bg-emerald-600 text-white px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer hover:bg-emerald-700 transition flex items-center gap-1">
+                      <Camera size={12} /> Kamera
+                      <input
+                        type="file"
+                        accept="image/*"
+                        capture="environment"
+                        onChange={handleAddPhotoFile}
+                        className="hidden"
+                        disabled={photoUploading}
+                      />
+                    </label>
+                  </div>
                 </div>
-
                 {modalPhotos.length > 0 && (
-                  <div className="grid grid-cols-4 gap-2 pt-2">
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-2">
                     {modalPhotos.map((photo, idx) => (
                       <div key={idx} className="relative group rounded-lg overflow-hidden border border-border aspect-square bg-black/5">
                         <img src={photo} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
                         <button
                           type="button"
                           onClick={() => handleRemovePhoto(idx)}
-                          className="absolute top-1 right-1 bg-rose-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition shadow-xs"
+                          className="absolute top-1 right-1 bg-rose-600 text-white rounded-full p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition shadow-xs"
                           title="Fotoğrafı Kaldır"
                         >
                           <X size={10} />
@@ -933,6 +1076,9 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
                       </div>
                     ))}
                   </div>
+                )}
+                {modalPhotos.length === 0 && !photoUploading && (
+                  <p className="text-xs text-text-muted text-center py-3">Teslimat kanıtı veya irsaliye fotoğrafı ekleyin.</p>
                 )}
               </div>
 

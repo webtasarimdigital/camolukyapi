@@ -100,11 +100,16 @@ export default async function PrintQuotePage({
   const salesRepPhone = creator?.phone || company?.phone || "0555 997 29 14";
 
   const headersList = await headers();
-  const host = headersList.get("x-forwarded-host") || headersList.get("host") || "camolukyapi.vercel.app";
-  const proto = headersList.get("x-forwarded-proto") || "https";
+  let host = headersList.get("x-forwarded-host") || headersList.get("host") || "";
+  let proto = headersList.get("x-forwarded-proto") || "https";
+
+  if (!host || host.includes("localhost") || host.includes("127.0.0.1")) {
+    host = "camolukyapi.vercel.app";
+    proto = "https";
+  }
   const currentOrigin = `${proto}://${host}`;
   const quoteDirectUrl = `${currentOrigin}/teklif-onizleme/${quote.id}`;
-  const qrIbanUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(quoteDirectUrl)}`;
+  const qrIbanUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=0&data=${encodeURIComponent(quoteDirectUrl)}`;
 
   const partners = [
     { name: "NG KÜTAHYA", sub: "SERAMİK", bold: true },
@@ -285,22 +290,22 @@ export default async function PrintQuotePage({
                           )}
                         </td>
                         <td className="py-1.5 px-2 text-right border-r border-neutral-200 font-medium tabular-nums">
-                          {Number(item.quantity).toLocaleString("tr-TR", { maximumFractionDigits: 2 })}
+                          {Number(item.quantity || 0).toLocaleString("tr-TR", { maximumFractionDigits: 2 })}
                         </td>
                         <td className="py-1.5 px-2 text-center border-r border-neutral-200 text-neutral-600 uppercase text-[8.5px]">
                           {item.unit_snapshot || "ADET"}
                         </td>
                         <td className="py-1.5 px-2 text-right border-r border-neutral-200 tabular-nums text-neutral-800">
-                          ₺{Number(item.unit_price).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          ₺{Number(item.unit_price || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td className="py-1.5 px-1.5 text-right border-r border-neutral-200 tabular-nums text-neutral-700">
-                          {discountPercent > 0 ? `%${Number(discountPercent).toFixed(2).replace(/\.00$/, "")}` : "%0,00"}
+                          {discountPercent > 0 ? `%${Number(discountPercent || 0).toFixed(2).replace(/\.00$/, "")}` : "%0,00"}
                         </td>
                         <td className="py-1.5 px-2 text-right border-r border-neutral-200 tabular-nums text-neutral-700">
                           ₺{Number(item.discount_amount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                         <td className="py-1.5 px-2.5 text-right font-bold text-neutral-900 tabular-nums">
-                          ₺{Number(item.line_total).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                          ₺{Number(item.line_total || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </td>
                       </tr>
                     );
@@ -362,24 +367,24 @@ export default async function PrintQuotePage({
                     ₺{Number(quote.subtotal || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
-                {quote.general_discount_amount > 0 && (
+                {Number(quote.general_discount_amount || 0) > 0 && (
                   <div className="flex justify-between items-center text-red-600 font-medium">
                     <span className="uppercase text-[9px]">GENEL İSKONTO:</span>
                     <span className="tabular-nums">
-                      -₺{Number(quote.general_discount_amount).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      -₺{Number(quote.general_discount_amount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                     </span>
                   </div>
                 )}
                 <div className="flex justify-between items-center text-neutral-700">
                   <span className="font-semibold uppercase text-[9px]">NET TUTAR:</span>
                   <span className="font-bold text-neutral-900 tabular-nums">
-                    ₺{Number(quote.net_total || quote.subtotal).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₺{Number(quote.net_total ?? quote.subtotal ?? 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
                 <div className="flex justify-between items-center text-neutral-600">
                   <span className="font-semibold uppercase text-[9px]">KDV (%{quote.vat_rate || 20}):</span>
                   <span className="font-bold text-neutral-800 tabular-nums">
-                    ₺{Number(quote.vat_amount || 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    ₺{Number(quote.vat_total ?? quote.vat_amount ?? 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                   </span>
                 </div>
               </div>
@@ -387,7 +392,7 @@ export default async function PrintQuotePage({
               <div className="bg-neutral-900 text-white rounded-lg px-3 py-2 flex justify-between items-center shadow-xs">
                 <span className="font-black tracking-wider text-[11px] uppercase">GENEL TOPLAM</span>
                 <span className="text-base font-black tabular-nums tracking-wide">
-                  ₺{Number(quote.total_amount).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                  ₺{Number(quote.grand_total ?? quote.total_amount ?? 0).toLocaleString("tr-TR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                 </span>
               </div>
             </div>

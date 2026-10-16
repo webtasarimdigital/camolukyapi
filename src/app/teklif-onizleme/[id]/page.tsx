@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createServiceClient } from "@/lib/supabase/server";
 import { headers } from "next/headers";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import {
@@ -24,7 +24,7 @@ export default async function PublicQuotePreviewPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const supabase = await createClient();
+  const supabase = await createServiceClient();
 
   const { data: quoteData } = await supabase
     .from("quotes")
@@ -76,11 +76,16 @@ export default async function PublicQuotePreviewPage({
   const salesRepPhone = creator?.phone || "0555 997 29 14";
 
   const headersList = await headers();
-  const host = headersList.get("x-forwarded-host") || headersList.get("host") || "camolukyapi.vercel.app";
-  const proto = headersList.get("x-forwarded-proto") || "https";
+  let host = headersList.get("x-forwarded-host") || headersList.get("host") || "";
+  let proto = headersList.get("x-forwarded-proto") || "https";
+
+  if (!host || host.includes("localhost") || host.includes("127.0.0.1")) {
+    host = "camolukyapi.vercel.app";
+    proto = "https";
+  }
   const currentOrigin = `${proto}://${host}`;
   const quoteDirectUrl = `${currentOrigin}/teklif-onizleme/${quote.id}`;
-  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(quoteDirectUrl)}`;
+  const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=0&data=${encodeURIComponent(quoteDirectUrl)}`;
 
   const partners = [
     { name: "NG KÜTAHYA", sub: "SERAMİK", bold: true },
@@ -339,12 +344,12 @@ export default async function PublicQuotePreviewPage({
               </div>
               <div className="flex justify-between items-center text-neutral-600">
                 <span>KDV (%{quote.vat_rate || 20})</span>
-                <span className="font-semibold text-neutral-900 tabular-nums">{formatCurrency(quote.vat_total)}</span>
+                <span className="font-semibold text-neutral-900 tabular-nums">{formatCurrency(quote.vat_total ?? quote.vat_amount ?? 0)}</span>
               </div>
             </div>
             <div className="bg-neutral-900 text-white p-2.5 flex justify-between items-center font-black text-[13px]">
               <span>GENEL TOPLAM</span>
-              <span className="tabular-nums">{formatCurrency(quote.grand_total)}</span>
+              <span className="tabular-nums">{formatCurrency(quote.grand_total ?? quote.total_amount ?? 0)}</span>
             </div>
           </div>
         </div>
