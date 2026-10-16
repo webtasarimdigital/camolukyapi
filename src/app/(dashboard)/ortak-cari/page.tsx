@@ -10,6 +10,8 @@ import {
 } from "lucide-react";
 import { PartnerCard } from "./PartnerCard";
 import { PartnerNotesSection, NoteItem } from "./PartnerNotesSection";
+import { PartnerRentShareCard } from "./PartnerRentShareCard";
+import { getRents } from "@/lib/data/store";
 
 export default async function OrtakCariPage() {
   const supabase = await createClient();
@@ -59,6 +61,9 @@ export default async function OrtakCariPage() {
       phone?: string | null;
     }>;
   }
+
+  // Sabit kira gelirlerini çek
+  const rents = await getRents();
 
   // Tüm hareketleri ve notları çek
   const { data: rawLedgerData } = await supabase
@@ -304,6 +309,9 @@ export default async function OrtakCariPage() {
           );
         })}
       </div>
+
+      {/* ŞİRKET SABİT KİRA GELİRLERİ & ORTAK PAYLAŞIMI */}
+      <PartnerRentShareCard rents={rents} partners={partners} />
 
       {/* ORTAKLAR ARASI ÖZEL NOT DEFTERİ (Projeden Bağımsız) */}
       <PartnerNotesSection partners={partners} notes={parsedNotes} />

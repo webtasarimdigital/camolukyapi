@@ -3,6 +3,7 @@ import Link from "next/link";
 import { formatCurrency } from "@/lib/formatters";
 import { redirect } from "next/navigation";
 import { ShoppingCart, Plus, ArrowRight } from "lucide-react";
+import { DeleteSaleButton } from "./DeleteSaleButton";
 
 export default async function SalesPage() {
   const supabase = await createClient();
@@ -134,12 +135,15 @@ export default async function SalesPage() {
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
-                      <Link 
-                        href={`/satislar/${sale.id}`} 
-                        className="inline-flex items-center gap-1 text-brand-navy hover:text-black font-bold text-xs bg-surface px-2.5 py-1 rounded-lg border border-border hover:border-brand-navy transition"
-                      >
-                        Detay <ArrowRight size={12} />
-                      </Link>
+                      <div className="flex items-center justify-end gap-1.5">
+                        <Link 
+                          href={`/satislar/${sale.id}`} 
+                          className="inline-flex items-center gap-1 text-brand-navy hover:text-black font-bold text-xs bg-surface px-2.5 py-1 rounded-lg border border-border hover:border-brand-navy transition"
+                        >
+                          Detay <ArrowRight size={12} />
+                        </Link>
+                        <DeleteSaleButton saleId={sale.id} saleCode={sale.sale_code} />
+                      </div>
                     </td>
                   </tr>
                 );

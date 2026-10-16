@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useMemo } from "react";
 import { Shipment } from "@/lib/data/types";
+import type { Vehicle } from "../otobil-gps/types";
 import {
   actionSaveShipment,
   actionUpdateShipmentStatus,
@@ -21,44 +22,168 @@ import {
   Box,
   FileText,
   User,
+  Calendar,
+  Filter,
+  X,
+  Edit3,
+  Camera,
+  Image as ImageIcon,
+  Eye,
+  CalendarDays,
+  CheckCircle,
 } from "lucide-react";
 
 interface Props {
   initialShipments: Shipment[];
+  initialVehicles?: Vehicle[];
   userRole: string;
   userName: string;
 }
 
-export function ShipmentClient({ initialShipments }: Props) {
+type ShipmentTab = "all" | "today" | "upcoming" | "delivered" | "otobil";
+
+export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props) {
   const [shipments, setShipments] = useState<Shipment[]>(initialShipments);
+  const [vehicles] = useState<Vehicle[]>(initialVehicles);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [officialFilter, setOfficialFilter] = useState<string>("all");
+  const [vehicleFilter, setVehicleFilter] = useState<string>("all");
+  const [startDateFilter, setStartDateFilter] = useState<string>("");
+  const [endDateFilter, setEndDateFilter] = useState<string>("");
+  const [activeTab, setActiveTab] = useState<ShipmentTab>("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [activeTab, setActiveTab] = useState<"list" | "otobil">("list");
+  const [editingShipment, setEditingShipment] = useState<Shipment | null>(null);
+  const [viewingPhotos, setViewingPhotos] = useState<{ title: string; photos: any[] } | null>(null);
+  const [modalPhotos, setModalPhotos] = useState<string[]>([]);
+  const [selectedVehiclePlate, setSelectedVehiclePlate] = useState<string>("");
+  const [driverNameInput, setDriverNameInput] = useState<string>("");
   const [isPending, startTransition] = useTransition();
 
-  // Otobil settings
+  // Otobil URL
   const [otobilUrl, setOtobilUrl] = useState("https://web.otobil.com.tr");
 
-  const filtered = shipments.filter((s) => {
-    const q = search.toLowerCase();
-    const matchQ =
-      s.customer_name.toLowerCase().includes(q) ||
-      s.seller.toLowerCase().includes(q) ||
-      s.receipt_no.toLowerCase().includes(q) ||
-      s.destination.toLowerCase().includes(q);
-    const matchStatus = statusFilter === "all" || s.status === statusFilter;
-    const matchOfficial = officialFilter === "all" || s.is_official === officialFilter;
-    return matchQ && matchStatus && matchOfficial;
-  });
+  const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
+
+  // Filter logic
+  const filtered = useMemo(() => {
+    return shipments.filter((s) => {
+      // Sekme Filtresi (Madde 21)
+      const sDate = s.shipment_date || (s.created_at ? s.created_at.split("T")[0] : "");
+      if (activeTab === "today") {
+        if (sDate !== todayStr && s.status === "Teslim Edildi") return false;
+        if (sDate !== todayStr && sDate) return false;
+      } else if (activeTab === "upcoming") {
+        if (!sDate || sDate <= todayStr || s.status === "Teslim Edildi") return false;
+      } else if (activeTab === "delivered") {
+        if (s.status !== "Teslim Edildi") return false;
+      }
+
+      // Metin Arama
+      const q = search.toLowerCase();
+      const matchQ =
+        !q ||
+        s.customer_name.toLowerCase().includes(q) ||
+        s.seller.toLowerCase().includes(q) ||
+        s.receipt_no.toLowerCase().includes(q) ||
+        s.destination.toLowerCase().includes(q) ||
+        (s.vehicle_plate && s.vehicle_plate.toLowerCase().includes(q)) ||
+        (s.driver_name && s.driver_name.toLowerCase().includes(q));
+
+      // Statü & Tip Filtresi (Madde 16)
+      const matchStatus = statusFilter === "all" || s.status === statusFilter;
+      const matchOfficial = officialFilter === "all" || s.is_official === officialFilter;
+      const matchVehicle = vehicleFilter === "all" || s.vehicle_plate === vehicleFilter;
+
+      // Tarih Aralığı Filtresi
+      let matchDate = true;
+      if (startDateFilter && sDate && sDate < startDateFilter) matchDate = false;
+      if (endDateFilter && sDate && sDate > endDateFilter) matchDate = false;
+
+      return matchQ && matchStatus && matchOfficial && matchVehicle && matchDate;
+    });
+  }, [
+    shipments,
+    activeTab,
+    todayStr,
+    search,
+    statusFilter,
+    officialFilter,
+    vehicleFilter,
+    startDateFilter,
+    endDateFilter,
+  ]);
+
+  // Tab sayıları
+  const countToday = useMemo(() => {
+    return shipments.filter((s) => {
+      const sDate = s.shipment_date || (s.created_at ? s.created_at.split("T")[0] : "");
+      return sDate === todayStr || (s.status !== "Teslim Edildi" && !s.shipment_date);
+    }).length;
+  }, [shipments, todayStr]);
+
+  const countUpcoming = useMemo(() => {
+    return shipments.filter((s) => {
+      const sDate = s.shipment_date || (s.created_at ? s.created_at.split("T")[0] : "");
+      return sDate > todayStr && s.status !== "Teslim Edildi";
+    }).length;
+  }, [shipments, todayStr]);
+
+  const countDelivered = useMemo(() => {
+    return shipments.filter((s) => s.status === "Teslim Edildi").length;
+  }, [shipments]);
 
   const countDepoyaGitti = shipments.filter((s) => s.status === "Depoya Gitti").length;
   const countSevkiyatta = shipments.filter((s) => s.status === "Sevkiyata Çıktı").length;
   const countTeslim = shipments.filter((s) => s.status === "Teslim Edildi").length;
 
+  function handleOpenNew() {
+    setEditingShipment(null);
+    setModalPhotos([]);
+    setSelectedVehiclePlate("");
+    setDriverNameInput("");
+    setIsModalOpen(true);
+  }
+
+  function handleOpenEdit(item: Shipment) {
+    setEditingShipment(item);
+    setModalPhotos(Array.isArray(item.photos) ? item.photos : []);
+    setSelectedVehiclePlate(item.vehicle_plate || "");
+    setDriverNameInput(item.driver_name || "");
+    setIsModalOpen(true);
+  }
+
+  function handleVehicleChange(plate: string) {
+    setSelectedVehiclePlate(plate);
+    const found = vehicles.find((v) => v.plate === plate);
+    if (found && found.driver_name) {
+      setDriverNameInput(found.driver_name);
+    }
+  }
+
+  function handleAddPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach((file) => {
+      if (!file.type.startsWith("image/")) {
+        toast.error("Lütfen sadece fotoğraf dosyası yükleyin.");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = () => {
+        if (typeof reader.result === "string") {
+          setModalPhotos((prev) => [...prev, reader.result as string]);
+        }
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function handleRemovePhoto(index: number) {
+    setModalPhotos((prev) => prev.filter((_, i) => i !== index));
+  }
+
   async function handleStatusChange(id: string, newStatus: Shipment["status"]) {
-    // Anında arayüzde göster (Optimistic update)
     setShipments((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status: newStatus } : item))
     );
@@ -101,22 +226,41 @@ export function ShipmentClient({ initialShipments }: Props) {
     const form = e.currentTarget;
     const formData = new FormData(form);
 
+    formData.set("photos", JSON.stringify(modalPhotos));
+    if (selectedVehiclePlate) formData.set("vehicle_plate", selectedVehiclePlate);
+    if (driverNameInput) formData.set("driver_name", driverNameInput);
+
     startTransition(async () => {
       try {
         const res = await actionSaveShipment(formData);
         if (res.success && res.shipment) {
-          setShipments((prev) => [res.shipment!, ...prev]);
-          toast.success("Yeni sevkiyat başarıyla oluşturuldu!");
+          setShipments((prev) => {
+            const idx = prev.findIndex((s) => s.id === res.shipment!.id);
+            if (idx !== -1) {
+              const updated = [...prev];
+              updated[idx] = res.shipment!;
+              return updated;
+            }
+            return [res.shipment!, ...prev];
+          });
+          toast.success(editingShipment ? "Sevkiyat bilgileri güncellendi!" : "Yeni sevkiyat başarıyla oluşturuldu!");
           setIsModalOpen(false);
-          form.reset();
         } else {
-          toast.error(res.error || "Sevkiyat oluşturulamadı.");
+          toast.error(res.error || "Sevkiyat kaydedilemedi.");
         }
       } catch {
         toast.error("Sevkiyat kaydedilirken hata oluştu.");
       }
     });
   }
+
+  const hasActiveFilters =
+    statusFilter !== "all" ||
+    officialFilter !== "all" ||
+    vehicleFilter !== "all" ||
+    startDateFilter !== "" ||
+    endDateFilter !== "" ||
+    search !== "";
 
   return (
     <div className="space-y-6">
@@ -128,42 +272,80 @@ export function ShipmentClient({ initialShipments }: Props) {
             Sevkiyat ve Teslimat Yönetimi
           </h1>
           <p className="text-xs text-text-muted mt-0.5">
-            Müşteri sevk yerleri, palet, metrekare ve anlık araç hazırlık takibi
+            Günlük sevkiyat planı, araç atama, teslimat fotoğrafları ve canlı rota takibi
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <div className="flex bg-surface p-1 rounded-xl border border-border">
-            <button
-              onClick={() => setActiveTab("list")}
-              className={`px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-                activeTab === "list"
-                  ? "bg-white text-brand-navy shadow-xs"
-                  : "text-text-muted hover:text-text"
-              }`}
-            >
-              Sevkiyat Listesi ({shipments.length})
-            </button>
-            <button
-              onClick={() => setActiveTab("otobil")}
-              className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-                activeTab === "otobil"
-                  ? "bg-brand-navy text-white shadow-xs"
-                  : "text-text-muted hover:text-text"
-              }`}
-            >
-              <Navigation size={13} />
-              Otobil GPS Araç Takip
-            </button>
-          </div>
-
           <button
-            onClick={() => setIsModalOpen(true)}
+            onClick={handleOpenNew}
             className="flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
           >
             <Plus size={16} /> + Yeni Sevk Kaydı Gir
           </button>
         </div>
+      </div>
+
+      {/* SEKME GEZİNTİSİ (Madde 21) */}
+      <div className="flex flex-wrap items-center gap-2 border-b border-border pb-2">
+        <button
+          onClick={() => setActiveTab("all")}
+          className={`px-3.5 py-2 rounded-xl text-xs font-bold transition ${
+            activeTab === "all"
+              ? "bg-brand-navy text-white shadow-xs"
+              : "bg-surface hover:bg-surface/80 text-text border border-border"
+          }`}
+        >
+          Tüm Sevkiyatlar ({shipments.length})
+        </button>
+
+        <button
+          onClick={() => setActiveTab("today")}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
+            activeTab === "today"
+              ? "bg-amber-600 text-white shadow-xs"
+              : "bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200"
+          }`}
+        >
+          <CalendarDays size={14} />
+          Bugün Gidecekler ({countToday})
+        </button>
+
+        <button
+          onClick={() => setActiveTab("upcoming")}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
+            activeTab === "upcoming"
+              ? "bg-blue-600 text-white shadow-xs"
+              : "bg-blue-50 hover:bg-blue-100 text-blue-900 border border-blue-200"
+          }`}
+        >
+          <Clock size={14} />
+          İleri Tarihli Planlar ({countUpcoming})
+        </button>
+
+        <button
+          onClick={() => setActiveTab("delivered")}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition ${
+            activeTab === "delivered"
+              ? "bg-emerald-600 text-white shadow-xs"
+              : "bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-200"
+          }`}
+        >
+          <CheckCircle size={14} />
+          Teslim Edilenler ({countDelivered})
+        </button>
+
+        <button
+          onClick={() => setActiveTab("otobil")}
+          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition ml-auto ${
+            activeTab === "otobil"
+              ? "bg-brand-navy text-white shadow-xs"
+              : "bg-surface hover:bg-surface/80 text-text border border-border"
+          }`}
+        >
+          <Navigation size={14} />
+          Otobil GPS Filo Takip
+        </button>
       </div>
 
       {activeTab === "otobil" ? (
@@ -214,12 +396,11 @@ export function ShipmentClient({ initialShipments }: Props) {
             </div>
           </div>
 
-          {/* Otobil Portal Frame / Entegrasyon Kutusu */}
           <div className="border border-border rounded-xl p-6 bg-slate-50 text-center space-y-3">
             <MapPin size={40} className="mx-auto text-brand-navy/60" />
             <h4 className="text-sm font-bold text-text">Otobil Canlı Harita ve Telemetri Girişi</h4>
             <p className="text-xs text-text-muted max-w-lg mx-auto">
-              Otobil kullanıcı adı ve şifrenizle doğrudan giriş yapmak veya takip portalını bağlamak için aşağıdaki bağlantıyı kullanabilirsiniz.
+              Petrol Ofisi Otobil sistemine tek tıkla bağlanın veya URL adresini özelleştirin.
             </p>
             <div className="max-w-md mx-auto flex gap-2">
               <input
@@ -244,7 +425,7 @@ export function ShipmentClient({ initialShipments }: Props) {
           {/* KPI Kartları */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div
-              onClick={() => setStatusFilter("Depoya Gitti")}
+              onClick={() => setStatusFilter(statusFilter === "Depoya Gitti" ? "all" : "Depoya Gitti")}
               className={`p-4 rounded-2xl border transition cursor-pointer ${
                 statusFilter === "Depoya Gitti"
                   ? "bg-amber-50 border-amber-300 ring-2 ring-amber-400"
@@ -260,7 +441,7 @@ export function ShipmentClient({ initialShipments }: Props) {
             </div>
 
             <div
-              onClick={() => setStatusFilter("Sevkiyata Çıktı")}
+              onClick={() => setStatusFilter(statusFilter === "Sevkiyata Çıktı" ? "all" : "Sevkiyata Çıktı")}
               className={`p-4 rounded-2xl border transition cursor-pointer ${
                 statusFilter === "Sevkiyata Çıktı"
                   ? "bg-blue-50 border-blue-300 ring-2 ring-blue-400"
@@ -276,7 +457,7 @@ export function ShipmentClient({ initialShipments }: Props) {
             </div>
 
             <div
-              onClick={() => setStatusFilter("Teslim Edildi")}
+              onClick={() => setStatusFilter(statusFilter === "Teslim Edildi" ? "all" : "Teslim Edildi")}
               className={`p-4 rounded-2xl border transition cursor-pointer ${
                 statusFilter === "Teslim Edildi"
                   ? "bg-emerald-50 border-emerald-300 ring-2 ring-emerald-400"
@@ -292,20 +473,21 @@ export function ShipmentClient({ initialShipments }: Props) {
             </div>
           </div>
 
-          {/* Filtre ve Arama */}
-          <div className="bg-white p-4 rounded-2xl border border-border flex flex-wrap items-center justify-between gap-3 shadow-xs">
-            <div className="relative flex-1 min-w-[240px]">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Müşteri adı, satıcı, fiş no veya sevk yeri ara..."
-                className="w-full pl-9 pr-3 py-2 bg-surface border border-border rounded-xl text-xs outline-none focus:border-brand-navy"
-              />
-            </div>
+          {/* ZENGİN FİLTRE VE ARAMA PANELİ (Madde 16) */}
+          <div className="bg-white p-4 rounded-2xl border border-border shadow-xs space-y-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="relative flex-1 min-w-[240px]">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="Müşteri adı, satıcı, fiş no, sevk yeri, plaka veya şoför ara..."
+                  className="w-full pl-9 pr-3 py-2 bg-surface border border-border rounded-xl text-xs outline-none focus:border-brand-navy"
+                />
+              </div>
 
-            <div className="flex items-center gap-2">
+              {/* Durum Filtresi */}
               <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
@@ -317,6 +499,7 @@ export function ShipmentClient({ initialShipments }: Props) {
                 <option value="Teslim Edildi">Teslim Edildi</option>
               </select>
 
+              {/* Resmi / Gayriresmi Filtresi */}
               <select
                 value={officialFilter}
                 onChange={(e) => setOfficialFilter(e.target.value)}
@@ -327,16 +510,54 @@ export function ShipmentClient({ initialShipments }: Props) {
                 <option value="Gayriresmi">Gayriresmi</option>
               </select>
 
-              {(statusFilter !== "all" || officialFilter !== "all" || search) && (
+              {/* Araç Filtresi */}
+              <select
+                value={vehicleFilter}
+                onChange={(e) => setVehicleFilter(e.target.value)}
+                className="border border-border rounded-xl px-3 py-2 text-xs bg-white font-medium outline-none"
+              >
+                <option value="all">Tüm Araçlar</option>
+                {vehicles.map((v) => (
+                  <option key={v.id} value={v.plate}>
+                    {v.plate} ({v.driver_name})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Tarih Aralığı Filtresi */}
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-border/60 text-xs">
+              <div className="flex items-center gap-2 text-text-muted">
+                <Calendar size={14} className="text-brand-navy" />
+                <span className="font-semibold text-text">Sevk Tarihi Aralığı:</span>
+                <input
+                  type="date"
+                  value={startDateFilter}
+                  onChange={(e) => setStartDateFilter(e.target.value)}
+                  className="border border-border rounded-lg px-2.5 py-1 text-xs bg-surface outline-none focus:bg-white"
+                />
+                <span>-</span>
+                <input
+                  type="date"
+                  value={endDateFilter}
+                  onChange={(e) => setEndDateFilter(e.target.value)}
+                  className="border border-border rounded-lg px-2.5 py-1 text-xs bg-surface outline-none focus:bg-white"
+                />
+              </div>
+
+              {hasActiveFilters && (
                 <button
                   onClick={() => {
                     setStatusFilter("all");
                     setOfficialFilter("all");
+                    setVehicleFilter("all");
+                    setStartDateFilter("");
+                    setEndDateFilter("");
                     setSearch("");
                   }}
-                  className="text-xs text-rose-600 hover:underline px-2"
+                  className="flex items-center gap-1 text-xs text-rose-600 hover:text-rose-800 font-semibold px-2 py-1 rounded hover:bg-rose-50 transition"
                 >
-                  Temizle
+                  <X size={13} /> Filtreleri Temizle
                 </button>
               )}
             </div>
@@ -345,100 +566,144 @@ export function ShipmentClient({ initialShipments }: Props) {
           {/* Tablo */}
           <div className="bg-white rounded-2xl border border-border shadow-xs overflow-hidden">
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs min-w-[900px]">
+              <table className="w-full text-left text-xs min-w-[950px]">
                 <thead className="bg-surface border-b border-border text-text-muted uppercase font-semibold">
                   <tr>
+                    <th className="py-3 px-4">Tarih</th>
                     <th className="py-3 px-4">Fiş No</th>
                     <th className="py-3 px-4">Müşteri Adı</th>
                     <th className="py-3 px-4">Satıcı</th>
                     <th className="py-3 px-4">Sevk Yeri</th>
+                    <th className="py-3 px-4">Araç & Şoför</th>
                     <th className="py-3 px-4 text-center">Tip</th>
                     <th className="py-3 px-4 text-center">m² / Palet</th>
-                    <th className="py-3 px-4">Hazırlık / Not</th>
-                    <th className="py-3 px-4">İşlemi Yapan</th>
-                    <th className="py-3 px-4 text-right">Statü (Durum)</th>
-                    <th className="py-3 px-4 text-center w-10"></th>
+                    <th className="py-3 px-4 text-center">Fotoğraf</th>
+                    <th className="py-3 px-4 text-right">Statü</th>
+                    <th className="py-3 px-4 text-center w-16">İşlem</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filtered.length === 0 ? (
                     <tr>
-                      <td colSpan={10} className="py-12 text-center text-text-muted">
+                      <td colSpan={11} className="py-12 text-center text-text-muted">
                         Kayıtlı sevkiyat bulunamadı.
                       </td>
                     </tr>
                   ) : (
-                    filtered.map((item) => (
-                      <tr key={item.id} className="hover:bg-surface/50 transition">
-                        <td className="py-3 px-4 font-mono font-bold text-brand-navy">
-                          {item.receipt_no || "-"}
-                        </td>
-                        <td className="py-3 px-4 font-bold text-text">
-                          {item.customer_name}
-                        </td>
-                        <td className="py-3 px-4 text-text-muted">
-                          {item.seller || "-"}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="flex items-center gap-1 text-text-muted">
-                            <MapPin size={12} className="text-brand-navy flex-shrink-0" />
-                            {item.destination}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span
-                            className={`px-2 py-0.5 rounded font-semibold text-[10px] ${
-                              item.is_official === "Resmi"
-                                ? "bg-blue-100 text-blue-800 border border-blue-200"
-                                : "bg-purple-100 text-purple-800 border border-purple-200"
-                            }`}
-                          >
-                            {item.is_official}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <span className="font-bold text-text">{item.m2} m²</span>
-                          <span className="text-text-muted ml-1.5 font-medium">({item.pallet_count} Palet)</span>
-                        </td>
-                        <td className="py-3 px-4 max-w-xs truncate text-text-muted">
-                          {item.preparation_notes || "-"}
-                        </td>
-                        <td className="py-3 px-4">
-                          <span className="inline-flex items-center gap-1 bg-surface px-2 py-0.5 rounded border border-border text-[10px] font-medium text-text-muted">
-                            <User size={10} /> {item.created_by_name}
-                          </span>
-                        </td>
-                        <td className="py-3 px-4 text-right">
-                          <select
-                            value={item.status}
-                            disabled={isPending}
-                            onChange={(e) =>
-                              handleStatusChange(item.id, e.target.value as Shipment["status"])
-                            }
-                            className={`px-2.5 py-1 rounded-lg font-bold text-xs border outline-none cursor-pointer transition ${
-                              item.status === "Depoya Gitti"
-                                ? "bg-amber-100 text-amber-900 border-amber-300"
-                                : item.status === "Sevkiyata Çıktı"
-                                ? "bg-blue-100 text-blue-900 border-blue-300"
-                                : "bg-emerald-100 text-emerald-900 border-emerald-300"
-                            }`}
-                          >
-                            <option value="Depoya Gitti">Depoya Gitti</option>
-                            <option value="Sevkiyata Çıktı">Sevkiyata Çıktı</option>
-                            <option value="Teslim Edildi">Teslim Edildi</option>
-                          </select>
-                        </td>
-                        <td className="py-3 px-4 text-center">
-                          <button
-                            onClick={() => handleDelete(item.id)}
-                            className="text-rose-400 hover:text-rose-600 p-1 rounded transition"
-                            title="Sil"
-                          >
-                            <Trash2 size={14} />
-                          </button>
-                        </td>
-                      </tr>
-                    ))
+                    filtered.map((item) => {
+                      const photoCount = Array.isArray(item.photos) ? item.photos.length : 0;
+
+                      return (
+                        <tr key={item.id} className="hover:bg-surface/50 transition">
+                          <td className="py-3 px-4 font-semibold text-text whitespace-nowrap">
+                            <div>{item.shipment_date || (item.created_at ? item.created_at.split("T")[0] : "-")}</div>
+                            {item.shipment_time && (
+                              <div className="text-[10px] text-text-muted">{item.shipment_time}</div>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 font-mono font-bold text-brand-navy">
+                            {item.receipt_no || "-"}
+                          </td>
+                          <td className="py-3 px-4 font-bold text-text">
+                            {item.customer_name}
+                          </td>
+                          <td className="py-3 px-4 text-text-muted">
+                            {item.seller || "-"}
+                          </td>
+                          <td className="py-3 px-4 max-w-[200px]">
+                            <span className="flex items-center gap-1 text-text-muted truncate">
+                              <MapPin size={12} className="text-brand-navy flex-shrink-0" />
+                              <span className="truncate">{item.destination}</span>
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {item.vehicle_plate ? (
+                              <div>
+                                <span className="font-mono font-bold text-brand-navy bg-brand-navy/5 px-1.5 py-0.5 rounded text-[11px] border border-brand-navy/15">
+                                  {item.vehicle_plate}
+                                </span>
+                                {item.driver_name && (
+                                  <div className="text-[10px] text-text-muted mt-0.5">{item.driver_name}</div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-text-muted text-[11px]">-</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <span
+                              className={`px-2 py-0.5 rounded font-semibold text-[10px] ${
+                                item.is_official === "Resmi"
+                                  ? "bg-blue-100 text-blue-800 border border-blue-200"
+                                  : "bg-purple-100 text-purple-800 border border-purple-200"
+                              }`}
+                            >
+                              {item.is_official}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-center whitespace-nowrap">
+                            <span className="font-bold text-text">{item.m2} m²</span>
+                            <span className="text-text-muted ml-1 font-medium">({item.pallet_count} Palet)</span>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            {photoCount > 0 ? (
+                              <button
+                                onClick={() =>
+                                  setViewingPhotos({
+                                    title: `${item.customer_name} - ${item.receipt_no || "Sevkiyat"} Fotoğrafları`,
+                                    photos: item.photos || [],
+                                  })
+                                }
+                                className="inline-flex items-center gap-1 bg-blue-50 text-blue-700 hover:bg-blue-100 px-2 py-0.5 rounded text-[11px] font-bold transition border border-blue-200"
+                                title="Fotoğrafları Görüntüle"
+                              >
+                                <Camera size={12} /> {photoCount} Foto
+                              </button>
+                            ) : (
+                              <span className="text-text-muted/60 text-[11px]">-</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4 text-right">
+                            <select
+                              value={item.status}
+                              disabled={isPending}
+                              onChange={(e) =>
+                                handleStatusChange(item.id, e.target.value as Shipment["status"])
+                              }
+                              className={`px-2.5 py-1 rounded-lg font-bold text-xs border outline-none cursor-pointer transition ${
+                                item.status === "Depoya Gitti"
+                                  ? "bg-amber-100 text-amber-900 border-amber-300"
+                                  : item.status === "Sevkiyata Çıktı"
+                                  ? "bg-blue-100 text-blue-900 border-blue-300"
+                                  : "bg-emerald-100 text-emerald-900 border-emerald-300"
+                              }`}
+                            >
+                              <option value="Depoya Gitti">Depoya Gitti</option>
+                              <option value="Sevkiyata Çıktı">Sevkiyata Çıktı</option>
+                              <option value="Teslim Edildi">Teslim Edildi</option>
+                            </select>
+                          </td>
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleOpenEdit(item)}
+                                className="p-1 rounded text-brand-navy hover:bg-surface transition"
+                                title="Sevkiyatı Düzenle / Fotoğraf Ekle"
+                              >
+                                <Edit3 size={15} />
+                              </button>
+                              <button
+                                onClick={() => handleDelete(item.id)}
+                                className="p-1 rounded text-rose-400 hover:text-rose-600 transition"
+                                title="Sil"
+                              >
+                                <Trash2 size={15} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
@@ -447,14 +712,14 @@ export function ShipmentClient({ initialShipments }: Props) {
         </>
       )}
 
-      {/* YENİ SEVKİYAT MODALI */}
+      {/* YENİ / DÜZENLEME SEVKİYAT MODALI (Madde 14) */}
       {isModalOpen && (
         <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95 duration-150">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-border space-y-4 animate-in fade-in zoom-in-95 duration-150 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-base text-text flex items-center gap-2">
                 <Truck className="text-brand-navy" size={20} />
-                Yeni Sevkiyat Kaydı Gir
+                {editingShipment ? "Sevkiyat Kaydını Düzenle" : "Yeni Sevkiyat Kaydı Gir"}
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -465,6 +730,32 @@ export function ShipmentClient({ initialShipments }: Props) {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-3 text-xs">
+              {editingShipment && <input type="hidden" name="id" value={editingShipment.id} />}
+
+              {/* Tarih ve Saat */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-text mb-1">Sevk Tarihi *</label>
+                  <input
+                    type="date"
+                    required
+                    name="shipment_date"
+                    defaultValue={editingShipment?.shipment_date || todayStr}
+                    className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-semibold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-text mb-1">Sevk Saati</label>
+                  <input
+                    type="time"
+                    name="shipment_time"
+                    defaultValue={editingShipment?.shipment_time || ""}
+                    className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy"
+                  />
+                </div>
+              </div>
+
+              {/* Müşteri ve Satıcı */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-text mb-1">Müşteri Adı *</label>
@@ -472,8 +763,9 @@ export function ShipmentClient({ initialShipments }: Props) {
                     type="text"
                     required
                     name="customer_name"
+                    defaultValue={editingShipment?.customer_name || ""}
                     placeholder="Örn: Yılmaz İnşaat Ltd."
-                    className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy"
+                    className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-semibold"
                   />
                 </div>
                 <div>
@@ -481,18 +773,21 @@ export function ShipmentClient({ initialShipments }: Props) {
                   <input
                     type="text"
                     name="seller"
+                    defaultValue={editingShipment?.seller || ""}
                     placeholder="Örn: Ahmet Duvarbaşı"
                     className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy"
                   />
                 </div>
               </div>
 
+              {/* Fiş No ve Tip */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold text-text mb-1">Fiş No</label>
                   <input
                     type="text"
                     name="receipt_no"
+                    defaultValue={editingShipment?.receipt_no || ""}
                     placeholder="SEV-2026-003"
                     className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-mono"
                   />
@@ -501,11 +796,57 @@ export function ShipmentClient({ initialShipments }: Props) {
                   <label className="block font-semibold text-text mb-1">Resmi / Gayri Resmi *</label>
                   <select
                     name="is_official"
+                    defaultValue={editingShipment?.is_official || "Resmi"}
                     className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-semibold"
                   >
                     <option value="Resmi">Resmi Fiş / Fatura</option>
                     <option value="Gayriresmi">Gayriresmi / Sevk</option>
                   </select>
+                </div>
+              </div>
+
+              {/* Araç ve Şoför Seçimi (Madde 14) */}
+              <div className="bg-surface/70 p-3 rounded-xl border border-border space-y-2">
+                <div className="text-[11px] font-bold text-text-muted uppercase">Araç & Şoför Atama</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-text mb-1">Araç Seçimi</label>
+                    <select
+                      value={selectedVehiclePlate}
+                      onChange={(e) => handleVehicleChange(e.target.value)}
+                      className="w-full border border-border rounded-lg px-3 py-2 bg-white outline-none focus:border-brand-navy font-semibold text-xs"
+                    >
+                      <option value="">-- Araç Seçin veya Boş Bırakın --</option>
+                      {vehicles.map((v) => (
+                        <option key={v.id} value={v.plate}>
+                          {v.plate} - {v.vehicle_type} ({v.driver_name})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-text mb-1">Plaka (Manuel / Düzenle)</label>
+                    <input
+                      type="text"
+                      name="vehicle_plate"
+                      value={selectedVehiclePlate}
+                      onChange={(e) => setSelectedVehiclePlate(e.target.value.toUpperCase())}
+                      placeholder="34 CLK 28"
+                      className="w-full border border-border rounded-lg px-3 py-2 bg-white outline-none focus:border-brand-navy font-mono uppercase text-xs"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-semibold text-text mb-1">Şoför Adı</label>
+                  <input
+                    type="text"
+                    name="driver_name"
+                    value={driverNameInput}
+                    onChange={(e) => setDriverNameInput(e.target.value)}
+                    placeholder="Mehmet Kaya"
+                    className="w-full border border-border rounded-lg px-3 py-2 bg-white outline-none focus:border-brand-navy text-xs"
+                  />
                 </div>
               </div>
 
@@ -515,6 +856,7 @@ export function ShipmentClient({ initialShipments }: Props) {
                   type="text"
                   required
                   name="destination"
+                  defaultValue={editingShipment?.destination || ""}
                   placeholder="Şantiye adresi, ilçe veya depo..."
                   className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy"
                 />
@@ -527,6 +869,7 @@ export function ShipmentClient({ initialShipments }: Props) {
                     type="number"
                     step="any"
                     name="m2"
+                    defaultValue={editingShipment?.m2 || ""}
                     placeholder="0.00"
                     className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-bold"
                   />
@@ -537,6 +880,7 @@ export function ShipmentClient({ initialShipments }: Props) {
                     type="number"
                     step="any"
                     name="pallet_count"
+                    defaultValue={editingShipment?.pallet_count || ""}
                     placeholder="0"
                     className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-bold"
                   />
@@ -548,15 +892,55 @@ export function ShipmentClient({ initialShipments }: Props) {
                 <textarea
                   name="preparation_notes"
                   rows={2}
+                  defaultValue={editingShipment?.preparation_notes || ""}
                   placeholder="Palet hazırlandı, yapıştırıcılar ayrıldı, şoför arandı..."
                   className="w-full border border-border rounded-lg p-2.5 bg-surface outline-none focus:bg-white focus:border-brand-navy"
                 />
               </div>
 
+              {/* FOTOĞRAFLAR (Madde 14) */}
+              <div className="space-y-2 bg-surface/70 p-3 rounded-xl border border-border">
+                <div className="flex items-center justify-between">
+                  <label className="font-bold text-text flex items-center gap-1.5">
+                    <Camera size={14} className="text-brand-navy" />
+                    Sevkiyat / İrsaliye Fotoğrafları ({modalPhotos.length})
+                  </label>
+                  <label className="bg-brand-navy text-white px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer hover:bg-brand-navy/90 transition flex items-center gap-1">
+                    <Plus size={12} /> Fotoğraf Ekle
+                    <input
+                      type="file"
+                      accept="image/*"
+                      multiple
+                      onChange={handleAddPhotoFile}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+
+                {modalPhotos.length > 0 && (
+                  <div className="grid grid-cols-4 gap-2 pt-2">
+                    {modalPhotos.map((photo, idx) => (
+                      <div key={idx} className="relative group rounded-lg overflow-hidden border border-border aspect-square bg-black/5">
+                        <img src={photo} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => handleRemovePhoto(idx)}
+                          className="absolute top-1 right-1 bg-rose-600 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition shadow-xs"
+                          title="Fotoğrafı Kaldır"
+                        >
+                          <X size={10} />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
               <div>
-                <label className="block font-semibold text-text mb-1">Başlangıç Statüsü</label>
+                <label className="block font-semibold text-text mb-1">Statü</label>
                 <select
                   name="status"
+                  defaultValue={editingShipment?.status || "Depoya Gitti"}
                   className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-bold text-amber-900"
                 >
                   <option value="Depoya Gitti">Depoya Gitti</option>
@@ -578,10 +962,52 @@ export function ShipmentClient({ initialShipments }: Props) {
                   disabled={isPending}
                   className="bg-brand-navy text-white px-5 py-2 rounded-lg font-bold hover:bg-brand-navy/90 transition shadow-xs"
                 >
-                  {isPending ? "Kaydediliyor..." : "Sevkiyatı Kaydet"}
+                  {isPending ? "Kaydediliyor..." : editingShipment ? "Güncellemeleri Kaydet" : "Sevkiyatı Kaydet"}
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* FOTOĞRAF GALERİSİ MODALI */}
+      {viewingPhotos && (
+        <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-xs flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <h3 className="font-bold text-base text-text flex items-center gap-2">
+                <ImageIcon className="text-brand-navy" size={20} />
+                {viewingPhotos.title}
+              </h3>
+              <button
+                onClick={() => setViewingPhotos(null)}
+                className="text-text-muted hover:text-text font-bold text-lg"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {viewingPhotos.photos.map((url, idx) => (
+                <div key={idx} className="rounded-xl overflow-hidden border border-border bg-slate-100 flex flex-col">
+                  <a href={url} target="_blank" rel="noopener noreferrer" className="block relative group aspect-video">
+                    <img src={url} alt={`Fotoğraf ${idx + 1}`} className="w-full h-full object-cover group-hover:scale-105 transition duration-300" />
+                    <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition flex items-center justify-center text-white text-xs font-bold gap-1">
+                      <ExternalLink size={14} /> Tam Boyut Gör
+                    </div>
+                  </a>
+                </div>
+              ))}
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-border">
+              <button
+                onClick={() => setViewingPhotos(null)}
+                className="bg-brand-navy text-white px-4 py-2 rounded-xl text-xs font-bold"
+              >
+                Kapat
+              </button>
+            </div>
           </div>
         </div>
       )}

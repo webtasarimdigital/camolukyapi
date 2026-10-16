@@ -27,6 +27,7 @@ import {
   ChevronRight,
   X,
   MapPin,
+  Globe,
 } from "lucide-react";
 
 interface NavItem {
@@ -56,6 +57,13 @@ const navItems: NavItem[] = [
     label: "Otobil GPS Takip",
     icon: MapPin,
     badge: "GPS",
+    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat"],
+  },
+  {
+    href: "/portallar",
+    label: "Şirket Portalları",
+    icon: Globe,
+    badge: "B2B",
     allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat"],
   },
   {

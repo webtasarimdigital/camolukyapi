@@ -18,7 +18,12 @@ import {
   UserCheck,
   Palmtree,
   User,
+  Eye,
+  CreditCard,
+  Copy,
+  Check,
 } from "lucide-react";
+import { EmployeeDetailDrawer } from "./EmployeeDetailDrawer";
 
 interface Props {
   initialItems: Employee[];
@@ -31,6 +36,10 @@ export function EmployeeClient({ initialItems, userName }: Props) {
   const [search, setSearch] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Employee | null>(null);
+  const [detailEmployee, setDetailEmployee] = useState<Employee | null>(null);
+  const [copiedIban, setCopiedIban] = useState<string | null>(null);
+  const [formOfficialSalary, setFormOfficialSalary] = useState<number | "">("");
+  const [formUnofficialSalary, setFormUnofficialSalary] = useState<number | "">("");
   const [isPending, startTransition] = useTransition();
 
   const filtered = items.filter((item) => {
@@ -47,12 +56,24 @@ export function EmployeeClient({ initialItems, userName }: Props) {
 
   function handleOpenNew() {
     setEditingItem(null);
+    setFormOfficialSalary("");
+    setFormUnofficialSalary("");
     setIsModalOpen(true);
   }
 
   function handleEdit(item: Employee) {
     setEditingItem(item);
+    setFormOfficialSalary(item.official_salary ?? "");
+    setFormUnofficialSalary(item.unofficial_salary ?? "");
     setIsModalOpen(true);
+  }
+
+  function handleCopyIban(iban: string, e: React.MouseEvent) {
+    e.stopPropagation();
+    navigator.clipboard.writeText(iban);
+    setCopiedIban(iban);
+    toast.success("IBAN kopyalandı!");
+    setTimeout(() => setCopiedIban(null), 2000);
   }
 
   async function handleDelete(id: string) {
@@ -188,7 +209,21 @@ export function EmployeeClient({ initialItems, userName }: Props) {
                           <div className="w-7 h-7 rounded-full bg-brand-navy/10 text-brand-navy font-bold flex items-center justify-center text-xs">
                             {item.full_name.charAt(0)}
                           </div>
-                          <span>{item.full_name}</span>
+                          <div>
+                            <div>{item.full_name}</div>
+                            {item.iban && (
+                              <button
+                                type="button"
+                                onClick={(e) => handleCopyIban(item.iban!, e)}
+                                className="inline-flex items-center gap-1 text-[10px] text-text-muted hover:text-brand-navy font-mono bg-surface px-1.5 py-0.5 rounded border border-border mt-0.5"
+                                title="IBAN Kopyala"
+                              >
+                                <CreditCard size={10} className="text-brand-navy" />
+                                <span className="truncate max-w-[130px]">{item.iban}</span>
+                                {copiedIban === item.iban ? <Check size={10} className="text-emerald-600" /> : <Copy size={10} />}
+                              </button>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="py-3 px-4">
@@ -199,7 +234,14 @@ export function EmployeeClient({ initialItems, userName }: Props) {
                       <td className="py-3 px-4 text-text-muted">{item.phone || "-"}</td>
                       <td className="py-3 px-4 text-text-muted">{item.start_date || "-"}</td>
                       <td className="py-3 px-4 text-right font-bold text-text tabular-nums">
-                        {formatCurrency(item.salary)}
+                        <div>{formatCurrency(item.salary)}</div>
+                        {(Boolean(item.official_salary) || Boolean(item.unofficial_salary)) && (
+                          <div className="text-[10px] text-text-muted font-normal leading-tight mt-0.5">
+                            {item.official_salary ? `Banka: ${formatCurrency(item.official_salary)}` : ""}
+                            {item.official_salary && item.unofficial_salary ? " • " : ""}
+                            {item.unofficial_salary ? `Elden: ${formatCurrency(item.unofficial_salary)}` : ""}
+                          </div>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-right font-bold text-amber-700 tabular-nums">
                         {item.total_advances > 0 ? formatCurrency(item.total_advances) : "-"}
@@ -221,9 +263,16 @@ export function EmployeeClient({ initialItems, userName }: Props) {
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">
                           <button
+                            onClick={() => setDetailEmployee(item)}
+                            className="p-1 rounded text-blue-600 hover:bg-blue-50 transition"
+                            title="Detay & Hareketler (Avans/İzin Geçmişi)"
+                          >
+                            <Eye size={15} />
+                          </button>
+                          <button
                             onClick={() => handleEdit(item)}
                             className="p-1 rounded text-brand-navy hover:bg-surface transition"
-                            title="Düzenle / Avans Gir / İzin Güncelle"
+                            title="Düzenle"
                           >
                             <Edit3 size={15} />
                           </button>
@@ -312,30 +361,81 @@ export function EmployeeClient({ initialItems, userName }: Props) {
                 </div>
               </div>
 
-              {/* Maaş ve Avans Bölümü */}
-              <div className="bg-surface/80 p-3 rounded-xl border border-border grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-text mb-1">Aylık Net Maaş (₺) *</label>
-                  <input
-                    type="number"
-                    step="any"
-                    required
-                    name="salary"
-                    defaultValue={editingItem?.salary || ""}
-                    placeholder="45000"
-                    className="w-full border border-border rounded-lg px-3 py-2 bg-white outline-none focus:border-brand-navy font-bold text-sm"
-                  />
+              <div>
+                <label className="block font-semibold text-text mb-1">IBAN Numarası</label>
+                <input
+                  type="text"
+                  name="iban"
+                  defaultValue={editingItem?.iban || ""}
+                  placeholder="TR00 0000 0000 0000 0000 0000 00"
+                  className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-mono text-xs uppercase"
+                />
+              </div>
+
+              {/* Maaş Bölümü (Resmi + Gayriresmi + Toplam) */}
+              <div className="bg-surface/80 p-3 rounded-xl border border-border space-y-3">
+                <div className="text-[11px] font-bold text-text-muted uppercase">Maaş & Ödeme Dağılımı</div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-text mb-1">Resmi (Banka) Maaş (₺)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      name="official_salary"
+                      value={formOfficialSalary}
+                      onChange={(e) => setFormOfficialSalary(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                      placeholder="Örn: 22104"
+                      className="w-full border border-border rounded-lg px-3 py-2 bg-white outline-none focus:border-brand-navy font-semibold text-xs"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-text mb-1">Elden / Gayriresmi (₺)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      name="unofficial_salary"
+                      value={formUnofficialSalary}
+                      onChange={(e) => setFormUnofficialSalary(e.target.value === "" ? "" : parseFloat(e.target.value))}
+                      placeholder="Örn: 15000"
+                      className="w-full border border-border rounded-lg px-3 py-2 bg-white outline-none focus:border-brand-navy font-semibold text-xs"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block font-bold text-amber-900 mb-1">Alınan Avans Tutarı (₺)</label>
-                  <input
-                    type="number"
-                    step="any"
-                    name="total_advances"
-                    defaultValue={editingItem?.total_advances || 0}
-                    placeholder="0"
-                    className="w-full border border-amber-300 rounded-lg px-3 py-2 bg-white outline-none focus:border-amber-600 font-bold text-sm text-amber-950"
-                  />
+
+                <div className="grid grid-cols-2 gap-3 pt-1 border-t border-border/60">
+                  <div>
+                    <label className="block font-bold text-text mb-1">Toplam Net Maaş (₺) *</label>
+                    <input
+                      type="number"
+                      step="any"
+                      required
+                      name="salary"
+                      value={
+                        (formOfficialSalary !== "" || formUnofficialSalary !== "")
+                          ? (Number(formOfficialSalary) || 0) + (Number(formUnofficialSalary) || 0)
+                          : (editingItem?.salary ?? "")
+                      }
+                      onChange={(e) => {
+                        // User can override manually
+                        const val = parseFloat(e.target.value) || 0;
+                        setFormOfficialSalary(val);
+                        setFormUnofficialSalary(0);
+                      }}
+                      placeholder="45000"
+                      className="w-full border border-brand-navy/30 rounded-lg px-3 py-2 bg-white outline-none focus:border-brand-navy font-black text-sm text-brand-navy"
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-bold text-amber-900 mb-1">Alınan Avans Tutarı (₺)</label>
+                    <input
+                      type="number"
+                      step="any"
+                      name="total_advances"
+                      defaultValue={editingItem?.total_advances || 0}
+                      placeholder="0"
+                      className="w-full border border-amber-300 rounded-lg px-3 py-2 bg-white outline-none focus:border-amber-600 font-bold text-sm text-amber-950"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -395,6 +495,19 @@ export function EmployeeClient({ initialItems, userName }: Props) {
             </form>
           </div>
         </div>
+      )}
+
+      {/* PERSONEL DETAY DRAWER */}
+      {detailEmployee && (
+        <EmployeeDetailDrawer
+          employee={detailEmployee}
+          userName={userName}
+          onClose={() => setDetailEmployee(null)}
+          onEmployeeUpdated={(updated) => {
+            setItems((prev) => prev.map((e) => (e.id === updated.id ? updated : e)));
+            setDetailEmployee(updated);
+          }}
+        />
       )}
     </div>
   );

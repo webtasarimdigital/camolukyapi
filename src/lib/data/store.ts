@@ -5,6 +5,7 @@ import {
   PaymentFollowup,
   Transporter,
   Employee,
+  EmployeeTransaction,
   Rent,
 } from "./types";
 
@@ -57,6 +58,8 @@ export async function saveShipment(
   data: Omit<Shipment, "id" | "created_at" | "updated_at"> & { id?: string }
 ): Promise<Shipment> {
   const now = new Date().toISOString();
+  const shipmentDate = data.shipment_date || now.split("T")[0];
+
   if (data.id) {
     const { data: updated, error } = await supabase
       .from("shipments")
@@ -70,6 +73,11 @@ export async function saveShipment(
         pallet_count: data.pallet_count,
         preparation_notes: data.preparation_notes,
         status: data.status,
+        shipment_date: shipmentDate,
+        shipment_time: data.shipment_time || null,
+        vehicle_plate: data.vehicle_plate || null,
+        driver_name: data.driver_name || null,
+        photos: data.photos || [],
         updated_at: now,
       })
       .eq("id", data.id)
@@ -93,6 +101,11 @@ export async function saveShipment(
       pallet_count: data.pallet_count,
       preparation_notes: data.preparation_notes,
       status: data.status,
+      shipment_date: shipmentDate,
+      shipment_time: data.shipment_time || null,
+      vehicle_plate: data.vehicle_plate || null,
+      driver_name: data.driver_name || null,
+      photos: data.photos || [],
       created_by_name: data.created_by_name || "Admin",
       created_at: now,
       updated_at: now,
@@ -252,6 +265,9 @@ export async function saveTransporter(
         status: data.status,
         notes: data.notes,
         due_date: data.due_date,
+        invoice_no: data.invoice_no || null,
+        document_url: data.document_url || null,
+        documents: data.documents || [],
         updated_at: now,
       })
       .eq("id", data.id)
@@ -273,6 +289,9 @@ export async function saveTransporter(
       status: data.status,
       notes: data.notes,
       due_date: data.due_date,
+      invoice_no: data.invoice_no || null,
+      document_url: data.document_url || null,
+      documents: data.documents || [],
       created_by_name: data.created_by_name || "Admin",
       created_at: now,
       updated_at: now,
@@ -284,6 +303,37 @@ export async function saveTransporter(
     throw new Error(error?.message || "Nakliye kaydı kaydedilemedi");
   }
   return inserted as Transporter;
+}
+
+export async function saveTransportersBatch(
+  items: Array<Omit<Transporter, "id" | "created_at">>
+): Promise<Transporter[]> {
+  const now = new Date().toISOString();
+  const rows = items.map((item) => ({
+    transporter_name: item.transporter_name,
+    transport_date: item.transport_date,
+    amount: item.amount,
+    iban: item.iban,
+    status: item.status || "Ödenmedi",
+    notes: item.notes || "",
+    due_date: item.due_date,
+    invoice_no: item.invoice_no || null,
+    document_url: item.document_url || null,
+    documents: item.documents || [],
+    created_by_name: item.created_by_name || "Excel İçe Aktarımı",
+    created_at: now,
+    updated_at: now,
+  }));
+
+  const { data, error } = await supabase
+    .from("transporters")
+    .insert(rows)
+    .select();
+
+  if (error) {
+    throw new Error(error.message || "Toplu nakliye kaydı eklenemedi");
+  }
+  return (data || []) as Transporter[];
 }
 
 export async function deleteTransporter(id: string): Promise<void> {
@@ -322,6 +372,9 @@ export async function saveEmployee(
         phone: data.phone,
         position: data.position,
         start_date: data.start_date,
+        iban: data.iban || null,
+        official_salary: data.official_salary ?? 0,
+        unofficial_salary: data.unofficial_salary ?? 0,
         salary: data.salary,
         total_advances: data.total_advances,
         used_leave_days: data.used_leave_days,
@@ -345,6 +398,9 @@ export async function saveEmployee(
       phone: data.phone,
       position: data.position,
       start_date: data.start_date,
+      iban: data.iban || null,
+      official_salary: data.official_salary ?? 0,
+      unofficial_salary: data.unofficial_salary ?? 0,
       salary: data.salary,
       total_advances: data.total_advances,
       used_leave_days: data.used_leave_days,
@@ -365,6 +421,104 @@ export async function saveEmployee(
 
 export async function deleteEmployee(id: string): Promise<void> {
   await supabase.from("employees").delete().eq("id", id);
+}
+
+// ──────────────────── PERSONEL DETAY HAREKETLERİ (AVANS & İZİN) ────────────────────
+export async function getEmployeeTransactions(employeeId: string): Promise<EmployeeTransaction[]> {
+  try {
+    const { data, error } = await supabase
+      .from("employee_transactions")
+      .select("*")
+      .eq("employee_id", employeeId)
+      .order("transaction_date", { ascending: false });
+
+    if (error) {
+      console.error("getEmployeeTransactions error:", error);
+      return [];
+    }
+    return (data || []) as EmployeeTransaction[];
+  } catch (err) {
+    console.error("getEmployeeTransactions catch:", err);
+    return [];
+  }
+}
+
+export async function saveEmployeeTransaction(data: {
+  employee_id: string;
+  type: "avans" | "izin" | "maas_odeme";
+  transaction_date: string;
+  amount?: number;
+  days?: number;
+  description?: string;
+  created_by_name?: string;
+}): Promise<EmployeeTransaction> {
+  const { data: inserted, error } = await supabase
+    .from("employee_transactions")
+    .insert({
+      employee_id: data.employee_id,
+      type: data.type,
+      transaction_date: data.transaction_date,
+      amount: data.amount ?? 0,
+      days: data.days ?? 0,
+      description: data.description || null,
+      created_by_name: data.created_by_name || "Yetkili",
+    })
+    .select()
+    .single();
+
+  if (error || !inserted) {
+    throw new Error(error?.message || "Hareket kaydedilemedi.");
+  }
+
+  // Personelin toplam avansını veya kalan izin gününü otomatik güncelle
+  if (data.type === "avans") {
+    const { data: allAdvances } = await supabase
+      .from("employee_transactions")
+      .select("amount")
+      .eq("employee_id", data.employee_id)
+      .eq("type", "avans");
+    const totalAdv = (allAdvances || []).reduce((s, a) => s + (Number(a.amount) || 0), 0);
+    await supabase.from("employees").update({ total_advances: totalAdv }).eq("id", data.employee_id);
+  } else if (data.type === "izin") {
+    const { data: allLeaves } = await supabase
+      .from("employee_transactions")
+      .select("days")
+      .eq("employee_id", data.employee_id)
+      .eq("type", "izin");
+    const usedDays = (allLeaves || []).reduce((s, l) => s + (Number(l.days) || 0), 0);
+    await supabase.from("employees").update({ 
+      used_leave_days: usedDays,
+      remaining_leave_days: Math.max(0, 14 - usedDays)
+    }).eq("id", data.employee_id);
+  }
+
+  return inserted as EmployeeTransaction;
+}
+
+export async function deleteEmployeeTransaction(id: string, employeeId: string): Promise<void> {
+  const { data: item } = await supabase.from("employee_transactions").select("type").eq("id", id).single();
+  await supabase.from("employee_transactions").delete().eq("id", id);
+
+  if (item?.type === "avans") {
+    const { data: allAdvances } = await supabase
+      .from("employee_transactions")
+      .select("amount")
+      .eq("employee_id", employeeId)
+      .eq("type", "avans");
+    const totalAdv = (allAdvances || []).reduce((s, a) => s + (Number(a.amount) || 0), 0);
+    await supabase.from("employees").update({ total_advances: totalAdv }).eq("id", employeeId);
+  } else if (item?.type === "izin") {
+    const { data: allLeaves } = await supabase
+      .from("employee_transactions")
+      .select("days")
+      .eq("employee_id", employeeId)
+      .eq("type", "izin");
+    const usedDays = (allLeaves || []).reduce((s, l) => s + (Number(l.days) || 0), 0);
+    await supabase.from("employees").update({ 
+      used_leave_days: usedDays,
+      remaining_leave_days: Math.max(0, 14 - usedDays)
+    }).eq("id", employeeId);
+  }
 }
 
 // ──────────────────── KİRALAR ────────────────────

@@ -2,7 +2,8 @@ import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import Link from "next/link";
-import { getPaymentFollowups, getRents } from "@/lib/data/store";
+import { getPaymentFollowups, getRents, getTransporters, getEmployees } from "@/lib/data/store";
+import { MonthlyCashFlowPlan } from "./MonthlyCashFlowPlan";
 import {
   Wallet,
   CreditCard,
@@ -62,6 +63,8 @@ export default async function FinansPage() {
   // Supabase veri deposundan ödemeleri al
   const followups = await getPaymentFollowups();
   const rents = await getRents();
+  const transporters = await getTransporters();
+  const employees = await getEmployees();
 
   // 1. Genel Finansal Toplamlar
   const totalCiro = sales.reduce((sum, s) => sum + (Number(s.grand_total) || 0), 0);
@@ -264,6 +267,15 @@ export default async function FinansPage() {
           </p>
         </div>
       </div>
+
+      {/* AYLIK NAKİT AKIŞI & ÖDEME PLANI (MAAŞLAR, NAKLİYELER, KİRALAR, BORÇLAR) */}
+      <MonthlyCashFlowPlan
+        sales={sales}
+        followups={followups}
+        rents={rents}
+        transporters={transporters}
+        employees={employees}
+      />
 
       {/* ÖDEME TİPİ ANALİTİĞİ (NAKİT, POS, HAVALE, ÇEK, SENET) */}
       <div className="bg-white p-6 rounded-2xl border border-border shadow-xs space-y-6">

@@ -9,6 +9,11 @@ export interface Shipment {
   pallet_count: number;
   preparation_notes: string;
   status: "Depoya Gitti" | "Sevkiyata Çıktı" | "Teslim Edildi";
+  shipment_date?: string;
+  shipment_time?: string | null;
+  vehicle_plate?: string | null;
+  driver_name?: string | null;
+  photos?: any[];
   created_by_name: string;
   created_at: string;
   updated_at: string;
@@ -40,6 +45,9 @@ export interface Transporter {
   iban: string;
   status: "Ödendi" | "Ödenmedi";
   notes?: string;
+  invoice_no?: string | null;
+  document_url?: string | null;
+  documents?: any[];
   due_date: string; // transport_date + 12 days
   created_by_name: string;
   created_at: string;
@@ -51,6 +59,9 @@ export interface Employee {
   phone: string;
   position: string;
   start_date: string;
+  iban?: string | null;
+  official_salary?: number;
+  unofficial_salary?: number;
   salary: number;
   total_advances: number;
   used_leave_days: number;
@@ -58,6 +69,19 @@ export interface Employee {
   notes: string;
   created_by_name: string;
   created_at: string;
+}
+
+export interface EmployeeTransaction {
+  id: string;
+  company_id: string;
+  employee_id: string;
+  type: "avans" | "izin" | "maas_odeme";
+  transaction_date: string;
+  amount: number;
+  days: number;
+  description: string | null;
+  created_by_name?: string | null;
+  created_at?: string;
 }
 
 export interface Rent {

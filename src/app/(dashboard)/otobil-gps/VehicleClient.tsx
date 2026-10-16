@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import {
   Truck, Plus, MapPin, Phone, User, Edit3, Trash2,
   CheckCircle2, Clock, Warehouse, XCircle, Loader2,
-  Navigation, X, Package, AlertCircle,
+  Navigation, X, Package, AlertCircle, Fuel,
 } from "lucide-react";
 
 interface Props {
@@ -143,6 +143,40 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
             <Plus size={15} /> Araç Ekle
           </button>
         )}
+      </div>
+
+      {/* OTOBİL PORTAL ENTEGRASYON KARTI (Madde 9) */}
+      <div className="bg-gradient-to-r from-red-600 via-rose-600 to-amber-600 text-white rounded-2xl p-4 sm:p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3.5">
+          <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center flex-shrink-0 text-white">
+            <Fuel size={26} />
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <span className="bg-white/25 text-[10px] uppercase font-black px-2 py-0.5 rounded-full tracking-wider">
+                Resmi Filo Entegrasyonu
+              </span>
+              <span className="text-xs text-white/80 font-medium">Petrol Ofisi Otobil</span>
+            </div>
+            <h3 className="text-base font-black text-white mt-0.5">
+              Petrol Ofisi Otobil GPS & Telemetri Portalı
+            </h3>
+            <p className="text-xs text-white/90 mt-0.5 max-w-xl">
+              Tüm araçların anlık uydu konumlarını, harita hareketlerini ve yakıt tüketim limitlerini canlı yönetin.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap">
+          <a
+            href="https://web.otobil.com.tr"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 bg-white text-red-700 hover:bg-white/90 px-4 py-2.5 rounded-xl text-xs font-black transition shadow-md cursor-pointer"
+          >
+            ⛽ Petrol Ofisi Otobil Portalına Git ↗
+          </a>
+        </div>
       </div>
 
       {/* KPI Kartlar */}

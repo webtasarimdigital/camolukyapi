@@ -1,5 +1,7 @@
 import { getShipments, Shipment } from "@/lib/data/store";
 import { ShipmentClient } from "./ShipmentClient";
+import { getVehicles } from "../otobil-gps/actions";
+import type { Vehicle } from "../otobil-gps/types";
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
 
@@ -43,9 +45,17 @@ export default async function SevkiyatPage() {
     console.error("SevkiyatPage getShipments error:", err);
   }
 
+  let vehicles: Vehicle[] = [];
+  try {
+    vehicles = await getVehicles();
+  } catch (err) {
+    console.error("SevkiyatPage getVehicles error:", err);
+  }
+
   return (
     <ShipmentClient
       initialShipments={shipments}
+      initialVehicles={vehicles}
       userRole={userRole}
       userName={userName}
     />

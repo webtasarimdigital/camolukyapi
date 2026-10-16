@@ -18,6 +18,8 @@ import {
   ArrowDownLeft,
   ArrowUpRight,
   User,
+  ChevronLeft,
+  ChevronRight,
 } from "lucide-react";
 
 interface Props {
@@ -33,6 +35,26 @@ export function RentClient({ initialItems, userName }: Props) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Rent | null>(null);
   const [isPending, startTransition] = useTransition();
+
+  // Sabit kira gelir ve giderlerinin aylık otomatik takibi
+  const now = new Date();
+  const currentYM = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const [selectedYM, setSelectedYM] = useState(currentYM);
+
+  function handlePrevMonth() {
+    const [year, month] = selectedYM.split("-").map(Number);
+    const d = new Date(year, month - 2, 1);
+    setSelectedYM(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+
+  function handleNextMonth() {
+    const [year, month] = selectedYM.split("-").map(Number);
+    const d = new Date(year, month, 1);
+    setSelectedYM(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`);
+  }
+
+  const [selYear, selMonth] = selectedYM.split("-").map(Number);
+  const monthTitle = new Date(selYear, selMonth - 1, 1).toLocaleDateString("tr-TR", { month: "long", year: "numeric" });
 
   const toplananList = items.filter((i) => i.type === "toplanan");
   const verilenList = items.filter((i) => i.type === "verilen");
@@ -167,6 +189,45 @@ export function RentClient({ initialItems, userName }: Props) {
         </div>
       </div>
 
+      {/* Aylık Otomasyon ve Dönem Seçici Barı */}
+      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-4 rounded-2xl border border-border shadow-xs">
+        <div className="flex items-center gap-2">
+          <Calendar className="text-brand-navy" size={18} />
+          <div>
+            <h3 className="text-xs font-bold text-text">Dönemsel Otomatik Kira Takibi</h3>
+            <p className="text-[11px] text-text-muted">Her ay sözleşmeleri baştan girmeden ödeme gününe göre otomatik takip edin</p>
+          </div>
+        </div>
+        <div className="flex items-center gap-2 bg-surface p-1 rounded-xl border border-border">
+          <button
+            type="button"
+            onClick={handlePrevMonth}
+            className="p-1 hover:bg-white rounded-lg text-text-muted hover:text-text transition"
+            title="Önceki Ay"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span className="px-3 text-xs font-bold text-brand-navy uppercase tracking-wider min-w-[120px] text-center">
+            {monthTitle}
+          </span>
+          <button
+            type="button"
+            onClick={handleNextMonth}
+            className="p-1 hover:bg-white rounded-lg text-text-muted hover:text-text transition"
+            title="Sonraki Ay"
+          >
+            <ChevronRight size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setSelectedYM(currentYM)}
+            className="text-[10px] font-bold px-2 py-1 bg-white hover:bg-neutral-100 rounded-md border border-border text-text transition"
+          >
+            Bu Ay
+          </button>
+        </div>
+      </div>
+
       {/* KPI KARTLARI */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="bg-white p-4 rounded-2xl border border-emerald-200 shadow-xs">
@@ -292,7 +353,7 @@ export function RentClient({ initialItems, userName }: Props) {
                             : "bg-amber-100 text-amber-800 hover:bg-amber-200"
                         }`}
                       >
-                        {item.status === "Ödendi" ? "✓ Ödendi" : "🟡 Bekliyor"}
+                        {item.status === "Ödendi" ? "✓ Bu Ay Ödendi" : "🟡 Bu Ay Bekliyor"}
                       </button>
                     </td>
                     <td className="py-3 px-4 text-center">

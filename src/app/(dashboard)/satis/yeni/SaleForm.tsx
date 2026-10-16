@@ -842,7 +842,9 @@ export function SaleForm({
                   type="number"
                   min="0.01"
                   step="any"
-                  value={stagedQty}
+                  value={stagedQty === 0 ? "" : stagedQty}
+                  placeholder="1"
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => setStagedQty(parseFloat(e.target.value) || 0)}
                   className="w-full border-2 border-emerald-200 rounded-lg px-3 py-2 text-sm font-bold text-text outline-none focus:border-emerald-500"
                 />
@@ -855,7 +857,9 @@ export function SaleForm({
                 <input
                   type="number"
                   step="any"
-                  value={stagedPrice}
+                  value={stagedPrice === 0 ? "" : stagedPrice}
+                  placeholder="0.00"
+                  onFocus={(e) => e.target.select()}
                   onChange={(e) => {
                     setStagedPrice(parseFloat(e.target.value) || 0);
                     setStagedSelectedQuality("custom");
@@ -881,9 +885,10 @@ export function SaleForm({
                     type="number"
                     min="0"
                     step="any"
-                    value={stagedDiscountValue}
-                    onChange={(e) => setStagedDiscountValue(parseFloat(e.target.value) || 0)}
+                    value={stagedDiscountValue === 0 ? "" : stagedDiscountValue}
                     placeholder="0"
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setStagedDiscountValue(parseFloat(e.target.value) || 0)}
                     className="w-full border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500"
                   />
                 </div>
@@ -989,7 +994,9 @@ export function SaleForm({
                         <input
                           type="number"
                           step="any"
-                          value={item.quantity}
+                          value={item.quantity === 0 ? "" : item.quantity}
+                          placeholder="1"
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => handleUpdateItem(idx, "quantity", parseFloat(e.target.value) || 0)}
                           className="w-16 border border-border rounded-lg px-2 py-1 text-center text-sm font-bold outline-none focus:border-brand-navy"
                         />
@@ -1001,7 +1008,9 @@ export function SaleForm({
                         <input
                           type="number"
                           step="any"
-                          value={item.unitPrice}
+                          value={item.unitPrice === 0 ? "" : item.unitPrice}
+                          placeholder="0.00"
+                          onFocus={(e) => e.target.select()}
                           onChange={(e) => handleUpdateItem(idx, "unitPrice", parseFloat(e.target.value) || 0)}
                           className="w-24 border border-border rounded-lg px-2 py-1 text-right text-sm font-bold outline-none focus:border-brand-navy"
                         />

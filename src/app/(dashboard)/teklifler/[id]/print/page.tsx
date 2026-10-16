@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { headers } from "next/headers";
 import Link from "next/link";
 import { PrintActions } from "./PrintActions";
 import { 
@@ -98,7 +99,10 @@ export default async function PrintQuotePage({
   const salesRepName = creator?.full_name || quote.creator_name || "Ahmet Duvarbaşı";
   const salesRepPhone = creator?.phone || company?.phone || "0555 997 29 14";
 
-  const currentOrigin = process.env.NEXT_PUBLIC_APP_URL || "https://camolukyapi.com";
+  const headersList = await headers();
+  const host = headersList.get("x-forwarded-host") || headersList.get("host") || "camolukyapi.vercel.app";
+  const proto = headersList.get("x-forwarded-proto") || "https";
+  const currentOrigin = `${proto}://${host}`;
   const quoteDirectUrl = `${currentOrigin}/teklif-onizleme/${quote.id}`;
   const qrIbanUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(quoteDirectUrl)}`;
 
@@ -330,18 +334,24 @@ export default async function PrintQuotePage({
                 </div>
               </div>
 
-              <div className="w-24 flex flex-col items-center justify-center p-1 bg-white border border-neutral-300 rounded-md text-center flex-shrink-0">
+              <a 
+                href={quoteDirectUrl} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="w-24 flex flex-col items-center justify-center p-1 bg-white border border-neutral-300 rounded-md text-center flex-shrink-0 hover:border-brand-navy hover:shadow-xs transition cursor-pointer"
+                title="Teklifi Tam Ekranda Görüntüle"
+              >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img 
                   src={qrIbanUrl} 
-                  alt="IBAN QR" 
+                  alt="Teklif QR" 
                   className="w-18 h-18 object-contain"
                   loading="eager"
                 />
                 <span className="text-[6.5px] font-bold text-neutral-700 leading-tight mt-1 uppercase tracking-tight">
-                  TEKLİFİ GÖRMEK İÇİN QR KODU OKUTUNUZ
+                  TEKLİFİ GÖRMEK İÇİN TIKLAYIN / OKUTUN
                 </span>
-              </div>
+              </a>
             </div>
 
             <div className="col-span-5 text-[9.5px] space-y-1">

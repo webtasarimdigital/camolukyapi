@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { headers } from "next/headers";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import {
   Printer,
@@ -74,8 +75,10 @@ export default async function PublicQuotePreviewPage({
   const salesRepName = creator?.full_name || quote.creator_name || "Ahmet Duvarbaşı";
   const salesRepPhone = creator?.phone || "0555 997 29 14";
 
-  // Her teklifin kendine ait tekil QR Kodu:
-  const currentOrigin = process.env.NEXT_PUBLIC_APP_URL || "https://camolukyapi.com";
+  const headersList = await headers();
+  const host = headersList.get("x-forwarded-host") || headersList.get("host") || "camolukyapi.vercel.app";
+  const proto = headersList.get("x-forwarded-proto") || "https";
+  const currentOrigin = `${proto}://${host}`;
   const quoteDirectUrl = `${currentOrigin}/teklif-onizleme/${quote.id}`;
   const qrCodeUrl = `https://api.qrserver.com/v1/create-qr-code/?size=140x140&data=${encodeURIComponent(quoteDirectUrl)}`;
 
@@ -306,12 +309,18 @@ export default async function PublicQuotePreviewPage({
               </div>
             </div>
 
-            <div className="flex flex-col items-center justify-center border border-neutral-300 p-1.5 rounded-md bg-white flex-shrink-0">
+            <a 
+              href={quoteDirectUrl} 
+              target="_blank" 
+              rel="noopener noreferrer" 
+              className="flex flex-col items-center justify-center border border-neutral-300 p-1.5 rounded-md bg-white flex-shrink-0 hover:border-brand-navy hover:shadow-xs transition cursor-pointer"
+              title="Teklifi Görüntüle"
+            >
               <img src={qrCodeUrl} alt="Teklif QR Kodu" className="w-18 h-18" />
               <span className="text-[7.5px] font-bold text-center text-neutral-600 mt-1 uppercase leading-tight">
-                TEKLİFİ GÖRMEK İÇİN<br/>QR KODU OKUTUNUZ
+                TEKLİFİ GÖRMEK İÇİN<br/>TIKLAYIN / OKUTUN
               </span>
-            </div>
+            </a>
           </div>
 
           <div className="col-span-5 border border-neutral-300 rounded-md overflow-hidden text-[10.5px]">

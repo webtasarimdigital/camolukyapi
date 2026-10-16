@@ -25,18 +25,27 @@ export interface QuoteTotals {
   grand_total: number;
 }
 
+function safeNum(n: unknown): number {
+  const val = Number(n);
+  return isNaN(val) || !isFinite(val) ? 0 : val;
+}
+
 function round2(n: number): number {
-  return Math.round(n * 100) / 100;
+  const safe = safeNum(n);
+  return Math.round(safe * 100) / 100;
 }
 
 export function calculateLine(item: LineItem): CalculatedLine {
-  const line_subtotal = round2(item.quantity * item.unit_price);
+  const qty = safeNum(item.quantity);
+  const price = safeNum(item.unit_price);
+  const line_subtotal = round2(qty * price);
   let discount_amount = 0;
 
-  if (item.discount_type === "percent" && item.discount_value) {
-    discount_amount = round2(line_subtotal * item.discount_value / 100);
-  } else if (item.discount_type === "fixed" && item.discount_value) {
-    discount_amount = round2(Math.min(item.discount_value, line_subtotal));
+  const discVal = safeNum(item.discount_value);
+  if (item.discount_type === "percent" && discVal > 0) {
+    discount_amount = round2((line_subtotal * discVal) / 100);
+  } else if (item.discount_type === "fixed" && discVal > 0) {
+    discount_amount = round2(Math.min(discVal, line_subtotal));
   }
 
   return {
@@ -52,18 +61,21 @@ export function calculateTotals(
   generalDiscountType?: "percent" | "fixed" | null,
   generalDiscountValue?: number | null
 ): QuoteTotals {
-  const subtotal = round2(lines.reduce((s, l) => s + l.line_total, 0));
-  const line_discount_total = round2(lines.reduce((s, l) => s + l.discount_amount, 0));
+  const validLines = Array.isArray(lines) ? lines : [];
+  const subtotal = round2(validLines.reduce((s, l) => s + safeNum(l?.line_total), 0));
+  const line_discount_total = round2(validLines.reduce((s, l) => s + safeNum(l?.discount_amount), 0));
 
   let general_discount_amount = 0;
-  if (generalDiscountType === "percent" && generalDiscountValue) {
-    general_discount_amount = round2(subtotal * generalDiscountValue / 100);
-  } else if (generalDiscountType === "fixed" && generalDiscountValue) {
-    general_discount_amount = round2(Math.min(generalDiscountValue, subtotal));
+  const genDiscVal = safeNum(generalDiscountValue);
+  if (generalDiscountType === "percent" && genDiscVal > 0) {
+    general_discount_amount = round2((subtotal * genDiscVal) / 100);
+  } else if (generalDiscountType === "fixed" && genDiscVal > 0) {
+    general_discount_amount = round2(Math.min(genDiscVal, subtotal));
   }
 
   const net_total = round2(subtotal - general_discount_amount);
-  const vat_total = round2(net_total * vatRate / 100);
+  const safeVatRate = safeNum(vatRate);
+  const vat_total = round2((net_total * safeVatRate) / 100);
   const grand_total = round2(net_total + vat_total);
 
   return {

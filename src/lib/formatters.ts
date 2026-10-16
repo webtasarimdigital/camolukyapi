@@ -1,6 +1,8 @@
 // Para formatları — TRY / tr-TR
 export function formatCurrency(amount: number | null | undefined): string {
-  if (amount == null) return "₺0,00";
+  if (amount == null || typeof amount !== "number" || isNaN(amount) || !isFinite(amount)) {
+    return "₺0,00";
+  }
   return new Intl.NumberFormat("tr-TR", {
     style: "currency",
     currency: "TRY",

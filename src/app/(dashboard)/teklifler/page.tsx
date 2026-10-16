@@ -3,6 +3,9 @@ import Link from "next/link";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { redirect } from "next/navigation";
 import { QuickQuoteSearch } from "./QuickQuoteSearch";
+import { DeleteQuoteButton } from "./DeleteQuoteButton";
+import { getUploadedQuotes } from "./uploaded-quotes-actions";
+import { UploadedQuotesClient } from "./UploadedQuotesClient";
 import {
   FileText,
   TrendingUp,
@@ -12,14 +15,15 @@ import {
   Edit3,
   CheckCircle2,
   Plus,
+  Upload,
 } from "lucide-react";
 
 export default async function TekliflerPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string }>;
+  searchParams: Promise<{ q?: string; status?: string; tab?: string }>;
 }) {
-  const { q, status } = await searchParams;
+  const { q, status, tab } = await searchParams;
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) redirect("/login");
@@ -76,6 +80,8 @@ export default async function TekliflerPage({
   const { data: quotesData } = await query;
   const quotes = quotesData as any[] | null;
 
+  const uploadedQuotes = await getUploadedQuotes();
+
   const { data: profilesData } = await supabase
     .from("profiles")
     .select("id, full_name")
@@ -107,23 +113,56 @@ export default async function TekliflerPage({
       {/* Üst Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-text">Teklifler & Satış Dönüşümü</h1>
+          <h1 className="text-xl font-bold text-text">Teklif Yönetimi & PDF Arşivi</h1>
           <p className="text-sm text-text-muted">
-            Verilen teklifleri takip edin, düzenleyin veya tek tıkla satışa dönüştürün.
+            Sistemde hazırlanan teklifleri yönetin veya dışarıdan gelen PDF teklifleri arşivleyin.
           </p>
         </div>
+        <div className="flex items-center gap-2">
+          <Link
+            href="/teklif/yeni"
+            className="flex items-center gap-2 bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-4 py-2.5 rounded-xl text-sm font-bold transition shadow-sm"
+          >
+            <Plus size={16} /> + Yeni Teklif Oluştur
+          </Link>
+        </div>
+      </div>
+
+      {/* SEKME GEZİNTİSİ (Madde 2) */}
+      <div className="flex items-center gap-2 border-b border-border pb-2">
         <Link
-          href="/teklif/yeni"
-          className="flex items-center gap-2 bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-4 py-2.5 rounded-xl text-sm font-bold transition shadow-sm"
+          href="/teklifler"
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition ${
+            tab !== "pdf"
+              ? "bg-brand-navy text-white shadow-xs"
+              : "bg-surface hover:bg-surface/80 text-text border border-border"
+          }`}
         >
-          <Plus size={16} /> + Yeni Teklif Oluştur
+          <FileText size={14} />
+          Sistem Teklifleri ({totalQuotesCount})
+        </Link>
+
+        <Link
+          href="/teklifler?tab=pdf"
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition ${
+            tab === "pdf"
+              ? "bg-brand-navy text-white shadow-xs"
+              : "bg-surface hover:bg-surface/80 text-text border border-border"
+          }`}
+        >
+          <Upload size={14} />
+          PDF Teklif Arşivi ({uploadedQuotes.length})
         </Link>
       </div>
 
-      {/* DÖNÜŞÜM GRAFİĞİ & KPI KARTLARI */}
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        {/* Kart 1: Dönüşüm Başarısı & İlerleme Çubuğu */}
-        <div className="bg-white p-5 rounded-2xl border border-border md:col-span-2 space-y-3">
+      {tab === "pdf" ? (
+        <UploadedQuotesClient initialQuotes={uploadedQuotes} />
+      ) : (
+        <>
+          {/* DÖNÜŞÜM GRAFİĞİ & KPI KARTLARI */}
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+            {/* Kart 1: Dönüşüm Başarısı & İlerleme Çubuğu */}
+            <div className="bg-white p-5 rounded-2xl border border-border md:col-span-2 space-y-3">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
@@ -341,6 +380,11 @@ export default async function TekliflerPage({
                         >
                           Görüntüle
                         </Link>
+                        <DeleteQuoteButton 
+                          quoteId={quote.id} 
+                          quoteCode={quote.quote_code} 
+                          variant="icon" 
+                        />
                       </div>
                     </td>
                   </tr>
@@ -377,6 +421,8 @@ export default async function TekliflerPage({
           </tbody>
         </table>
       </div>
+      </>
+      )}
     </div>
   );
 }

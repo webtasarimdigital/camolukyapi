@@ -101,6 +101,33 @@ export function PaymentFollowupClient({ initialItems, userName }: Props) {
     });
   }
 
+  async function handleQuickStatusChange(item: PaymentFollowup, newStatus: PaymentFollowup["status"]) {
+    const newPaidAmount = newStatus === "Ödendi" ? item.total_amount : item.paid_amount;
+    startTransition(async () => {
+      const formData = new FormData();
+      formData.set("id", item.id);
+      formData.set("type", item.type);
+      formData.set("contact_date", item.contact_date || "");
+      formData.set("contact_name", item.contact_name);
+      formData.set("description", item.description || "");
+      formData.set("personnel", item.personnel || "");
+      formData.set("payment_method", item.payment_method);
+      formData.set("due_date", item.due_date);
+      formData.set("total_amount", String(item.total_amount));
+      formData.set("paid_amount", String(newPaidAmount));
+      formData.set("status", newStatus);
+      formData.set("notes", item.notes || "");
+
+      const res = await actionSavePaymentFollowup(formData);
+      if (res.success && res.payment) {
+        setItems((prev) => prev.map((i) => (i.id === item.id ? res.payment! : i)));
+        toast.success(`Durum "${newStatus}" olarak güncellendi!`);
+      } else {
+        toast.error(res.error || "Durum güncellenemedi.");
+      }
+    });
+  }
+
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = e.currentTarget;
@@ -369,20 +396,39 @@ export function PaymentFollowupClient({ initialItems, userName }: Props) {
                         </span>
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <span
-                          className={`px-2 py-0.5 rounded font-bold text-[10px] ${
-                            item.status === "Ödendi"
-                              ? "bg-emerald-100 text-emerald-800"
-                              : item.status === "Kısmi Ödendi"
-                              ? "bg-amber-100 text-amber-800"
-                              : item.status === "Ertelendi"
-                              ? "bg-purple-100 text-purple-800"
-                              : "bg-gray-100 text-gray-800"
-                          }`}
-                        >
-                          {item.status}
-                        </span>
-                        {item.notes && <p className="text-[10px] text-text-muted mt-0.5 truncate max-w-[120px]">{item.notes}</p>}
+                        <div className="flex flex-col items-center gap-1">
+                          <select
+                            value={item.status}
+                            disabled={isPending}
+                            onChange={(e) => handleQuickStatusChange(item, e.target.value as any)}
+                            className={`px-2 py-0.5 rounded font-bold text-[10px] border outline-none cursor-pointer transition ${
+                              item.status === "Ödendi"
+                                ? "bg-emerald-100 text-emerald-800 border-emerald-300"
+                                : item.status === "Kısmi Ödendi"
+                                ? "bg-amber-100 text-amber-800 border-amber-300"
+                                : item.status === "Ertelendi"
+                                ? "bg-purple-100 text-purple-800 border-purple-300"
+                                : "bg-gray-100 text-gray-800 border-gray-300"
+                            }`}
+                          >
+                            <option value="Bekliyor">Bekliyor</option>
+                            <option value="Kısmi Ödendi">Kısmi Ödendi</option>
+                            <option value="Ödendi">Ödendi</option>
+                            <option value="Ertelendi">Ertelendi</option>
+                          </select>
+                          {item.status !== "Ödendi" && (
+                            <button
+                              type="button"
+                              onClick={() => handleQuickStatusChange(item, "Ödendi")}
+                              disabled={isPending}
+                              title="Tek tıkla tüm bakiyeyi kapat ve ödendi yap"
+                              className="text-[9px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 px-1.5 py-0.5 rounded transition cursor-pointer"
+                            >
+                              ✓ Ödendi Yap
+                            </button>
+                          )}
+                          {item.notes && <p className="text-[10px] text-text-muted truncate max-w-[120px]">{item.notes}</p>}
+                        </div>
                       </td>
                       <td className="py-3 px-4 text-center">
                         <div className="flex items-center justify-center gap-1">

@@ -506,11 +506,6 @@ export function QuoteForm({
                     1. Kalite: {formatCurrency(stagedProduct.price_quality_1)}
                   </button>
                 )}
-                {stagedProduct.price_quality_2 && (
-                  <button type="button" onClick={() => handleSetQualityPrice("q2")} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${ stagedSelectedQuality === "q2" ? "bg-emerald-600 text-white shadow-xs" : "bg-white border border-border text-text-muted hover:bg-surface" }`}>
-                    2. Kalite: {formatCurrency(stagedProduct.price_quality_2)}
-                  </button>
-                )}
                 {stagedProduct.price_commercial && (
                   <button type="button" onClick={() => handleSetQualityPrice("commercial")} className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 ${ stagedSelectedQuality === "commercial" ? "bg-emerald-600 text-white shadow-xs" : "bg-white border border-border text-text-muted hover:bg-surface" }`}>
                     Ticari: {formatCurrency(stagedProduct.price_commercial)}
@@ -521,11 +516,28 @@ export function QuoteForm({
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 bg-white p-4 rounded-xl border border-border items-end">
               <div>
                 <label className="block text-xs font-bold text-text mb-1">Miktar ({stagedProduct.unit || "M2"}) *</label>
-                <input type="number" min="0.01" step="any" value={stagedQty} onChange={(e) => setStagedQty(parseFloat(e.target.value) || 0)} className="w-full border-2 border-emerald-200 rounded-lg px-3 py-2 text-sm font-bold text-text outline-none focus:border-emerald-500" />
+                <input 
+                  type="number" 
+                  min="0.01" 
+                  step="any" 
+                  value={stagedQty === 0 ? "" : stagedQty} 
+                  placeholder="1"
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setStagedQty(parseFloat(e.target.value) || 0)} 
+                  className="w-full border-2 border-emerald-200 rounded-lg px-3 py-2 text-sm font-bold text-text outline-none focus:border-emerald-500" 
+                />
               </div>
               <div>
                 <label className="block text-xs font-bold text-text mb-1">Birim Satış Fiyatı (₺) *</label>
-                <input type="number" step="any" value={stagedPrice} onChange={(e) => { setStagedPrice(parseFloat(e.target.value) || 0); setStagedSelectedQuality("custom"); }} className="w-full border-2 border-border rounded-lg px-3 py-2 text-sm font-bold text-text outline-none focus:border-emerald-500" />
+                <input 
+                  type="number" 
+                  step="any" 
+                  value={stagedPrice === 0 ? "" : stagedPrice} 
+                  placeholder="0.00"
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => { setStagedPrice(parseFloat(e.target.value) || 0); setStagedSelectedQuality("custom"); }} 
+                  className="w-full border-2 border-border rounded-lg px-3 py-2 text-sm font-bold text-text outline-none focus:border-emerald-500" 
+                />
               </div>
               <div>
                 <label className="block text-xs font-bold text-text mb-1">İskonto</label>
@@ -534,7 +546,16 @@ export function QuoteForm({
                     <option value="percent">%</option>
                     <option value="fixed">₺</option>
                   </select>
-                  <input type="number" min="0" step="any" value={stagedDiscountValue} onChange={(e) => setStagedDiscountValue(parseFloat(e.target.value) || 0)} placeholder="0" className="w-full border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" />
+                  <input 
+                    type="number" 
+                    min="0" 
+                    step="any" 
+                    value={stagedDiscountValue === 0 ? "" : stagedDiscountValue} 
+                    placeholder="0" 
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setStagedDiscountValue(parseFloat(e.target.value) || 0)} 
+                    className="w-full border border-border rounded-lg px-3 py-2 text-sm outline-none focus:border-emerald-500" 
+                  />
                 </div>
               </div>
               <div>
@@ -588,13 +609,29 @@ export function QuoteForm({
                       {item.product_code_snapshot && <span className="text-[10px] text-text-muted">Kod: {item.product_code_snapshot}</span>}
                     </td>
                     <td className="px-3 py-2 text-center">
-                      <input type="number" value={item.quantity || ""} step="any" onChange={(e) => handleUpdateItem(item.id, { quantity: Number(e.target.value) })} className="w-20 border border-border rounded px-2 py-1 text-sm text-center font-bold outline-none" />
+                      <input 
+                        type="number" 
+                        value={item.quantity === 0 ? "" : item.quantity} 
+                        placeholder="1"
+                        step="any" 
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => handleUpdateItem(item.id, { quantity: parseFloat(e.target.value) || 0 })} 
+                        className="w-20 border border-border rounded px-2 py-1 text-sm text-center font-bold outline-none focus:border-brand-gold" 
+                      />
                     </td>
                     <td className="px-3 py-2">
                       <input value={item.unit_snapshot} onChange={(e) => handleUpdateItem(item.id, { unit_snapshot: e.target.value })} className="w-16 border border-border rounded px-2 py-1 text-sm" />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <input type="number" value={item.unit_price || ""} step="any" onChange={(e) => handleUpdateItem(item.id, { unit_price: Number(e.target.value) })} className="w-24 border border-border rounded px-2 py-1 text-sm text-right font-bold outline-none" />
+                      <input 
+                        type="number" 
+                        value={item.unit_price === 0 ? "" : item.unit_price} 
+                        placeholder="0.00"
+                        step="any" 
+                        onFocus={(e) => e.target.select()}
+                        onChange={(e) => handleUpdateItem(item.id, { unit_price: parseFloat(e.target.value) || 0 })} 
+                        className="w-24 border border-border rounded px-2 py-1 text-sm text-right font-bold outline-none focus:border-brand-gold" 
+                      />
                     </td>
                     <td className="px-3 py-2 text-right text-xs text-text-muted tabular-nums">{discountPct > 0 ? `%${Number(discountPct).toFixed(2)}` : "-"}</td>
                     <td className="px-3 py-2 text-right text-xs text-rose-600 tabular-nums">{calc.discount_amount > 0 ? `-${formatCurrency(calc.discount_amount)}` : "-"}</td>

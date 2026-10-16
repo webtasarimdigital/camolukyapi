@@ -24,6 +24,7 @@ export async function saveExcelProducts(payload: {
   if (!profile?.company_id) throw new Error("Şirket profili bulunamadı.");
 
   const companyId = profile.company_id;
+  const now = new Date().toISOString();
 
   // 1. Import kaydı aç
   const { data: importRecord, error: importErr } = await supabase
@@ -43,101 +44,57 @@ export async function saveExcelProducts(payload: {
   if (importErr) throw new Error(importErr.message);
   const importId = (importRecord as { id: string })?.id;
 
-  let inserted = 0;
-  let updated = 0;
+  let totalProcessed = 0;
   let errors = 0;
 
-  // 2. Ürünleri batch halinde upsert et
-  for (const item of payload.products) {
-    if (!item.product_code || !item.product_name) {
-      errors++;
-      continue;
-    }
+  // Geçerli ürünleri filtrele
+  const validProducts = payload.products.filter(
+    (p) => p.product_code && p.product_code.trim() && p.product_name && p.product_name.trim()
+  );
+  errors = payload.products.length - validProducts.length;
 
-    // Mevcut ürün var mı?
-    const { data: existingData } = await supabase
-      .from("products")
-      .select("id, price_quality_1, price_quality_2, price_commercial, stock_qty")
-      .eq("company_id", companyId)
-      .eq("product_code", item.product_code.trim())
-      .single();
+  // 2. Yüksek Performanslı Batch Upsert (100'lük gruplar halinde)
+  const CHUNK_SIZE = 100;
+  for (let i = 0; i < validProducts.length; i += CHUNK_SIZE) {
+    const chunk = validProducts.slice(i, i + CHUNK_SIZE);
 
-    const existing = existingData as {
-      id: string;
-      price_quality_1: number | null;
-      price_quality_2: number | null;
-      price_commercial: number | null;
-      stock_qty?: number | null;
-    } | null;
+    const rows = chunk.map((item) => {
+      const code = item.product_code.trim();
+      const p1 = item.price_quality_1 ?? null;
+      const p2 = item.price_quality_2 ?? null;
+      const pC = item.price_commercial ?? null;
+      const defPrice = item.default_sale_price ?? p1 ?? 0;
 
-    if (existing) {
-      // Güncelle
-      const { error: updateErr } = await supabase
-        .from("products")
-        .update({
-          product_name: item.product_name.trim(),
-          product_group: item.product_group?.trim() || null,
-          series_name: item.series_name?.trim() || null,
-          size: item.size?.trim() || null,
-          unit: item.unit?.trim() || "M2",
-          price_quality_1: item.price_quality_1 ?? existing.price_quality_1,
-          price_quality_2: item.price_quality_2 ?? existing.price_quality_2,
-          price_commercial: item.price_commercial ?? existing.price_commercial,
-          default_sale_price: item.default_sale_price ?? item.price_quality_1,
-          stock_qty: item.stock_qty !== undefined && item.stock_qty !== null ? item.stock_qty : existing.stock_qty,
-          last_import_id: importId,
-          updated_at: new Date().toISOString(),
-          updated_by: user.id,
-        } as never)
-        .eq("id", existing.id);
-
-      if (updateErr) {
-        errors++;
-      } else {
-        updated++;
-        // Fiyat değiştiyse fiyat geçmişi yaz
-        if (
-          item.price_quality_1 !== existing.price_quality_1 ||
-          item.price_quality_2 !== existing.price_quality_2 ||
-          item.price_commercial !== existing.price_commercial
-        ) {
-          await supabase.from("product_price_history").insert({
-            company_id: companyId,
-            product_id: existing.id,
-            price_quality_1: item.price_quality_1,
-            price_quality_2: item.price_quality_2,
-            price_commercial: item.price_commercial,
-            source_import_id: importId,
-            created_by: user.id,
-          } as never);
-        }
-      }
-    } else {
-      // Yeni Ekle
-      const { error: insertErr } = await supabase.from("products").insert({
+      return {
         company_id: companyId,
-        product_code: item.product_code.trim(),
+        product_code: code,
         product_name: item.product_name.trim(),
         product_group: item.product_group?.trim() || null,
         series_name: item.series_name?.trim() || null,
         size: item.size?.trim() || null,
         unit: item.unit?.trim() || "M2",
-        price_quality_1: item.price_quality_1 ?? null,
-        price_quality_2: item.price_quality_2 ?? null,
-        price_commercial: item.price_commercial ?? null,
-        default_sale_price: item.default_sale_price ?? item.price_quality_1 ?? 0,
-        stock_qty: item.stock_qty ?? 0,
+        price_quality_1: p1,
+        price_quality_2: p2,
+        price_commercial: pC,
+        default_sale_price: defPrice,
+        stock_qty: typeof item.stock_qty === "number" ? item.stock_qty : 0,
         min_stock_qty: 0,
         allows_decimal_qty: true,
         last_import_id: importId,
-        created_by: user.id,
-      } as never);
+        is_active: true,
+        updated_at: now,
+      };
+    });
 
-      if (insertErr) {
-        errors++;
-      } else {
-        inserted++;
-      }
+    const { error: upsertErr } = await supabase
+      .from("products")
+      .upsert(rows as never[], { onConflict: "company_id,product_code" });
+
+    if (upsertErr) {
+      console.error(`Chunk upsert error at index ${i}:`, upsertErr);
+      errors += chunk.length;
+    } else {
+      totalProcessed += chunk.length;
     }
   }
 
@@ -146,18 +103,18 @@ export async function saveExcelProducts(payload: {
     .from("product_imports")
     .update({
       status: "completed",
-      inserted_rows: inserted,
-      updated_rows: updated,
+      inserted_rows: totalProcessed,
+      updated_rows: 0,
       error_rows: errors,
       completed_at: new Date().toISOString(),
-      summary: `Toplam: ${payload.products.length}, Yeni: ${inserted}, Güncellenen: ${updated}, Hatalı: ${errors}`,
+      summary: `Toplam: ${payload.products.length}, Başarılı: ${totalProcessed}, Hatalı/Atlanan: ${errors}`,
     } as never)
     .eq("id", importId);
 
   revalidatePath("/import");
   revalidatePath("/urunler");
 
-  return { success: true, inserted, updated, errors };
+  return { success: true, inserted: totalProcessed, updated: 0, errors };
 }
 
 export async function savePdfDocument(formData: FormData) {

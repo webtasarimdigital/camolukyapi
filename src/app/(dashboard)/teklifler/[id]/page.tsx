@@ -3,6 +3,7 @@ import Link from "next/link";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { redirect } from "next/navigation";
 import { ConvertQuoteButton } from "./ConvertQuoteButton";
+import { DeleteQuoteButton } from "../DeleteQuoteButton";
 import { ArrowLeft, Printer, Edit3 } from "lucide-react";
 
 export default async function QuoteDetailPage({
@@ -95,6 +96,13 @@ export default async function QuoteDetailPage({
           </Link>
 
           <ConvertQuoteButton quoteId={quote.id} isConverted={isConverted} />
+
+          <DeleteQuoteButton 
+            quoteId={quote.id} 
+            quoteCode={quote.quote_code} 
+            redirectTo="/teklifler" 
+            variant="button" 
+          />
         </div>
       </div>
 
