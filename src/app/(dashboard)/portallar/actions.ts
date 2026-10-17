@@ -115,7 +115,6 @@ export async function savePortal(input: {
           username: input.username?.trim() || null,
           password: input.password?.trim() || null,
           notes: input.notes?.trim() || null,
-          updated_at: now,
         })
         .eq("id", input.id)
         .select()
@@ -136,7 +135,6 @@ export async function savePortal(input: {
           notes: input.notes?.trim() || null,
           created_by_name: userName,
           created_at: now,
-          updated_at: now,
         })
         .select()
         .single();

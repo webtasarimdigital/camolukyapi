@@ -4,6 +4,7 @@ import { formatCurrency } from "@/lib/formatters";
 import { redirect } from "next/navigation";
 import { ShoppingCart, Plus, ArrowRight } from "lucide-react";
 import { DeleteSaleButton } from "./DeleteSaleButton";
+import { ExportSalesButton } from "./ExportSalesButton";
 
 export default async function SalesPage() {
   const supabase = await createClient();
@@ -43,12 +44,15 @@ export default async function SalesPage() {
           </h1>
           <p className="text-xs text-text-muted mt-0.5">Gerçekleşen satışlar, stok çıkışları ve tahsilat durumları</p>
         </div>
-        <Link
-          href="/satis/yeni"
-          className="bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
-        >
-          <Plus size={16} /> Yeni Satış Yap
-        </Link>
+        <div className="flex items-center gap-2.5">
+          <ExportSalesButton sales={sales || []} />
+          <Link
+            href="/satis/yeni"
+            className="bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-4 py-2.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+          >
+            <Plus size={16} /> Yeni Satış Yap
+          </Link>
+        </div>
       </div>
 
       <div className="bg-white rounded-2xl border border-border shadow-xs overflow-hidden">

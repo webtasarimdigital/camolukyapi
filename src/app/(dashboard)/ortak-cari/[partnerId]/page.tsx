@@ -136,10 +136,12 @@ export default async function OrtakDetayPage({
           </div>
         </div>
 
-        {/* Yeni Hareket Ekle Butonu */}
+        {/* Yeni Hareket Ekle & Excel İndir Butonları */}
         <PartnerDetailActions
           partners={allPartners}
           currentPartnerId={partner.id}
+          movements={movements}
+          partnerName={partner.name}
         />
       </div>
 

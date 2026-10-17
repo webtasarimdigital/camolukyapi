@@ -134,59 +134,56 @@ export default async function PublicQuotePreviewPage({
       <PublicPrintButton quoteCode={quote.quote_code || quote.id.substring(0, 6)} />
 
       {/* A4 PROPOSAL DOCUMENT - Her ekrana tam oturan responsive container */}
-      <div className="print-clean w-full max-w-[210mm] mx-auto bg-white p-3.5 sm:p-5 md:p-7 text-[10.5px] leading-tight text-neutral-800 shadow-md border border-neutral-200 rounded-xl space-y-3">
+      <div className="print-clean w-full max-w-[210mm] mx-auto bg-white p-3.5 sm:p-5 md:p-6 text-[10px] leading-tight text-neutral-800 shadow-md border border-neutral-200 rounded-xl space-y-2.5">
         
         {/* Header (Logo & Teklif Rozeti) */}
-        <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b-2 border-neutral-800">
-          <div className="flex items-center gap-3 sm:gap-5">
+        <div className="flex items-center justify-between gap-3 pb-2.5 border-b-2 border-neutral-800">
+          <div className="flex items-center gap-3 sm:gap-4">
+            <img
+              src="/camoluk-logo.png"
+              alt="ÇAMOLUK YAPI"
+              className="h-9 sm:h-11 w-auto max-w-[190px] object-contain"
+            />
+            <div className="h-8 w-[1.5px] bg-neutral-300" />
             <div className="flex flex-col">
-              <span className="text-[20px] sm:text-[23px] font-black tracking-wider text-neutral-900 leading-none">
-                ÇAMOLUK
+              <span className="text-[14px] sm:text-[16px] font-light tracking-[0.2em] text-neutral-800 leading-none">
+                <strong className="font-black mr-1">NG</strong>KÜTAHYA
               </span>
-              <span className="bg-neutral-900 text-white text-[8px] sm:text-[9px] font-bold tracking-[0.25em] text-center px-1.5 py-0.5 mt-1 rounded-xs">
-                YAPI
-              </span>
-            </div>
-            <div className="h-8 sm:h-9 w-[1.5px] bg-neutral-300" />
-            <div className="flex flex-col">
-              <span className="text-[15px] sm:text-[17px] font-black tracking-tight text-neutral-800 leading-none">
-                NG | KÜTAHYA
-              </span>
-              <span className="text-[7.5px] sm:text-[8px] font-bold tracking-widest text-neutral-500 uppercase mt-0.5">
+              <span className="text-[7px] sm:text-[7.5px] tracking-[0.3em] text-neutral-500 font-semibold mt-1">
                 SERAMİK
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 bg-neutral-900 text-white px-4 sm:px-5 py-2 rounded-xl">
-            <FileCheck size={16} className="text-brand-gold" />
-            <span className="text-sm sm:text-[15px] font-black tracking-wider uppercase">TEKLİF</span>
+          <div className="flex items-center gap-2 bg-neutral-900 text-white px-3.5 sm:px-4 py-1.5 rounded-lg">
+            <FileCheck size={15} className="text-brand-gold" />
+            <span className="text-xs sm:text-sm font-black tracking-widest uppercase">TEKLİF</span>
           </div>
         </div>
 
-        {/* Müşteri ve Teklif Bilgileri */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        {/* Müşteri ve Teklif Bilgileri - Yan Yana */}
+        <div className="grid grid-cols-2 gap-2.5 text-[9px]">
           {/* Müşteri Kartı */}
           <div className="border border-neutral-300 rounded-lg overflow-hidden flex flex-col justify-between">
-            <div className="bg-neutral-100 px-3 py-1.5 border-b border-neutral-300 flex items-center gap-1.5 font-bold text-neutral-800 text-[10.5px]">
-              <User size={13} />
+            <div className="bg-neutral-100 px-2.5 py-1 border-b border-neutral-300 flex items-center gap-1.5 font-bold text-neutral-800 text-[9.5px]">
+              <User size={12} />
               <span>MÜŞTERİ BİLGİLERİ</span>
             </div>
-            <div className="p-2.5 space-y-1 text-[10px] flex-1">
+            <div className="p-2 space-y-0.5 text-[9px] flex-1">
               <div className="grid grid-cols-3">
-                <span className="text-neutral-500 font-medium">MÜŞTERİ ÜNVANI</span>
+                <span className="text-neutral-500 font-medium">MÜŞTERİ</span>
                 <span className="col-span-2 font-bold text-neutral-900 truncate">: {customerName}</span>
               </div>
               <div className="grid grid-cols-3">
-                <span className="text-neutral-500 font-medium">ADRES BİLGİLERİ</span>
-                <span className="col-span-2 text-neutral-700">: {customerAddress}</span>
+                <span className="text-neutral-500 font-medium">ADRES</span>
+                <span className="col-span-2 text-neutral-700 truncate">: {customerAddress}</span>
               </div>
               <div className="grid grid-cols-3">
-                <span className="text-neutral-500 font-medium">İLETİŞİM BİLGİLERİ</span>
+                <span className="text-neutral-500 font-medium">İLETİŞİM</span>
                 <span className="col-span-2 text-neutral-700">: {customerPhone}</span>
               </div>
               <div className="grid grid-cols-3">
-                <span className="text-neutral-500 font-medium">VERGİ KİMLİK NO</span>
+                <span className="text-neutral-500 font-medium">VERGİ NO</span>
                 <span className="col-span-2 text-neutral-700">: {customerTaxInfo}</span>
               </div>
               <div className="grid grid-cols-3">
@@ -198,17 +195,17 @@ export default async function PublicQuotePreviewPage({
 
           {/* Teklif Kartı */}
           <div className="border border-neutral-300 rounded-lg overflow-hidden flex flex-col justify-between">
-            <div className="bg-neutral-100 px-3 py-1.5 border-b border-neutral-300 flex items-center gap-1.5 font-bold text-neutral-800 text-[10.5px]">
-              <Calendar size={13} />
+            <div className="bg-neutral-100 px-2.5 py-1 border-b border-neutral-300 flex items-center gap-1.5 font-bold text-neutral-800 text-[9.5px]">
+              <Calendar size={12} />
               <span>TEKLİF DETAYLARI</span>
             </div>
-            <div className="p-2.5 space-y-1 text-[10px] flex-1">
+            <div className="p-2 space-y-0.5 text-[9px] flex-1">
               <div className="grid grid-cols-5 items-center">
                 <span className="col-span-2 text-neutral-500 font-medium">TEKLİF NO</span>
                 <span className="col-span-3 font-mono font-bold text-neutral-900">: TKF-{quote.quote_code}</span>
               </div>
               <div className="grid grid-cols-5 items-center">
-                <span className="col-span-2 text-neutral-500 font-medium">TEKLİF TARİHİ</span>
+                <span className="col-span-2 text-neutral-500 font-medium">TARİH</span>
                 <span className="col-span-3 font-semibold text-neutral-800">: {formatDate(quote.created_at || quote.quote_date)}</span>
               </div>
               <div className="grid grid-cols-5 items-center">
@@ -216,7 +213,7 @@ export default async function PublicQuotePreviewPage({
                 <span className="col-span-3 font-bold text-neutral-900">: 2 İŞ GÜNÜ ({formatDate(quote.valid_until)})</span>
               </div>
               <div className="grid grid-cols-5 items-center">
-                <span className="col-span-2 text-neutral-500 font-medium">SATIŞ TEMSİLCİSİ</span>
+                <span className="col-span-2 text-neutral-500 font-medium">TEMSİLCİ</span>
                 <span className="col-span-3 font-bold text-neutral-900">: {salesRepName}</span>
               </div>
               <div className="grid grid-cols-5 items-center">
@@ -316,53 +313,11 @@ export default async function PublicQuotePreviewPage({
           * Fiyatlara KDV dahil değildir.
         </div>
 
-        {/* Banka & QR ve Toplamlar */}
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3 items-start">
-          {/* Banka & QR */}
-          <div className="col-span-1 md:col-span-7 border border-neutral-300 rounded-lg p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-            <div className="space-y-1 text-[9.5px] w-full">
-              <span className="font-bold text-neutral-900 uppercase text-[10px] block border-b border-neutral-200 pb-1 mb-1">
-                BANKA BİLGİLERİ
-              </span>
-              <div className="grid grid-cols-3">
-                <span className="text-neutral-500">HESAP ADI</span>
-                <span className="col-span-2 font-bold text-neutral-800 truncate">: {primaryBank.account_name}</span>
-              </div>
-              <div className="grid grid-cols-3">
-                <span className="text-neutral-500">BANKA</span>
-                <span className="col-span-2 font-semibold">: {primaryBank.bank_name}</span>
-              </div>
-              <div className="grid grid-cols-3">
-                <span className="text-neutral-500">HESAP NO</span>
-                <span className="col-span-2 font-mono">: {primaryBank.account_no}</span>
-              </div>
-              <div className="grid grid-cols-3">
-                <span className="text-neutral-500 font-bold">IBAN</span>
-                <span className="col-span-2 font-mono font-bold text-neutral-900 break-all">: {primaryBank.iban}</span>
-              </div>
-              <div className="grid grid-cols-3">
-                <span className="text-neutral-500">ŞUBE KODU</span>
-                <span className="col-span-2">: {primaryBank.branch}</span>
-              </div>
-            </div>
-
-            <a 
-              href={quoteDirectUrl} 
-              target="_blank" 
-              rel="noopener noreferrer" 
-              className="flex flex-col items-center justify-center border border-neutral-300 p-1.5 rounded-lg bg-white flex-shrink-0 hover:border-brand-navy hover:shadow-xs transition cursor-pointer"
-              title="Teklifi Görüntüle"
-            >
-              <img src={qrCodeUrl} alt="Teklif QR Kodu" className="w-16 h-16 sm:w-18 sm:h-18" />
-              <span className="text-[7.5px] font-bold text-center text-neutral-600 mt-1 uppercase leading-tight">
-                TEKLİFİ GÖRMEK İÇİN<br/>TIKLAYIN / OKUTUN
-              </span>
-            </a>
-          </div>
-
-          {/* Toplamlar */}
-          <div className="col-span-1 md:col-span-5 border border-neutral-300 rounded-lg overflow-hidden text-[10px]">
-            <div className="p-2.5 space-y-1.5">
+        {/* TOPLAMLAR VE GENEL TOPLAMIN ALTINDA BANKA BİLGİLERİ */}
+        <div className="w-full flex justify-end">
+          <div className="w-full sm:max-w-md border border-neutral-300 rounded-lg overflow-hidden text-[9.5px]">
+            {/* Ara Toplam, İskonto, KDV */}
+            <div className="p-2 space-y-1 bg-white">
               <div className="flex justify-between items-center text-neutral-600">
                 <span>ARA TOPLAM</span>
                 <span className="font-semibold text-neutral-900 tabular-nums">{formatCurrency(quote.subtotal)}</span>
@@ -380,49 +335,89 @@ export default async function PublicQuotePreviewPage({
                 <span className="font-semibold text-neutral-900 tabular-nums">{formatCurrency(quote.vat_total ?? quote.vat_amount ?? 0)}</span>
               </div>
             </div>
-            <div className="bg-neutral-900 text-white p-2.5 flex justify-between items-center font-black text-xs sm:text-[13px]">
+
+            {/* GENEL TOPLAM BARI */}
+            <div className="bg-neutral-900 text-white px-3 py-2 flex justify-between items-center font-black text-xs sm:text-[13px]">
               <span>GENEL TOPLAM</span>
               <span className="tabular-nums">{formatCurrency(quote.grand_total ?? quote.total_amount ?? 0)}</span>
+            </div>
+
+            {/* GENEL TOPLAMIN HEMEN ALTINDA: BANKA BİLGİLERİ & QR */}
+            <div className="bg-neutral-50 p-2.5 border-t border-neutral-300 flex items-center justify-between gap-3">
+              <div className="space-y-0.5 text-[8.5px] leading-tight flex-1">
+                <span className="font-bold text-neutral-900 uppercase text-[9px] block border-b border-neutral-200 pb-0.5 mb-1">
+                  BANKA HESAP BİLGİLERİ
+                </span>
+                <div>
+                  <span className="text-neutral-500 font-medium">HESAP ADI: </span>
+                  <strong className="text-neutral-800">{primaryBank.account_name}</strong>
+                </div>
+                <div>
+                  <span className="text-neutral-500 font-medium">BANKA: </span>
+                  <strong className="text-neutral-800">{primaryBank.bank_name} - {primaryBank.branch}</strong>
+                </div>
+                <div>
+                  <span className="text-neutral-500 font-medium">HESAP NO: </span>
+                  <span className="font-mono text-neutral-800">{primaryBank.account_no}</span>
+                </div>
+                <div>
+                  <span className="text-neutral-500 font-bold">IBAN: </span>
+                  <strong className="font-mono text-neutral-950 font-bold break-all">{primaryBank.iban}</strong>
+                </div>
+              </div>
+
+              <a 
+                href={quoteDirectUrl} 
+                target="_blank" 
+                rel="noopener noreferrer" 
+                className="flex flex-col items-center justify-center border border-neutral-300 p-1 rounded-lg bg-white flex-shrink-0 hover:border-brand-navy hover:shadow-xs transition cursor-pointer"
+                title="Teklifi Görüntüle"
+              >
+                <img src={qrCodeUrl} alt="Teklif QR Kodu" className="w-14 h-14" />
+                <span className="text-[7px] font-bold text-center text-neutral-600 mt-0.5 uppercase leading-none">
+                  TEKLİFİ GÖR<br/>OKUTUN
+                </span>
+              </a>
             </div>
           </div>
         </div>
 
-        {/* Önemli Notlar & Teslimat Koşulları */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-[9px]">
-          <div className="border border-neutral-300 rounded-lg p-2.5 space-y-1">
-            <span className="font-bold text-neutral-900 uppercase text-[9.5px] block border-b border-neutral-200 pb-1">
+        {/* Önemli Notlar & Teslimat Koşulları (AYNI SATIRDA YAN YANA) */}
+        <div className="grid grid-cols-2 gap-2.5 text-[8.5px] leading-tight">
+          <div className="border border-neutral-300 rounded-lg p-2 space-y-0.5">
+            <span className="font-bold text-neutral-900 uppercase text-[9px] block border-b border-neutral-200 pb-0.5">
               ÖNEMLİ NOTLAR
             </span>
             <ul className="space-y-0.5 text-neutral-700 list-disc list-inside">
               <li>Teklifimiz 2 iş günü geçerlidir.</li>
-              <li>Termin süresi stok ve sipariş miktarlarına göre değişiklik göstermektedir.</li>
-              <li>Nakliye alıcıya aittir. Nakliye dahil değildir.</li>
-              <li>Teklif onaylandığında kısmi ön ödeme ile kalan ödeme şartları görüşülecektir.</li>
-              <li>Ürünlerinizi sayarak eksiksiz ve sağlam alınız. Kırık veya eksik ürünlerden firmamız sorumlu değildir.</li>
-              <li>Ürün iade süresi 10 gün olup, kutuları sağlam şekilde depo teslimi alınacaktır.</li>
+              <li>Termin süresi stok ve sipariş miktarlarına göre değişir.</li>
+              <li>Nakliye alıcıya aittir, dahil değildir.</li>
+              <li>Teklif onayında kısmi ön ödeme alınır.</li>
+              <li>Ürünlerinizi sayarak eksiksiz ve sağlam alınız.</li>
+              <li>İade süresi 10 gün olup sağlam kutuda depo teslimi alınır.</li>
             </ul>
           </div>
 
-          <div className="border border-neutral-300 rounded-lg p-2.5 space-y-1">
-            <span className="font-bold text-neutral-900 uppercase text-[9.5px] block border-b border-neutral-200 pb-1">
+          <div className="border border-neutral-300 rounded-lg p-2 space-y-0.5">
+            <span className="font-bold text-neutral-900 uppercase text-[9px] block border-b border-neutral-200 pb-0.5">
               TESLİM & ÖDEME KOŞULLARI
             </span>
-            <div className="space-y-1 text-neutral-700">
-              <div className="grid grid-cols-4">
-                <span className="font-bold">TESLİMAT</span>
-                <span className="col-span-3">: Stok durumuna göre en kısa sürede teslim edilir.</span>
+            <div className="space-y-0.5 text-neutral-700">
+              <div>
+                <strong className="text-neutral-800">TESLİMAT: </strong>
+                <span>Stok durumuna göre en kısa sürede teslim edilir.</span>
               </div>
-              <div className="grid grid-cols-4">
-                <span className="font-bold">ÖDEME ŞEKLİ</span>
-                <span className="col-span-3">: Kısmi ön ödeme, kalan ödeme şartları görüşülecektir.</span>
+              <div>
+                <strong className="text-neutral-800">ÖDEME ŞEKLİ: </strong>
+                <span>Kısmi ön ödeme, kalan bakiye teslimat öncesi kapatılır.</span>
               </div>
-              <div className="grid grid-cols-4">
-                <span className="font-bold">GARANTİ</span>
-                <span className="col-span-3">: Ürünler, üretici firma garantisi kapsamındadır.</span>
+              <div>
+                <strong className="text-neutral-800">GARANTİ: </strong>
+                <span>Ürünler, üretici firma garantisi kapsamındadır.</span>
               </div>
-              <div className="grid grid-cols-4">
-                <span className="font-bold">İADE KOŞULLARI</span>
-                <span className="col-span-3">: İade süresi 10 gündür. Sağlam kutuda depo teslimi alınır.</span>
+              <div>
+                <strong className="text-neutral-800">İADE KOŞULLARI: </strong>
+                <span>İade süresi 10 gündür. Sağlam kutuda depo teslimi alınır.</span>
               </div>
             </div>
           </div>

@@ -5,6 +5,7 @@ import { Employee } from "@/lib/data/types";
 import { actionSaveEmployee, actionDeleteEmployee } from "@/lib/data/actions";
 import { formatCurrency } from "@/lib/formatters";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import {
   Users,
   Plus,
@@ -22,6 +23,7 @@ import {
   CreditCard,
   Copy,
   Check,
+  Download,
 } from "lucide-react";
 import { EmployeeDetailDrawer } from "./EmployeeDetailDrawer";
 
@@ -108,6 +110,34 @@ export function EmployeeClient({ initialItems, userName }: Props) {
     });
   }
 
+  function handleExportEmployeesExcel() {
+    if (filtered.length === 0) {
+      toast.error("İndirilecek personel kaydı bulunamadı.");
+      return;
+    }
+    const rows = filtered.map((item, idx) => ({
+      "Sıra": idx + 1,
+      "Personel Adı": item.full_name,
+      "Görevi / Pozisyon": item.position,
+      "Telefon": item.phone,
+      "İşe Başlama Tarihi": item.start_date || "-",
+      "Toplam Maaş (₺)": item.salary,
+      "Resmi Banka Maaşı (₺)": item.official_salary ?? "-",
+      "Elden Maaş (₺)": item.unofficial_salary ?? "-",
+      "Toplam Avans (₺)": item.total_advances,
+      "Kalan Net Maaş (₺)": Math.max(0, item.salary - item.total_advances),
+      "Kullanılan İzin (Gün)": item.used_leave_days,
+      "Kalan İzin (Gün)": item.remaining_leave_days,
+      "IBAN": item.iban || "-",
+      "Notlar": item.notes || "-",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Personel_Listesi");
+    XLSX.writeFile(wb, `Personel_Listesi_${new Date().toISOString().split("T")[0]}.xlsx`);
+    toast.success("Personel listesi Excel olarak indirildi.");
+  }
+
   return (
     <div className="space-y-6">
       {/* Üst Bar */}
@@ -122,12 +152,22 @@ export function EmployeeClient({ initialItems, userName }: Props) {
           </p>
         </div>
 
-        <button
-          onClick={handleOpenNew}
-          className="flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
-        >
-          <Plus size={16} /> + Yeni Personel Ekle
-        </button>
+        <div className="flex items-center gap-2.5">
+          <button
+            onClick={handleExportEmployeesExcel}
+            className="flex items-center gap-1.5 bg-surface hover:bg-neutral-100 text-text border border-border px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+            title="Tüm personel listesini Excel olarak indir"
+          >
+            <Download size={15} /> Excel İndir
+          </button>
+
+          <button
+            onClick={handleOpenNew}
+            className="flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+          >
+            <Plus size={16} /> + Yeni Personel Ekle
+          </button>
+        </div>
       </div>
 
       {/* KPI Kartları */}

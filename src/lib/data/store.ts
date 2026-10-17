@@ -7,6 +7,7 @@ import {
   Employee,
   EmployeeTransaction,
   Rent,
+  RentPayment,
 } from "./types";
 
 const SUPABASE_URL =
@@ -522,6 +523,27 @@ export async function deleteEmployeeTransaction(id: string, employeeId: string):
 }
 
 // ──────────────────── KİRALAR ────────────────────
+export function parseRentNotes(rawNotes: string | null | undefined): { text: string; payments: RentPayment[] } {
+  if (!rawNotes) return { text: "", payments: [] };
+  try {
+    if (rawNotes.startsWith("{") && rawNotes.includes('"payments"')) {
+      const parsed = JSON.parse(rawNotes);
+      return {
+        text: parsed.text || "",
+        payments: Array.isArray(parsed.payments) ? parsed.payments : [],
+      };
+    }
+  } catch {}
+  return { text: rawNotes, payments: [] };
+}
+
+export function serializeRentNotes(text: string, payments: RentPayment[]): string {
+  return JSON.stringify({
+    text: text || "",
+    payments: payments || [],
+  });
+}
+
 export async function getRents(): Promise<Rent[]> {
   try {
     const { data, error } = await supabase
@@ -533,8 +555,18 @@ export async function getRents(): Promise<Rent[]> {
       console.error("getRents error:", error);
       return memFallback.rents as Rent[];
     }
-    memFallback.rents = data || [];
-    return (data || []) as Rent[];
+    
+    const formatted = (data || []).map((r: any) => {
+      const { text, payments } = parseRentNotes(r.notes);
+      return {
+        ...r,
+        notes: text,
+        payments,
+      } as Rent;
+    });
+
+    memFallback.rents = formatted;
+    return formatted;
   } catch (err) {
     console.error("getRents catch:", err);
     return memFallback.rents as Rent[];
@@ -545,6 +577,10 @@ export async function saveRent(
   data: Omit<Rent, "id" | "created_at"> & { id?: string }
 ): Promise<Rent> {
   const now = new Date().toISOString();
+  // Mevcut payments varsa koru
+  const currentPayments = data.payments || [];
+  const serializedNotes = serializeRentNotes(data.notes || "", currentPayments);
+
   if (data.id) {
     const { data: updated, error } = await supabase
       .from("rents")
@@ -556,7 +592,7 @@ export async function saveRent(
         payment_day: data.payment_day,
         payment_method: data.payment_method,
         status: data.status,
-        notes: data.notes,
+        notes: serializedNotes,
         updated_at: now,
       })
       .eq("id", data.id)
@@ -564,7 +600,8 @@ export async function saveRent(
       .single();
 
     if (!error && updated) {
-      return updated as Rent;
+      const { text, payments } = parseRentNotes(updated.notes);
+      return { ...updated, notes: text, payments } as Rent;
     }
   }
 
@@ -578,7 +615,7 @@ export async function saveRent(
       payment_day: data.payment_day,
       payment_method: data.payment_method,
       status: data.status,
-      notes: data.notes,
+      notes: serializedNotes,
       created_by_name: data.created_by_name || "Admin",
       created_at: now,
       updated_at: now,
@@ -589,9 +626,86 @@ export async function saveRent(
   if (error || !inserted) {
     throw new Error(error?.message || "Kira kaydı kaydedilemedi");
   }
-  return inserted as Rent;
+  const { text, payments } = parseRentNotes(inserted.notes);
+  return { ...inserted, notes: text, payments } as Rent;
 }
 
 export async function deleteRent(id: string): Promise<void> {
   await supabase.from("rents").delete().eq("id", id);
+}
+
+export async function addRentPayment(
+  rentId: string,
+  paymentData: Omit<RentPayment, "id" | "created_at">
+): Promise<Rent> {
+  const { data: rent, error } = await supabase
+    .from("rents")
+    .select("*")
+    .eq("id", rentId)
+    .single();
+
+  if (error || !rent) {
+    throw new Error("Kira kaydı bulunamadı.");
+  }
+
+  const { text, payments } = parseRentNotes(rent.notes);
+  const newPayment: RentPayment = {
+    ...paymentData,
+    id: `pay-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+    created_at: new Date().toISOString(),
+  };
+
+  const updatedPayments = [newPayment, ...payments];
+  const newNotes = serializeRentNotes(text, updatedPayments);
+
+  const { data: updated, error: updateErr } = await supabase
+    .from("rents")
+    .update({
+      notes: newNotes,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", rentId)
+    .select()
+    .single();
+
+  if (updateErr || !updated) {
+    throw new Error("Parça ödeme kaydedilemedi.");
+  }
+
+  return { ...updated, notes: text, payments: updatedPayments } as Rent;
+}
+
+export async function deleteRentPayment(
+  rentId: string,
+  paymentId: string
+): Promise<Rent> {
+  const { data: rent, error } = await supabase
+    .from("rents")
+    .select("*")
+    .eq("id", rentId)
+    .single();
+
+  if (error || !rent) {
+    throw new Error("Kira kaydı bulunamadı.");
+  }
+
+  const { text, payments } = parseRentNotes(rent.notes);
+  const updatedPayments = payments.filter((p) => p.id !== paymentId);
+  const newNotes = serializeRentNotes(text, updatedPayments);
+
+  const { data: updated, error: updateErr } = await supabase
+    .from("rents")
+    .update({
+      notes: newNotes,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", rentId)
+    .select()
+    .single();
+
+  if (updateErr || !updated) {
+    throw new Error("Parça ödeme silinemedi.");
+  }
+
+  return { ...updated, notes: text, payments: updatedPayments } as Rent;
 }

@@ -5,6 +5,8 @@ import { Rent } from "@/lib/data/types";
 import { actionSaveRent, actionDeleteRent } from "@/lib/data/actions";
 import { formatCurrency } from "@/lib/formatters";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
+import { RentDetailDrawer } from "./RentDetailDrawer";
 import {
   Building2,
   Plus,
@@ -20,6 +22,9 @@ import {
   User,
   ChevronLeft,
   ChevronRight,
+  Download,
+  Receipt,
+  Eye,
 } from "lucide-react";
 
 interface Props {
@@ -34,6 +39,7 @@ export function RentClient({ initialItems, userName }: Props) {
   const [typeTab, setTypeTab] = useState<"all" | "toplanan" | "verilen">("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingItem, setEditingItem] = useState<Rent | null>(null);
+  const [detailRent, setDetailRent] = useState<Rent | null>(null);
   const [isPending, startTransition] = useTransition();
 
   // Sabit kira gelir ve giderlerinin aylık otomatik takibi
@@ -138,6 +144,35 @@ export function RentClient({ initialItems, userName }: Props) {
     });
   }
 
+  function handleExportExcel() {
+    if (filtered.length === 0) {
+      toast.error("İndirilecek kira kaydı bulunamadı.");
+      return;
+    }
+    const rows = filtered.map((item, idx) => {
+      const paymentsTotal = (item.payments || []).reduce((s, p) => s + p.amount, 0);
+      return {
+        "Sıra": idx + 1,
+        "Kira Türü": item.type === "toplanan" ? "Toplanan (Gelir)" : "Verilen (Gider)",
+        "Mülk / Dükkan Tanımı": item.title,
+        "Kiracı / Mülk Sahibi": item.counterpart_name,
+        "Ödeme Günü": `Her ayın ${item.payment_day}. günü`,
+        "Aylık Kira Bedeli (₺)": item.amount,
+        "Ödeme Yöntemi": item.payment_method,
+        "Bu Ayki Durum": item.status,
+        "Toplam Yapılan Parça Ödeme (₺)": paymentsTotal,
+        "Kayıtlı Parça Ödeme Adedi": (item.payments || []).length,
+        "Notlar": item.notes || "",
+        "Kaydeden": item.created_by_name,
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Kiralar");
+    XLSX.writeFile(wb, `Kiralar_${selectedYM}.xlsx`);
+    toast.success("Kira listesi Excel olarak indirildi.");
+  }
+
   return (
     <div className="space-y-6">
       {/* Üst Bar */}
@@ -152,7 +187,7 @@ export function RentClient({ initialItems, userName }: Props) {
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5">
           <div className="flex bg-surface p-1 rounded-xl border border-border">
             <button
               onClick={() => setTypeTab("all")}
@@ -179,6 +214,14 @@ export function RentClient({ initialItems, userName }: Props) {
               <ArrowUpRight size={13} /> Verilen Kiralar ({verilenList.length})
             </button>
           </div>
+
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center gap-1.5 bg-surface hover:bg-neutral-100 text-text border border-border px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+            title="Tüm kira listesini Excel tablosu olarak indir"
+          >
+            <Download size={15} /> Excel İndir
+          </button>
 
           <button
             onClick={handleOpenNew}
@@ -321,8 +364,18 @@ export function RentClient({ initialItems, userName }: Props) {
                       </span>
                     </td>
                     <td className="py-3 px-4 font-bold text-text">{item.title}</td>
-                    <td className="py-3 px-4 text-text-muted font-medium">
-                      {item.counterpart_name}
+                    <td className="py-3 px-4">
+                      <button
+                        type="button"
+                        onClick={() => setDetailRent(item)}
+                        className="text-left font-bold text-brand-navy hover:underline flex items-center gap-1.5 group cursor-pointer"
+                        title="Kişi Detayı ve Parça Ödemeleri Gör"
+                      >
+                        <span>{item.counterpart_name}</span>
+                        <span className="text-[10px] bg-brand-navy/10 text-brand-navy px-1.5 py-0.5 rounded font-bold group-hover:bg-brand-navy group-hover:text-white transition">
+                          Kişi Detayı
+                        </span>
+                      </button>
                     </td>
                     <td className="py-3 px-4 text-center">
                       <span className="font-bold bg-surface px-2 py-0.5 rounded border border-border">
@@ -359,15 +412,23 @@ export function RentClient({ initialItems, userName }: Props) {
                     <td className="py-3 px-4 text-center">
                       <div className="flex items-center justify-center gap-1">
                         <button
+                          onClick={() => setDetailRent(item)}
+                          className="px-2.5 py-1 rounded-lg text-brand-navy bg-brand-navy/5 hover:bg-brand-navy/15 transition font-bold text-[11px] flex items-center gap-1 cursor-pointer"
+                          title="Kişi Detayı & Parça Ödemeler"
+                        >
+                          <Receipt size={13} />
+                          Detay
+                        </button>
+                        <button
                           onClick={() => handleEdit(item)}
-                          className="p-1 rounded text-brand-navy hover:bg-surface transition"
+                          className="p-1 rounded text-brand-navy hover:bg-surface transition cursor-pointer"
                           title="Düzenle"
                         >
                           <Edit3 size={15} />
                         </button>
                         <button
                           onClick={() => handleDelete(item.id)}
-                          className="p-1 rounded text-rose-400 hover:text-rose-600 transition"
+                          className="p-1 rounded text-rose-400 hover:text-rose-600 transition cursor-pointer"
                           title="Sil"
                         >
                           <Trash2 size={15} />
@@ -520,6 +581,19 @@ export function RentClient({ initialItems, userName }: Props) {
             </form>
           </div>
         </div>
+      )}
+
+      {/* KİŞİ DETAYI & PARÇA ÖDEMELER DRAWER (Personel modülüyle birebir mimari) */}
+      {detailRent && (
+        <RentDetailDrawer
+          rent={detailRent}
+          userName={userName}
+          onClose={() => setDetailRent(null)}
+          onRentUpdated={(updated) => {
+            setItems((prev) => prev.map((r) => (r.id === updated.id ? updated : r)));
+            setDetailRent(updated);
+          }}
+        />
       )}
     </div>
   );

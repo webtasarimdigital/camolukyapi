@@ -165,9 +165,9 @@ export function MonthlyCashFlowPlan({
     };
   }, [sales, selectedYM]);
 
-  // TOPLAM GİRİŞ VE ÇIKIŞLAR
-  const totalInflow = salesData.collectedRevenue + followupData.collectedAlacak + rentData.totalToplanan;
-  const projectedInflow = salesData.totalRevenue + followupData.totalAlacak + rentData.totalToplanan;
+  // TOPLAM GİRİŞ VE ÇIKIŞLAR (Kira gelirleri/alacakları finans analizine dahil edilmez, sadece ödenecek kiralar gider olarak alınır)
+  const totalInflow = salesData.collectedRevenue + followupData.collectedAlacak;
+  const projectedInflow = salesData.totalRevenue + followupData.totalAlacak;
 
   const totalOutflow = salaryData.netPayable + transportData.totalAmount + rentData.totalVerilen + followupData.totalBorc;
   const netProjected = projectedInflow - totalOutflow;
@@ -273,7 +273,7 @@ export function MonthlyCashFlowPlan({
           { key: "overview", label: "Genel Dağılım", icon: Coins },
           { key: "salaries", label: `Personel Maaşları (${salaryData.count})`, icon: Users },
           { key: "transports", label: `Nakliyeler (12 Gün) (${transportData.items.length})`, icon: Truck },
-          { key: "rents", label: `Kiralar (${rents.length})`, icon: Building2 },
+          { key: "rents", label: `Kira Giderleri (${rentData.verilenRents.length})`, icon: Building2 },
           { key: "debts", label: `Vadeli Borçlar (${followupData.borcItems.length})`, icon: Receipt },
         ].map((tab) => {
           const Icon = tab.icon;
@@ -320,7 +320,7 @@ export function MonthlyCashFlowPlan({
               </div>
               <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-border">
                 <span className="font-medium text-text flex items-center gap-2">
-                  <Building2 size={14} className="text-neutral-500" /> Kira Giderleri (Verilen Kiralar)
+                  <Building2 size={14} className="text-neutral-500" /> Kira Giderleri (Ödenecek Kiralar)
                 </span>
                 <strong className="font-mono text-rose-700">{formatCurrency(rentData.totalVerilen)}</strong>
               </div>
@@ -345,12 +345,6 @@ export function MonthlyCashFlowPlan({
                   <Coins size={14} className="text-neutral-500" /> Müşteri Satış Ciroları (Bu Ay)
                 </span>
                 <strong className="font-mono text-emerald-700">{formatCurrency(salesData.totalRevenue)}</strong>
-              </div>
-              <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-border">
-                <span className="font-medium text-text flex items-center gap-2">
-                  <Building2 size={14} className="text-neutral-500" /> Kira Gelirleri (Toplanan Kiralar)
-                </span>
-                <strong className="font-mono text-emerald-700">{formatCurrency(rentData.totalToplanan)}</strong>
               </div>
               <div className="flex justify-between items-center bg-white p-2.5 rounded-lg border border-border">
                 <span className="font-medium text-text flex items-center gap-2">
@@ -470,44 +464,34 @@ export function MonthlyCashFlowPlan({
         </div>
       )}
 
-      {/* Kiralar Detayı */}
+      {/* Kiralar Detayı (Sadece Ödenecek Kira Giderleri) */}
       {activeTab === "rents" && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="border border-border rounded-xl p-3 space-y-2">
-            <h4 className="text-xs font-bold text-rose-700 uppercase flex items-center justify-between">
-              <span>Verilen Kiralar (Gider)</span>
-              <span>{formatCurrency(rentData.totalVerilen)}</span>
+        <div className="border border-border rounded-xl p-4 bg-surface/20 space-y-3">
+          <div className="flex items-center justify-between border-b border-border pb-2">
+            <h4 className="text-xs font-bold text-rose-700 uppercase flex items-center gap-2">
+              <Building2 size={16} />
+              Ödenecek Kira Giderleri (Dükkan, Depo vb.)
             </h4>
-            <div className="space-y-1.5 divide-y divide-border">
+            <span className="font-mono font-bold text-sm text-rose-700">
+              Toplam: {formatCurrency(rentData.totalVerilen)}
+            </span>
+          </div>
+          {rentData.verilenRents.length === 0 ? (
+            <p className="text-xs text-text-muted py-4 text-center">Bu ay için kayıtlı kira gideri bulunmuyor.</p>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
               {rentData.verilenRents.map((r) => (
-                <div key={r.id} className="pt-1.5 flex justify-between items-center text-xs">
+                <div key={r.id} className="p-3 bg-white border border-border rounded-lg flex justify-between items-center text-xs shadow-2xs">
                   <div>
-                    <span className="font-semibold text-text">{r.title}</span>
-                    <span className="text-[10px] text-text-muted block">{r.counterpart_name} • Ayın {r.payment_day}. günü</span>
+                    <span className="font-bold text-text block">{r.title}</span>
+                    <span className="text-[11px] text-text-muted block mt-0.5">{r.counterpart_name} • Her ayın {r.payment_day}. günü</span>
+                    <span className="text-[10px] text-neutral-400 font-medium">{r.payment_method}</span>
                   </div>
-                  <strong className="font-mono text-rose-600">{formatCurrency(r.amount)}</strong>
+                  <strong className="font-mono text-sm text-rose-600 font-bold">{formatCurrency(r.amount)}</strong>
                 </div>
               ))}
             </div>
-          </div>
-
-          <div className="border border-border rounded-xl p-3 space-y-2">
-            <h4 className="text-xs font-bold text-emerald-700 uppercase flex items-center justify-between">
-              <span>Toplanan Kiralar (Gelir)</span>
-              <span>{formatCurrency(rentData.totalToplanan)}</span>
-            </h4>
-            <div className="space-y-1.5 divide-y divide-border">
-              {rentData.toplananRents.map((r) => (
-                <div key={r.id} className="pt-1.5 flex justify-between items-center text-xs">
-                  <div>
-                    <span className="font-semibold text-text">{r.title}</span>
-                    <span className="text-[10px] text-text-muted block">{r.counterpart_name} • Ayın {r.payment_day}. günü</span>
-                  </div>
-                  <strong className="font-mono text-emerald-600">{formatCurrency(r.amount)}</strong>
-                </div>
-              ))}
-            </div>
-          </div>
+          )}
         </div>
       )}
 

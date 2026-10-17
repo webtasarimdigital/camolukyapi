@@ -9,6 +9,7 @@ import {
   actionSaveEmployeeTransaction,
   actionDeleteEmployeeTransaction,
 } from "@/lib/data/actions";
+import * as XLSX from "xlsx";
 import {
   X,
   Wallet,
@@ -25,6 +26,7 @@ import {
   TrendingDown,
   CalendarDays,
   CircleAlert,
+  Download,
 } from "lucide-react";
 
 interface Props {
@@ -232,6 +234,28 @@ export function EmployeeDetailDrawer({
     });
   }
 
+  function handleExportLeavesExcel() {
+    if (leaves.length === 0) {
+      toast.error("İndirilecek izin kaydı bulunamadı.");
+      return;
+    }
+    const rows = leaves.map((item, idx) => ({
+      "Sıra": idx + 1,
+      "Personel Adı": employee.full_name,
+      "Görev": employee.position,
+      "İzin Tarihi": item.transaction_date,
+      "Kullanılan İzin (Gün)": item.days || 1,
+      "İzin Sebebi / Açıklama": item.description || "-",
+      "İşlemi Yapan": item.created_by_name || "-",
+      "Kayıt Tarihi": item.created_at ? item.created_at.substring(0, 10) : "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Izin_Gecmisi");
+    XLSX.writeFile(wb, `${employee.full_name.replace(/\s+/g, "_")}_Izin_Gecmisi.xlsx`);
+    toast.success("İzin geçmişi Excel olarak indirildi.");
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-2xl h-full shadow-2xl flex flex-col border-l border-border animate-in slide-in-from-right duration-200 overflow-hidden">
@@ -427,6 +451,25 @@ export function EmployeeDetailDrawer({
                   </button>
                 </div>
               </form>
+
+              {/* İzin Geçmişi Başlığı ve Excel İndir */}
+              <div className="flex items-center justify-between pt-1">
+                <span className="text-xs font-bold text-text flex items-center gap-1.5 uppercase tracking-wide">
+                  <Palmtree size={14} className="text-blue-600" />
+                  Kayıtlı İzin Geçmişi Dökümü
+                </span>
+                {leaves.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleExportLeavesExcel}
+                    className="flex items-center gap-1.5 text-[11px] font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-3 py-1.5 rounded-lg transition shadow-2xs cursor-pointer"
+                    title="Bu personelin tüm izin dökümünü Excel dosyası olarak indir"
+                  >
+                    <Download size={13} />
+                    İzinleri Excel'e İndir
+                  </button>
+                )}
+              </div>
 
               {/* İzin Geçmişi - Aylara Göre Accordion */}
               {loading ? (

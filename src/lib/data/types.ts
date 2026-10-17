@@ -84,6 +84,17 @@ export interface EmployeeTransaction {
   created_at?: string;
 }
 
+export interface RentPayment {
+  id: string;
+  period: string; // '2026-06', '2026-10' (Hangi ayın kirası)
+  payment_date: string; // '2026-06-15' (Ödeme tarihi)
+  amount: number; // Ödenen miktar
+  payment_method: string; // 'Havale/EFT', 'Nakit', 'Banka'
+  notes?: string; // Parça ödeme notu
+  created_by_name: string;
+  created_at: string;
+}
+
 export interface Rent {
   id: string;
   type: "toplanan" | "verilen"; // Toplanan (Gelir) vs Verilen (Gider)
@@ -94,6 +105,7 @@ export interface Rent {
   payment_method: string;
   status: "Ödendi" | "Bekliyor" | "Gecikmede";
   notes?: string;
+  payments?: RentPayment[];
   created_by_name: string;
   created_at: string;
 }

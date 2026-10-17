@@ -237,7 +237,7 @@ export function TransporterClient({ initialItems, userName }: Props) {
     });
   }
 
-  // EXCEL IMPORT HANDLERS (Madde 18)
+  // EXCEL IMPORT HANDLERS (Madde 18 & AAAA.xlsx formatı desteği)
   function handleExcelFileSelect(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -249,56 +249,157 @@ export function TransporterClient({ initialItems, userName }: Props) {
         const wb = XLSX.read(bstr, { type: "binary", cellDates: true });
         const wsname = wb.SheetNames[0];
         const ws = wb.Sheets[wsname];
-        const rawJson: any[] = XLSX.utils.sheet_to_json(ws, { defval: "" });
 
-        if (!rawJson || rawJson.length === 0) {
+        // 2D Array olarak tüm hücreleri oku (başlık satırını dinamik bulmak için)
+        const rawRows: any[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: "" });
+
+        if (!rawRows || rawRows.length === 0) {
           toast.error("Excel dosyasında veri bulunamadı.");
           return;
         }
 
-        // Normalize columns
-        const parsed = rawJson.map((row) => {
-          // Detect fields by common Turkish & English names
-          const name =
-            row["Firma"] ||
-            row["Firma Adı"] ||
-            row["Nakliyeci"] ||
-            row["Nakliyeci Adı"] ||
-            row["Şoför"] ||
-            row["İsim"] ||
-            row["transporter_name"] ||
-            "";
+        const normalizeCell = (v: any) =>
+          String(v ?? "")
+            .trim()
+            .toLowerCase()
+            .replace(/İ/g, "i")
+            .replace(/I/g, "i")
+            .replace(/ı/g, "i")
+            .replace(/ğ/g, "g")
+            .replace(/ü/g, "u")
+            .replace(/ş/g, "s")
+            .replace(/ö/g, "o")
+            .replace(/ç/g, "c");
 
-          let dateVal = row["Tarih"] || row["Taşıma Tarihi"] || row["Sevk Tarihi"] || row["transport_date"] || todayStr;
-          if (dateVal instanceof Date) {
-            dateVal = dateVal.toISOString().split("T")[0];
-          } else if (typeof dateVal === "string" && dateVal.includes(".")) {
-            const parts = dateVal.trim().split(".");
-            if (parts.length === 3) {
-              dateVal = `${parts[2]}-${parts[1].padStart(2, "0")}-${parts[0].padStart(2, "0")}`;
+        // Başlık satırını (header row) akıllıca tespit et:
+        let headerRowIdx = -1;
+        for (let i = 0; i < Math.min(rawRows.length, 10); i++) {
+          const rowText = rawRows[i].map(normalizeCell).join(" ");
+          if (
+            (rowText.includes("isim") || rowText.includes("firma") || rowText.includes("nakliye") || rowText.includes("sofor")) &&
+            (rowText.includes("tarih") || rowText.includes("fatura") || rowText.includes("iban") || rowText.includes("tutar") || rowText.includes("vade"))
+          ) {
+            headerRowIdx = i;
+            break;
+          }
+        }
+
+        // Eğer başlık bulunamadıysa ama 2. satırda kolonlar varsa (Örn: AAAA.xlsx 1. satır NAKLİYELER, 2. satır İSİM TARİH FATURA IBAN VADE KİM ÖDER)
+        if (headerRowIdx === -1) {
+          if (rawRows.length > 1 && rawRows[1].filter((c: any) => String(c).trim().length > 0).length >= 3) {
+            headerRowIdx = 1;
+          } else {
+            headerRowIdx = 0;
+          }
+        }
+
+        const headerRow = rawRows[headerRowIdx] || [];
+        const normHeaders = headerRow.map(normalizeCell);
+
+        // Kolon indekslerini bul
+        let nameIdx = normHeaders.findIndex((h) => h.includes("isim") || h.includes("firma") || h.includes("nakliye") || h.includes("sofor"));
+        let dateIdx = normHeaders.findIndex((h) => h.includes("tarih") || h.includes("sevk") || h.includes("date"));
+        let amountIdx = normHeaders.findIndex((h) => h.includes("fatura") || h.includes("tutar") || h.includes("fiyat") || h.includes("ucret") || h.includes("bedel") || h.includes("amount"));
+        let ibanIdx = normHeaders.findIndex((h) => h.includes("iban") || h.includes("banka"));
+        let vadeIdx = normHeaders.findIndex((h) => h.includes("vade") || h.includes("durum") || h.includes("statu"));
+        let payerIdx = normHeaders.findIndex((h) => h.includes("kim") || h.includes("oder") || h.includes("not") || h.includes("aciklama") || h.includes("guzergah"));
+
+        // Varsayılan sıralama: A=İsim, B=Tarih, C=Fatura, D=IBAN, E=Vade, F=Kim Öder
+        if (nameIdx === -1) nameIdx = 0;
+        if (dateIdx === -1 && normHeaders.length > 1) dateIdx = 1;
+        if (amountIdx === -1 && normHeaders.length > 2) amountIdx = 2;
+        if (ibanIdx === -1 && normHeaders.length > 3) ibanIdx = 3;
+        if (vadeIdx === -1 && normHeaders.length > 4) vadeIdx = 4;
+        if (payerIdx === -1 && normHeaders.length > 5) payerIdx = 5;
+
+        const dataRows = rawRows.slice(headerRowIdx + 1);
+
+        const parsed = dataRows
+          .map((row) => {
+            const rawName = String(row[nameIdx] ?? "").trim();
+            // Başlık veya boşluk satırlarını atla
+            if (!rawName || rawName.toLowerCase() === "isim" || rawName.toLowerCase() === "toplam") {
+              return null;
             }
-          }
 
-          let amountVal = row["Tutar"] || row["Fiyat"] || row["Ücret"] || row["amount"] || 0;
-          if (typeof amountVal === "string") {
-            amountVal = parseFloat(amountVal.replace(/[^\d.,]/g, "").replace(",", ".")) || 0;
-          }
+            // Tarih ayrıştırma
+            let dateVal = row[dateIdx];
+            let formattedDate = todayStr;
+            if (dateVal instanceof Date && !isNaN(dateVal.getTime())) {
+              formattedDate = dateVal.toISOString().split("T")[0];
+            } else if (typeof dateVal === "number" && dateVal > 20000 && dateVal < 60000) {
+              const parsedDate = new Date(Math.round((dateVal - 25569) * 86400 * 1000));
+              if (!isNaN(parsedDate.getTime())) {
+                formattedDate = parsedDate.toISOString().split("T")[0];
+              }
+            } else if (typeof dateVal === "string" && dateVal.trim()) {
+              const cleaned = dateVal.trim();
+              if (cleaned.includes(".")) {
+                const parts = cleaned.split(".");
+                if (parts.length === 3) {
+                  const day = parts[0].padStart(2, "0");
+                  const month = parts[1].padStart(2, "0");
+                  let year = parts[2].split(" ")[0];
+                  if (year.length === 2) year = `20${year}`;
+                  formattedDate = `${year}-${month}-${day}`;
+                }
+              } else if (cleaned.includes("/")) {
+                const parts = cleaned.split("/");
+                if (parts.length === 3) {
+                  const day = parts[0].padStart(2, "0");
+                  const month = parts[1].padStart(2, "0");
+                  let year = parts[2].split(" ")[0];
+                  if (year.length === 2) year = `20${year}`;
+                  formattedDate = `${year}-${month}-${day}`;
+                }
+              } else if (cleaned.includes("-")) {
+                formattedDate = cleaned.split("T")[0];
+              }
+            }
 
-          const ibanVal = row["IBAN"] || row["Banka IBAN"] || row["iban"] || "";
-          const invoiceVal = row["Fatura No"] || row["İrsaliye No"] || row["invoice_no"] || "";
-          const notesVal = row["Not"] || row["Açıklama"] || row["Güzergah"] || row["notes"] || "";
-          const statusVal = String(row["Durum"] || row["Statü"] || "").toLowerCase().includes("öden") ? "Ödendi" : "Ödenmedi";
+            // Tutar ayrıştırma (Örn: ₺12.543,66 veya 12543.66)
+            let rawAmount = row[amountIdx];
+            let parsedAmount = 0;
+            if (typeof rawAmount === "number") {
+              parsedAmount = rawAmount;
+            } else if (typeof rawAmount === "string") {
+              let clean = rawAmount.replace(/[₺TLtl\s]/g, "").trim();
+              if (clean.includes(",") && clean.includes(".")) {
+                clean = clean.replace(/\./g, "").replace(",", ".");
+              } else if (clean.includes(",")) {
+                clean = clean.replace(",", ".");
+              }
+              parsedAmount = parseFloat(clean) || 0;
+            }
 
-          return {
-            transporter_name: String(name).trim(),
-            transport_date: String(dateVal).trim(),
-            amount: Number(amountVal) || 0,
-            iban: String(ibanVal).trim(),
-            invoice_no: String(invoiceVal).trim(),
-            notes: String(notesVal).trim(),
-            status: statusVal,
-          };
-        }).filter((r) => r.transporter_name.length > 0);
+            const ibanVal = String(row[ibanIdx] ?? "").trim();
+            const vadeCell = vadeIdx !== -1 ? String(row[vadeIdx] ?? "").trim() : "";
+            const payerCell = payerIdx !== -1 ? String(row[payerIdx] ?? "").trim() : "";
+
+            // Durum tespiti: Vade hücresinde ÖDENDİ geçiyorsa
+            const normVade = normalizeCell(vadeCell);
+            const isPaid = normVade.includes("odendi") || normVade.includes("odedi");
+            const statusVal = isPaid ? "Ödendi" : "Ödenmedi";
+
+            // Notlar: Kim öder ve Vade bilgisi
+            const notesArr: string[] = [];
+            if (payerCell) notesArr.push(`Ödeyen: ${payerCell}`);
+            if (vadeCell && !isPaid) notesArr.push(`Vade: ${vadeCell}`);
+            else if (vadeCell && isPaid && vadeCell.replace(/öden[^\s]*/gi, "").trim()) {
+              notesArr.push(`Ödeme: ${vadeCell}`);
+            }
+
+            return {
+              transporter_name: rawName,
+              transport_date: formattedDate,
+              amount: parsedAmount,
+              iban: ibanVal,
+              invoice_no: "",
+              notes: notesArr.join(" - "),
+              status: statusVal,
+            };
+          })
+          .filter(Boolean) as any[];
 
         if (parsed.length === 0) {
           toast.error("Excel tablosunda geçerli nakliyeci satırı bulunamadı.");
@@ -313,6 +414,31 @@ export function TransporterClient({ initialItems, userName }: Props) {
       }
     };
     reader.readAsBinaryString(file);
+  }
+
+  // EXCEL EXPORT HANDLER
+  function handleExportExcel() {
+    if (filtered.length === 0) {
+      toast.error("İndirilecek nakliye kaydı bulunamadı.");
+      return;
+    }
+    const rows = filtered.map((item, idx) => ({
+      "Sıra": idx + 1,
+      "Nakliyeci Firma / Şoför": item.transporter_name,
+      "Taşıma Tarihi": item.transport_date,
+      "Tutar (₺)": item.amount,
+      "Banka IBAN": item.iban || "",
+      "Fatura No": item.invoice_no || "",
+      "12 Günlük Son Ödeme Vadesi": item.due_date,
+      "Durum": item.status,
+      "Not / Güzergah": item.notes || "",
+      "Kayıt Tarihi": item.created_at ? item.created_at.substring(0, 10) : "",
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Nakliyeler");
+    XLSX.writeFile(wb, `Nakliyeler_${todayStr}.xlsx`);
+    toast.success("Nakliye listesi Excel olarak indirildi.");
   }
 
   async function handleImportExcelConfirm() {
@@ -357,6 +483,14 @@ export function TransporterClient({ initialItems, userName }: Props) {
         </div>
 
         <div className="flex items-center gap-2.5">
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center gap-1.5 bg-surface hover:bg-neutral-100 text-text border border-border px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+            title="Tüm nakliye listesini Excel tablosu olarak indir"
+          >
+            <Download size={15} /> Excel İndir
+          </button>
+
           <button
             onClick={() => {
               setExcelPreviewData([]);

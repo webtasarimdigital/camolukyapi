@@ -8,6 +8,7 @@ import {
 } from "@/lib/data/actions";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { toast } from "sonner";
+import * as XLSX from "xlsx";
 import {
   CalendarClock,
   Plus,
@@ -26,6 +27,7 @@ import {
   X,
   CalendarDays,
   Coins,
+  Download,
 } from "lucide-react";
 
 interface Props {
@@ -276,6 +278,37 @@ export function PaymentFollowupClient({ initialItems, userName }: Props) {
     });
   }
 
+  function handleExportExcel() {
+    if (filtered.length === 0) {
+      toast.error("İndirilecek ödeme kaydı bulunamadı.");
+      return;
+    }
+    const rows = filtered.map((item, idx) => {
+      const remaining = Math.max(0, item.total_amount - item.paid_amount);
+      return {
+        "Sıra": idx + 1,
+        "İşlem Türü": item.type === "alacak" ? "Alacak (Müşteri Tahsilatı)" : "Borç (Tedarikçi Ödemesi)",
+        "Kişi / Firma Ünvanı": item.contact_name,
+        "Görüşme Tarihi": item.contact_date,
+        "Vade Tarihi": item.due_date,
+        "Toplam Tutar (₺)": item.total_amount,
+        "Ödenen Tutar (₺)": item.paid_amount,
+        "Kalan Bakiye (₺)": remaining,
+        "Ödeme Şekli": item.payment_method,
+        "Durum": item.status,
+        "İlgili Personel": item.personnel || "-",
+        "Açıklama": item.description || "-",
+        "Notlar": item.notes || "-",
+        "İşlemi Yapan": item.created_by_name || "-",
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Odeme_Vadeleri");
+    XLSX.writeFile(wb, `Odeme_Vadeleri_${todayStr}.xlsx`);
+    toast.success("Ödeme vadeleri listesi Excel olarak indirildi.");
+  }
+
   return (
     <div className="space-y-6">
       {/* Üst Bar */}
@@ -290,7 +323,7 @@ export function PaymentFollowupClient({ initialItems, userName }: Props) {
           </p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2.5">
           {/* Tip Seçici: Tümü / Alacak / Borç */}
           <div className="flex bg-surface p-1 rounded-xl border border-border">
             <button
@@ -318,6 +351,14 @@ export function PaymentFollowupClient({ initialItems, userName }: Props) {
               <ArrowUpRight size={13} /> Borçlar
             </button>
           </div>
+
+          <button
+            onClick={handleExportExcel}
+            className="flex items-center gap-1.5 bg-surface hover:bg-neutral-100 text-text border border-border px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+            title="Tüm vade listesini Excel olarak indir"
+          >
+            <Download size={15} /> Excel İndir
+          </button>
 
           <button
             onClick={handleOpenNew}

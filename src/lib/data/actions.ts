@@ -30,7 +30,10 @@ import {
   getRents,
   saveRent,
   deleteRent,
+  addRentPayment,
+  deleteRentPayment,
 } from "./store";
+import type { RentPayment } from "./types";
 
 import { cookies } from "next/headers";
 
@@ -537,5 +540,34 @@ export async function actionDeleteRent(id: string) {
   } catch (err: any) {
     console.error("actionDeleteRent error:", err);
     return { success: false, error: err?.message || "Kira kaydı silinemedi." };
+  }
+}
+
+export async function actionAddRentPayment(
+  rentId: string,
+  paymentData: Omit<RentPayment, "id" | "created_at">
+) {
+  try {
+    const updatedRent = await addRentPayment(rentId, paymentData);
+    try {
+      revalidatePath("/kiralar");
+    } catch {}
+    return { success: true, rent: updatedRent };
+  } catch (err: any) {
+    console.error("actionAddRentPayment error:", err);
+    return { success: false, error: err?.message || "Parça ödeme kaydedilemedi." };
+  }
+}
+
+export async function actionDeleteRentPayment(rentId: string, paymentId: string) {
+  try {
+    const updatedRent = await deleteRentPayment(rentId, paymentId);
+    try {
+      revalidatePath("/kiralar");
+    } catch {}
+    return { success: true, rent: updatedRent };
+  } catch (err: any) {
+    console.error("actionDeleteRentPayment error:", err);
+    return { success: false, error: err?.message || "Parça ödeme silinemedi." };
   }
 }
