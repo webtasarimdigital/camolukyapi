@@ -15,8 +15,9 @@ export interface UploadedQuote {
   file_url: string;
   file_size?: number | null;
   notes?: string | null;
+  created_by_name?: string | null;
   created_at: string;
-  updated_at: string;
+  updated_at?: string;
 }
 
 async function getCompanyAndUser() {
@@ -67,7 +68,7 @@ export async function getUploadedQuotes(): Promise<UploadedQuote[]> {
 
 export async function saveUploadedQuote(formData: FormData) {
   try {
-    const { supabase, companyId } = await getCompanyAndUser();
+    const { supabase, companyId, userName } = await getCompanyAndUser();
     const title = (formData.get("title") as string) || "Teklif PDF";
     const customer_name = (formData.get("customer_name") as string) || "";
     const quote_date =
@@ -96,8 +97,8 @@ export async function saveUploadedQuote(formData: FormData) {
         file_url,
         file_size,
         notes: notes.trim() || null,
+        created_by_name: userName,
         created_at: now,
-        updated_at: now,
       })
       .select()
       .single();
