@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation';
 import Link from 'next/link';
 import { formatCurrency, formatQty } from '@/lib/formatters';
 import { Suspense } from 'react';
+import { StockQtyImportModal } from './StockQtyImportModal';
 
 export default async function UrunlerPage({
   searchParams,
@@ -55,16 +56,17 @@ export default async function UrunlerPage({
           </div>
           <p className="text-sm text-text-muted mt-0.5">PDF ve Excel katalog ürünleri ile manuel eklenen tüm ürünler</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <StockQtyImportModal />
           <Link
             href="/import"
-            className="bg-surface border border-border text-text px-4 py-2 rounded-lg text-sm font-semibold hover:bg-gray-100 transition flex items-center gap-1.5"
+            className="bg-surface border border-border text-text px-3.5 py-2 rounded-lg text-sm font-semibold hover:bg-gray-100 transition flex items-center gap-1.5"
           >
             📄 PDF / Excel Yükle
           </Link>
           <Link
             href="/urunler/yeni"
-            className="bg-brand-gold text-brand-navy px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition flex items-center gap-1.5"
+            className="bg-brand-gold text-brand-navy px-3.5 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition flex items-center gap-1.5"
           >
             + Yeni Ürün Ekle
           </Link>
