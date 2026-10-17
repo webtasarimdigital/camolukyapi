@@ -367,7 +367,7 @@ export default async function TekliflerPage({
                           </Link>
                         )}
                         <Link
-                          href={`/teklifler/${quote.id}/print`}
+                          href={`/teklif-yazdir/${quote.id}`}
                           target="_blank"
                           title="A4 Yazdır / PDF İndir"
                           className="p-1.5 text-brand-navy hover:text-brand-gold hover:bg-surface rounded-lg border border-border transition"

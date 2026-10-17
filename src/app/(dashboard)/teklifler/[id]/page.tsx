@@ -88,7 +88,7 @@ export default async function QuoteDetailPage({
           )}
 
           <Link
-            href={`/teklifler/${quote.id}/print`}
+            href={`/teklif-yazdir/${quote.id}`}
             target="_blank"
             className="flex items-center gap-1.5 bg-brand-gold text-brand-navy px-4 py-2 rounded-lg text-sm font-semibold hover:bg-brand-gold-light transition shadow-sm"
           >

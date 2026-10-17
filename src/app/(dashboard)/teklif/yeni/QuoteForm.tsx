@@ -320,7 +320,7 @@ export function QuoteForm({
       });
       toast.success("Teklif başarıyla kaydedildi!");
       if (print) {
-        router.push(`/teklifler/${res.quoteId}/print?autoPrint=true`);
+        router.push(`/teklif-yazdir/${res.quoteId}?autoPrint=true`);
       } else {
         router.push(`/teklifler/${res.quoteId}`);
       }
