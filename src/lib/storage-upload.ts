@@ -1,8 +1,10 @@
 /**
  * Supabase Storage client-side upload helper
  * Tarayıcıdan direkt olarak Supabase Storage'a yükler ve public URL döndürür.
- * Server Action'a gerek yok — anon key ile public bucketlara erişilebilir.
+ * @supabase/supabase-js client kullanır — compact key formatını otomatik çözer.
  */
+
+import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -30,11 +32,13 @@ export async function uploadToStorage(
 ): Promise<UploadResult> {
   // Boyut kontrolü
   if (file.size > maxMB * 1024 * 1024) {
-    return { success: false, error: `Dosya boyutu ${maxMB}MB sınırını aşıyor (${(file.size / 1024 / 1024).toFixed(1)}MB).` };
+    return {
+      success: false,
+      error: `Dosya boyutu ${maxMB}MB sınırını aşıyor (${(file.size / 1024 / 1024).toFixed(1)}MB).`,
+    };
   }
 
   // Benzersiz dosya adı oluştur
-  const ext = file.name.split(".").pop() || "bin";
   const timestamp = Date.now();
   const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_").slice(0, 50);
   const path = folder
@@ -42,28 +46,19 @@ export async function uploadToStorage(
     : `${timestamp}_${safeName}`;
 
   try {
-    const formData = new FormData();
-    formData.append("", file);
+    // Supabase JS client kullan — compact key formatını otomatik JWT'ye çevirir
+    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
-    const response = await fetch(
-      `${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`,
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${SUPABASE_ANON_KEY}`,
-          "x-upsert": "true",
-        },
-        body: formData,
-      }
-    );
+    const { data, error } = await supabase.storage
+      .from(bucket)
+      .upload(path, file, { upsert: true });
 
-    if (!response.ok) {
-      const errText = await response.text();
-      return { success: false, error: `Yükleme hatası: ${errText}` };
+    if (error) {
+      return { success: false, error: error.message };
     }
 
-    const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucket}/${path}`;
-    return { success: true, url: publicUrl };
+    const { data: urlData } = supabase.storage.from(bucket).getPublicUrl(path);
+    return { success: true, url: urlData.publicUrl };
   } catch (err: any) {
     return { success: false, error: err?.message || "Bilinmeyen yükleme hatası." };
   }
