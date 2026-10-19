@@ -21,6 +21,7 @@ import {
   saveTransporter,
   saveTransportersBatch,
   deleteTransporter,
+  deleteAllTransporters,
   getEmployees,
   saveEmployee,
   deleteEmployee,
@@ -350,6 +351,20 @@ export async function actionDeleteTransporter(id: string) {
   } catch (err: any) {
     console.error("actionDeleteTransporter error:", err);
     return { success: false, error: err?.message || "Nakliye kaydı silinemedi." };
+  }
+}
+
+export async function actionDeleteAllTransporters() {
+  try {
+    await deleteAllTransporters();
+    try {
+      revalidatePath("/nakliyeler");
+      revalidatePath("/finans");
+    } catch {}
+    return { success: true };
+  } catch (err: any) {
+    console.error("actionDeleteAllTransporters error:", err);
+    return { success: false, error: err?.message || "Tüm nakliye kayıtları silinemedi." };
   }
 }
 

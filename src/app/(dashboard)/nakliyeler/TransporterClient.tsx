@@ -7,6 +7,7 @@ import {
   actionSaveTransporter,
   actionSaveTransportersBatch,
   actionDeleteTransporter,
+  actionDeleteAllTransporters,
 } from "@/lib/data/actions";
 import { formatCurrency } from "@/lib/formatters";
 import { toast } from "sonner";
@@ -57,6 +58,7 @@ export function TransporterClient({ initialItems, userName }: Props) {
 
   // Excel İçe Aktarım State
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
+  const [isDeleteAllModalOpen, setIsDeleteAllModalOpen] = useState(false);
   const [excelPreviewData, setExcelPreviewData] = useState<any[]>([]);
   const [isExcelProcessing, setIsExcelProcessing] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -180,6 +182,19 @@ export function TransporterClient({ initialItems, userName }: Props) {
       await actionDeleteTransporter(id);
       setItems((prev) => prev.filter((i) => i.id !== id));
       toast.success("Nakliye kaydı silindi.");
+    });
+  }
+
+  async function handleDeleteAll() {
+    startTransition(async () => {
+      const res = await actionDeleteAllTransporters();
+      if (res.success) {
+        setItems([]);
+        setIsDeleteAllModalOpen(false);
+        toast.success("Tüm nakliye kayıtları başarıyla silindi.");
+      } else {
+        toast.error(res.error || "Tüm nakliyeler silinemedi.");
+      }
     });
   }
 
@@ -500,6 +515,16 @@ export function TransporterClient({ initialItems, userName }: Props) {
           >
             <FileSpreadsheet size={15} /> Toplu Excel İçe Aktar
           </button>
+
+          {items.length > 0 && (
+            <button
+              onClick={() => setIsDeleteAllModalOpen(true)}
+              className="flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+              title="Tüm nakliye kayıtlarını kalıcı olarak sil"
+            >
+              <Trash2 size={15} /> Tümünü Sil
+            </button>
+          )}
 
           <button
             onClick={handleOpenNew}
@@ -1243,6 +1268,48 @@ export function TransporterClient({ initialItems, userName }: Props) {
                 className="bg-brand-navy text-white px-4 py-2 rounded-xl text-xs font-bold"
               >
                 Kapat
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TÜMÜNÜ SİL ONAY MODALI */}
+      {isDeleteAllModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 animate-in fade-in duration-150">
+          <div className="bg-white rounded-2xl max-w-sm w-full p-6 space-y-4 shadow-2xl border border-border">
+            <div className="flex items-center gap-3 text-rose-600">
+              <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center shrink-0">
+                <Trash2 size={22} />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-text">Tüm Nakliyeleri Sil</h3>
+                <p className="text-xs text-text-muted">Toplu Silme Onayı</p>
+              </div>
+            </div>
+            <p className="text-sm text-text-muted">
+              Sistemde kayıtlı toplam <strong className="text-rose-600 font-bold">{items.length} adet</strong> nakliye kaydının tamamını kalıcı olarak silmek istediğinize emin misiniz?
+            </p>
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-800 font-medium">
+              ⚠️ Bu işlem geri alınamaz ve tüm nakliyecilerin kayıtları, vadeleri ve belgeleri silinecektir.
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => setIsDeleteAllModalOpen(false)}
+                disabled={isPending}
+                className="px-4 py-2 border border-border rounded-xl text-xs font-semibold text-text-muted hover:text-text cursor-pointer"
+              >
+                Vazgeç
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteAll}
+                disabled={isPending}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold transition shadow-xs cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+              >
+                <Trash2 size={13} />
+                {isPending ? "Siliniyor..." : "Evet, Hepsini Sil"}
               </button>
             </div>
           </div>

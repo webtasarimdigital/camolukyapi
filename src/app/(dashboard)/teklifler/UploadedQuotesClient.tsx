@@ -97,47 +97,30 @@ export function UploadedQuotesClient({ initialQuotes }: Props) {
 
     const form = e.currentTarget;
     const formData = new FormData(form);
+    formData.set("file", selectedFile);
 
     setUploadingPdf(true);
-    const month = new Date().toISOString().slice(0, 7);
-    const uploadRes = await uploadToStorage("quote-pdfs", selectedFile, month, 50);
 
-    if (!uploadRes.success || !uploadRes.url) {
-      setUploadingPdf(false);
-      toast.error(uploadRes.error || "PDF dosyası depolama alanına yüklenemedi.");
-      return;
-    }
-
-    const title = ((formData.get("title") as string) || selectedFile.name.replace(/\.pdf$/i, "")).trim();
-    const customer_name = ((formData.get("customer_name") as string) || "").trim();
-    const quote_date = (formData.get("quote_date") as string) || new Date().toISOString().split("T")[0];
-    const rawAmount = formData.get("amount") as string;
-    const cleanAmount = typeof rawAmount === "string" 
-      ? parseFloat(rawAmount.replace(/\./g, "").replace(",", ".")) 
-      : 0;
-    const amount = isNaN(cleanAmount) ? 0 : cleanAmount;
-    const notes = ((formData.get("notes") as string) || "").trim();
-
-    startTransition(async () => {
-      const res = await saveUploadedQuote({
-        title,
-        customer_name: customer_name || null,
-        quote_date,
-        amount,
-        notes: notes || null,
-        file_name: selectedFile.name,
-        file_url: uploadRes.url!,
-        file_size: selectedFile.size,
+    try {
+      const res = await fetch("/api/upload-quote-pdf", {
+        method: "POST",
+        body: formData,
       });
+
+      const data = await res.json();
       setUploadingPdf(false);
-      if (res.success && res.quote) {
-        setQuotes((prev) => [res.quote!, ...prev]);
+
+      if (data.success && data.quote) {
+        setQuotes((prev) => [data.quote, ...prev]);
         toast.success("PDF teklifi başarıyla yüklendi ve arşivlendi!");
         setIsModalOpen(false);
       } else {
-        toast.error(res.error || "Yükleme başarısız oldu.");
+        toast.error(data.error || "Yükleme başarısız oldu.");
       }
-    });
+    } catch (err: any) {
+      setUploadingPdf(false);
+      toast.error(err?.message || "Sunucuya bağlanırken bir hata oluştu.");
+    }
   }
 
   return (

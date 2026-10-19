@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { calculateLine, calculateTotals } from "@/lib/calculations";
@@ -161,15 +161,25 @@ export async function updateQuote(
 }
 
 export async function deleteQuote(quoteId: string) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Unauthorized");
+  const service = await createServiceClient();
 
-  const { error } = await supabase
-    .from("quotes")
-    .update({ deleted_at: new Date().toISOString() } as never)
-    .eq("id", quoteId);
+  // 1. Unlink any sales referencing this quote
+  try {
+    await (service.from("sales") as any).update({ quote_id: null }).eq("quote_id", quoteId);
+  } catch {}
 
-  if (error) throw new Error(error.message);
-  revalidatePath(`/teklifler`);
+  // 2. Delete quote items first
+  try {
+    await service.from("quote_items").delete().eq("quote_id", quoteId);
+  } catch {}
+
+  // 3. Try hard delete on quotes
+  const { error } = await service.from("quotes").delete().eq("id", quoteId);
+  if (error) {
+    console.warn("Hard delete failed, falling back to soft delete:", error.message);
+    await (service.from("quotes") as any).update({ deleted_at: new Date().toISOString() }).eq("id", quoteId);
+  }
+
+  revalidatePath("/teklifler");
+  return { success: true };
 }

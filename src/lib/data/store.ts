@@ -341,6 +341,12 @@ export async function deleteTransporter(id: string): Promise<void> {
   await supabase.from("transporters").delete().eq("id", id);
 }
 
+export async function deleteAllTransporters(): Promise<void> {
+  const { error } = await supabase.from("transporters").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+  if (error) throw new Error(error.message);
+  memFallback.transporters = [];
+}
+
 // ──────────────────── PERSONEL YÖNETİMİ ────────────────────
 export async function getEmployees(): Promise<Employee[]> {
   try {
