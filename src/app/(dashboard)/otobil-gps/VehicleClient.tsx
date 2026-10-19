@@ -265,15 +265,15 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
       {/* Üst Başlık & Butonlar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h1 className="text-xl font-bold text-text">Otobil GPS & Araç Filo Yönetimi</h1>
+          <h1 className="text-xl font-bold text-text">Araç Takip & Filo Yönetimi</h1>
           <p className="text-sm text-text-muted">
-            Muayene, sigorta hatırlatıcıları (1 ay / 1 hafta kala), bakım ve yakıt masrafları
+            Muayene, sigorta ve ruhsat hatırlatıcıları (1 ay / 1 hafta kala), periyodik bakım ve yakıt masrafları
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap">
           <button
             onClick={exportVehiclesToExcel}
-            className="flex items-center gap-2 bg-white border border-border text-text px-3.5 py-2 rounded-xl text-sm font-semibold hover:bg-surface transition shadow-xs"
+            className="flex items-center gap-2 bg-white border border-border text-text px-3.5 py-2 rounded-xl text-sm font-semibold hover:bg-surface transition shadow-xs cursor-pointer"
             title="Araç filosu ve muayene/sigorta/masraf dökümünü Excel olarak indir"
           >
             <Download size={15} className="text-emerald-600" />
@@ -282,7 +282,7 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
           {isAdmin && (
             <button
               onClick={openNew}
-              className="flex items-center gap-2 bg-brand-gold text-brand-navy px-4 py-2 rounded-xl text-sm font-semibold hover:bg-brand-gold-light transition shadow-xs"
+              className="flex items-center gap-2 bg-brand-gold text-brand-navy px-4 py-2 rounded-xl text-sm font-semibold hover:bg-brand-gold-light transition shadow-xs cursor-pointer"
             >
               <Plus size={16} /> Araç Ekle
             </button>
@@ -313,7 +313,7 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
 
             <button
               onClick={() => setFilterAlertOnly(prev => !prev)}
-              className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition ${
+              className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${
                 filterAlertOnly
                   ? "bg-red-700 text-white border-red-700 shadow-xs"
                   : "bg-white/80 text-red-900 border-red-300 hover:bg-white"
@@ -351,7 +351,7 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
                   {isAdmin && (
                     <button
                       onClick={() => openEdit(item.vehicle)}
-                      className="text-[10px] font-bold text-brand-navy hover:underline flex items-center gap-0.5"
+                      className="text-[10px] font-bold text-brand-navy hover:underline flex items-center gap-0.5 cursor-pointer"
                     >
                       <Edit3 size={10} /> Tarihi Güncelle
                     </button>
@@ -362,40 +362,6 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
           </div>
         </div>
       )}
-
-      {/* OTOBİL PORTAL ENTEGRASYON KARTI */}
-      <div className="bg-linear-to-r from-red-600 via-rose-600 to-amber-600 text-white rounded-2xl p-4 sm:p-5 shadow-sm flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3.5">
-          <div className="w-12 h-12 rounded-xl bg-white/20 backdrop-blur-xs flex items-center justify-center shrink-0 text-white">
-            <Fuel size={26} />
-          </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="bg-white/25 text-[10px] uppercase font-black px-2 py-0.5 rounded-full tracking-wider">
-                Resmi Filo Entegrasyonu
-              </span>
-              <span className="text-xs text-white/80 font-medium">Petrol Ofisi Otobil</span>
-            </div>
-            <h3 className="text-base font-black text-white mt-0.5">
-              Petrol Ofisi Otobil GPS & Telemetri Portalı
-            </h3>
-            <p className="text-xs text-white/90 mt-0.5 max-w-xl">
-              Tüm araçların anlık uydu konumlarını, harita hareketlerini ve yakıt tüketim limitlerini canlı yönetin.
-            </p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-2 flex-wrap">
-          <a
-            href="https://web.otobil.com.tr"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-2 bg-white text-red-700 hover:bg-white/90 px-4 py-2.5 rounded-xl text-xs font-black transition shadow-md cursor-pointer"
-          >
-            ⛽ Petrol Ofisi Otobil Portalına Git ↗
-          </a>
-        </div>
-      </div>
 
       {/* KPI Kartlar: Durumlar + Masraf Toplamları */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
@@ -571,89 +537,101 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
 
                   {/* Muayene */}
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-neutral-600 flex items-center gap-1.5">
+                    <span className="text-neutral-600 flex items-center gap-1.5 font-medium">
                       <ShieldCheck size={13} className="text-neutral-400" />
-                      Muayene:
+                      TÜVTÜRK Muayene:
                     </span>
                     <div className="flex items-center gap-1.5">
                       <span className="font-semibold text-text">
-                        {v.inspection_date ? formatDate(v.inspection_date) : "—"}
+                        {v.inspection_date ? formatDate(v.inspection_date) : "Girilmedi"}
                       </span>
-                      {v.inspection_date && (
+                      {v.inspection_date ? (
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-md border ${inspectionAlert.badgeClass}`}>
                           {inspectionAlert.label}
                         </span>
-                      )}
+                      ) : isAdmin ? (
+                        <button
+                          onClick={() => openEdit(v)}
+                          className="text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold transition cursor-pointer"
+                        >
+                          + Tarih Ekle
+                        </button>
+                      ) : null}
                     </div>
                   </div>
 
                   {/* Sigorta */}
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-neutral-600 flex items-center gap-1.5">
+                    <span className="text-neutral-600 flex items-center gap-1.5 font-medium">
                       <ShieldCheck size={13} className="text-amber-500" />
-                      Sigorta:
+                      Trafik Sigortası:
                     </span>
                     <div className="flex items-center gap-1.5">
                       <span className="font-semibold text-text">
-                        {v.insurance_date ? formatDate(v.insurance_date) : "—"}
+                        {v.insurance_date ? formatDate(v.insurance_date) : "Girilmedi"}
                       </span>
-                      {v.insurance_date && (
+                      {v.insurance_date ? (
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-md border ${insuranceAlert.badgeClass}`}>
                           {insuranceAlert.label}
                         </span>
-                      )}
+                      ) : isAdmin ? (
+                        <button
+                          onClick={() => openEdit(v)}
+                          className="text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold transition cursor-pointer"
+                        >
+                          + Tarih Ekle
+                        </button>
+                      ) : null}
                     </div>
                   </div>
 
-                  {/* Ruhsat / Kasko (varsa) */}
-                  {v.license_date && (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-neutral-600 flex items-center gap-1.5">
-                        <FileText size={13} className="text-neutral-400" />
-                        Ruhsat/Kasko:
+                  {/* Ruhsat / Kasko Sigorta */}
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-neutral-600 flex items-center gap-1.5 font-medium">
+                      <FileText size={13} className="text-blue-500" />
+                      Ruhsat / Kasko:
+                    </span>
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-text">
+                        {v.license_date ? formatDate(v.license_date) : "—"}
                       </span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="font-semibold text-text">{formatDate(v.license_date)}</span>
+                      {v.license_date && (
                         <span className={`text-[10px] px-1.5 py-0.5 rounded-md border ${licenseAlert.badgeClass}`}>
                           {licenseAlert.label}
                         </span>
-                      </div>
+                      )}
                     </div>
-                  )}
+                  </div>
                 </div>
 
                 {/* ── BAKIM VE MASRAF ÖZETİ ── */}
-                {((v.maintenance_cost && v.maintenance_cost > 0) || (v.fuel_cost && v.fuel_cost > 0) || v.maintenance_date) && (
-                  <div className="grid grid-cols-2 gap-2 text-xs pt-1">
-                    <div className="rounded-lg bg-surface p-2 border border-border/60">
-                      <span className="text-[10px] text-text-muted flex items-center gap-1">
-                        <Wrench size={10} className="text-violet-600" />
-                        Bakım Masrafı
-                      </span>
-                      <p className="font-bold text-text mt-0.5">
-                        {formatCurrency(v.maintenance_cost || 0)}
-                      </p>
-                      {v.maintenance_date && (
-                        <span className="text-[10px] text-text-muted block">
-                          {formatDate(v.maintenance_date)}
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="rounded-lg bg-surface p-2 border border-border/60">
-                      <span className="text-[10px] text-text-muted flex items-center gap-1">
-                        <Fuel size={10} className="text-emerald-600" />
-                        Yakıt Masrafı
-                      </span>
-                      <p className="font-bold text-text mt-0.5">
-                        {formatCurrency(v.fuel_cost || 0)}
-                      </p>
-                      <span className="text-[10px] text-text-muted block">
-                        Toplam: {formatCurrency((v.maintenance_cost || 0) + (v.fuel_cost || 0))}
-                      </span>
-                    </div>
+                <div className="grid grid-cols-2 gap-2 text-xs pt-0.5">
+                  <div className="rounded-xl bg-surface p-2.5 border border-border/70 space-y-0.5">
+                    <span className="text-[10px] text-text-muted flex items-center gap-1 font-medium">
+                      <Wrench size={11} className="text-violet-600" />
+                      Periyodik Bakım
+                    </span>
+                    <p className="font-bold text-text text-xs">
+                      {v.maintenance_cost && v.maintenance_cost > 0 ? formatCurrency(v.maintenance_cost) : "Masraf: ₺0,00"}
+                    </p>
+                    <span className="text-[10px] text-text-muted block">
+                      {v.maintenance_date ? `Tarih: ${formatDate(v.maintenance_date)}` : "Tarih girilmedi"}
+                    </span>
                   </div>
-                )}
+
+                  <div className="rounded-xl bg-surface p-2.5 border border-border/70 space-y-0.5">
+                    <span className="text-[10px] text-text-muted flex items-center gap-1 font-medium">
+                      <Fuel size={11} className="text-emerald-600" />
+                      Yakıt & Masraf Toplamı
+                    </span>
+                    <p className="font-bold text-text text-xs">
+                      {v.fuel_cost && v.fuel_cost > 0 ? formatCurrency(v.fuel_cost) : "Yakıt: ₺0,00"}
+                    </p>
+                    <span className="text-[10px] font-semibold text-brand-navy block">
+                      Toplam: {formatCurrency((Number(v.maintenance_cost) || 0) + (Number(v.fuel_cost) || 0))}
+                    </span>
+                  </div>
+                </div>
 
                 {/* Yük Notu & Ek Notlar */}
                 {v.cargo_notes && (

@@ -54,9 +54,9 @@ const navItems: NavItem[] = [
   },
   {
     href: "/otobil-gps",
-    label: "Otobil GPS Takip",
-    icon: MapPin,
-    badge: "GPS",
+    label: "Araç & Filo Takip",
+    icon: Truck,
+    badge: "Filo",
     allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat"],
   },
   {
