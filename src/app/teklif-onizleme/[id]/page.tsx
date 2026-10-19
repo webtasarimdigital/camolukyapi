@@ -480,7 +480,7 @@ export default async function PublicQuotePreviewPage({
         <div className="bg-neutral-900 text-white px-3 py-1.5 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-1 text-[8.5px] font-medium text-center sm:text-left">
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-3 gap-y-0.5">
             <span>📍 Çamlıca Mah. Libadiye Cad. No:35 Üsküdar / İstanbul</span>
-            <span>📞 0216 000 00 00</span>
+            <span>📞 0535 742 28 61</span>
             <span>🌐 www.camolukyapi.com</span>
           </div>
           <span className="italic font-normal opacity-80">Güvenilir Çözümler, Kalıcı Yapılar</span>
