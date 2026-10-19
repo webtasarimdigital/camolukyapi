@@ -108,12 +108,27 @@ export function UploadedQuotesClient({ initialQuotes }: Props) {
       return;
     }
 
-    formData.set("file_url", uploadRes.url);
-    formData.set("file_name", selectedFile.name);
-    formData.set("file_size", String(selectedFile.size));
+    const title = ((formData.get("title") as string) || selectedFile.name.replace(/\.pdf$/i, "")).trim();
+    const customer_name = ((formData.get("customer_name") as string) || "").trim();
+    const quote_date = (formData.get("quote_date") as string) || new Date().toISOString().split("T")[0];
+    const rawAmount = formData.get("amount") as string;
+    const cleanAmount = typeof rawAmount === "string" 
+      ? parseFloat(rawAmount.replace(/\./g, "").replace(",", ".")) 
+      : 0;
+    const amount = isNaN(cleanAmount) ? 0 : cleanAmount;
+    const notes = ((formData.get("notes") as string) || "").trim();
 
     startTransition(async () => {
-      const res = await saveUploadedQuote(formData);
+      const res = await saveUploadedQuote({
+        title,
+        customer_name: customer_name || null,
+        quote_date,
+        amount,
+        notes: notes || null,
+        file_name: selectedFile.name,
+        file_url: uploadRes.url!,
+        file_size: selectedFile.size,
+      });
       setUploadingPdf(false);
       if (res.success && res.quote) {
         setQuotes((prev) => [res.quote!, ...prev]);

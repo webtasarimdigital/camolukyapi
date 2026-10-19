@@ -313,39 +313,13 @@ export default async function PublicQuotePreviewPage({
           * Fiyatlara KDV dahil değildir.
         </div>
 
-        {/* TOPLAMLAR VE GENEL TOPLAMIN ALTINDA BANKA BİLGİLERİ */}
-        <div className="w-full flex justify-end">
-          <div className="w-full sm:max-w-md border border-neutral-300 rounded-lg overflow-hidden text-[9.5px]">
-            {/* Ara Toplam, İskonto, KDV */}
-            <div className="p-2 space-y-1 bg-white">
-              <div className="flex justify-between items-center text-neutral-600">
-                <span>ARA TOPLAM</span>
-                <span className="font-semibold text-neutral-900 tabular-nums">{formatCurrency(quote.subtotal)}</span>
-              </div>
-              <div className="flex justify-between items-center text-neutral-600">
-                <span>GENEL İSKONTO</span>
-                <span className="font-semibold text-rose-700 tabular-nums">-{formatCurrency(quote.general_discount_amount || 0)}</span>
-              </div>
-              <div className="flex justify-between items-center text-neutral-800 font-medium">
-                <span>NET TUTAR</span>
-                <span className="font-bold tabular-nums">{formatCurrency(quote.net_total || quote.subtotal)}</span>
-              </div>
-              <div className="flex justify-between items-center text-neutral-600">
-                <span>KDV (%{quote.vat_rate || 20})</span>
-                <span className="font-semibold text-neutral-900 tabular-nums">{formatCurrency(quote.vat_total ?? quote.vat_amount ?? 0)}</span>
-              </div>
-            </div>
-
-            {/* GENEL TOPLAM BARI */}
-            <div className="bg-neutral-900 text-white px-3 py-2 flex justify-between items-center font-black text-xs sm:text-[13px]">
-              <span>GENEL TOPLAM</span>
-              <span className="tabular-nums">{formatCurrency(quote.grand_total ?? quote.total_amount ?? 0)}</span>
-            </div>
-
-            {/* GENEL TOPLAMIN HEMEN ALTINDA: BANKA BİLGİLERİ & QR */}
-            <div className="bg-neutral-50 p-2.5 border-t border-neutral-300 flex items-center justify-between gap-3">
+        {/* TOPLAMLAR, BANKA BİLGİLERİ VE YATAY GENEL TOPLAM BARI */}
+        <div className="w-full border border-neutral-300 rounded-lg overflow-hidden text-[9.5px] bg-white">
+          <div className="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-neutral-300">
+            {/* Sol Sütun: Banka Hesap Bilgileri & QR */}
+            <div className="bg-neutral-50/70 p-2.5 flex items-center justify-between gap-3">
               <div className="space-y-0.5 text-[8.5px] leading-tight flex-1">
-                <span className="font-bold text-neutral-900 uppercase text-[9px] block border-b border-neutral-200 pb-0.5 mb-1">
+                <span className="font-bold text-neutral-900 uppercase text-[9px] block border-b border-neutral-200 pb-0.5 mb-1 tracking-wide">
                   BANKA HESAP BİLGİLERİ
                 </span>
                 <div>
@@ -370,7 +344,7 @@ export default async function PublicQuotePreviewPage({
                 href={quoteDirectUrl} 
                 target="_blank" 
                 rel="noopener noreferrer" 
-                className="flex flex-col items-center justify-center border border-neutral-300 p-1 rounded-lg bg-white flex-shrink-0 hover:border-brand-navy hover:shadow-xs transition cursor-pointer"
+                className="flex flex-col items-center justify-center border border-neutral-300 p-1 rounded-lg bg-white shrink-0 hover:border-brand-navy hover:shadow-xs transition cursor-pointer"
                 title="Teklifi Görüntüle"
               >
                 <img src={qrCodeUrl} alt="Teklif QR Kodu" className="w-14 h-14" />
@@ -379,6 +353,32 @@ export default async function PublicQuotePreviewPage({
                 </span>
               </a>
             </div>
+
+            {/* Sağ Sütun: Ara Toplam, İskonto, Net Tutar, KDV */}
+            <div className="p-2.5 space-y-1 bg-white flex flex-col justify-center">
+              <div className="flex justify-between items-center text-neutral-600">
+                <span>ARA TOPLAM</span>
+                <span className="font-semibold text-neutral-900 tabular-nums">{formatCurrency(quote.subtotal)}</span>
+              </div>
+              <div className="flex justify-between items-center text-neutral-600">
+                <span>GENEL İSKONTO</span>
+                <span className="font-semibold text-rose-700 tabular-nums">-{formatCurrency(quote.general_discount_amount || 0)}</span>
+              </div>
+              <div className="flex justify-between items-center text-neutral-800 font-medium">
+                <span>NET TUTAR</span>
+                <span className="font-bold tabular-nums">{formatCurrency(quote.net_total || quote.subtotal)}</span>
+              </div>
+              <div className="flex justify-between items-center text-neutral-600">
+                <span>KDV (%{quote.vat_rate || 20})</span>
+                <span className="font-semibold text-neutral-900 tabular-nums">{formatCurrency(quote.vat_total ?? quote.vat_amount ?? 0)}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* TÜM GENİŞLİĞİ KAPLAYAN YATAY GENEL TOPLAM BARI */}
+          <div className="bg-neutral-900 text-white px-4 py-2 flex justify-between items-center font-black text-xs sm:text-sm border-t border-neutral-800">
+            <span className="tracking-widest uppercase">GENEL TOPLAM</span>
+            <span className="tabular-nums text-sm sm:text-base font-black text-brand-gold">{formatCurrency(quote.grand_total ?? quote.total_amount ?? 0)}</span>
           </div>
         </div>
 

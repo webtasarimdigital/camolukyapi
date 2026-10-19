@@ -1,6 +1,6 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 
@@ -20,31 +20,47 @@ export interface UploadedQuote {
   updated_at?: string;
 }
 
-async function getCompanyAndUser() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+export interface SaveUploadedQuoteInput {
+  title: string;
+  customer_name?: string | null;
+  quote_date?: string | null;
+  amount?: number | null;
+  notes?: string | null;
+  file_name: string;
+  file_url: string;
+  file_size?: number | null;
+}
 
+async function getCompanyAndUser() {
   let companyId = "a0000000-0000-0000-0000-000000000001";
   let userName = "Admin";
 
-  if (user) {
-    const { data: profile } = (await supabase
-      .from("profiles")
-      .select("company_id, full_name, role")
-      .eq("id", user.id)
-      .single()) as any;
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    if (profile?.company_id) companyId = profile.company_id;
-    if (profile?.full_name) userName = profile.full_name;
-  }
+    if (user) {
+      const { data: profile } = (await supabase
+        .from("profiles")
+        .select("company_id, full_name, role")
+        .eq("id", user.id)
+        .single()) as any;
 
-  const cookieStore = await cookies();
-  const cookieName = cookieStore.get("app_user_name")?.value;
-  if (cookieName) userName = cookieName;
+      if (profile?.company_id) companyId = profile.company_id;
+      if (profile?.full_name) userName = profile.full_name;
+    }
+  } catch {}
 
-  return { supabase, user, companyId, userName };
+  try {
+    const cookieStore = await cookies();
+    const cookieName = cookieStore.get("app_user_name")?.value;
+    if (cookieName) userName = cookieName;
+  } catch {}
+
+  const serviceClient = await createServiceClient();
+  return { supabase: serviceClient, companyId, userName };
 }
 
 export async function getUploadedQuotes(): Promise<UploadedQuote[]> {
@@ -66,19 +82,41 @@ export async function getUploadedQuotes(): Promise<UploadedQuote[]> {
   }
 }
 
-export async function saveUploadedQuote(formData: FormData) {
+export async function saveUploadedQuote(input: SaveUploadedQuoteInput | FormData) {
   try {
     const { supabase, companyId, userName } = await getCompanyAndUser();
-    const title = (formData.get("title") as string) || "Teklif PDF";
-    const customer_name = (formData.get("customer_name") as string) || "";
-    const quote_date =
-      (formData.get("quote_date") as string) ||
-      new Date().toISOString().split("T")[0];
-    const amount = parseFloat(formData.get("amount") as string) || 0;
-    const notes = (formData.get("notes") as string) || "";
-    const file_name = (formData.get("file_name") as string) || "teklif.pdf";
-    const file_url = (formData.get("file_url") as string) || "";
-    const file_size = parseInt(formData.get("file_size") as string, 10) || 0;
+
+    let title = "Teklif PDF";
+    let customer_name: string | null = null;
+    let quote_date = new Date().toISOString().split("T")[0];
+    let amount = 0;
+    let notes: string | null = null;
+    let file_name = "teklif.pdf";
+    let file_url = "";
+    let file_size = 0;
+
+    if (typeof (input as any)?.get === "function") {
+      const fd = input as FormData;
+      title = (fd.get("title") as string) || "Teklif PDF";
+      customer_name = (fd.get("customer_name") as string) || null;
+      quote_date = (fd.get("quote_date") as string) || quote_date;
+      const rawAmount = fd.get("amount") as string;
+      amount = parseFloat(rawAmount?.replace(/\./g, "").replace(",", ".") || "0") || 0;
+      notes = (fd.get("notes") as string) || null;
+      file_name = (fd.get("file_name") as string) || "teklif.pdf";
+      file_url = (fd.get("file_url") as string) || "";
+      file_size = parseInt(fd.get("file_size") as string, 10) || 0;
+    } else {
+      const obj = input as SaveUploadedQuoteInput;
+      title = obj.title || "Teklif PDF";
+      customer_name = obj.customer_name || null;
+      quote_date = obj.quote_date || quote_date;
+      amount = Number(obj.amount) || 0;
+      notes = obj.notes || null;
+      file_name = obj.file_name || "teklif.pdf";
+      file_url = obj.file_url || "";
+      file_size = Number(obj.file_size) || 0;
+    }
 
     if (!file_url) {
       return { success: false, error: "Lütfen bir PDF dosyası seçin." };
@@ -90,20 +128,23 @@ export async function saveUploadedQuote(formData: FormData) {
       .insert({
         company_id: companyId,
         title: title.trim(),
-        customer_name: customer_name.trim() || null,
+        customer_name: customer_name ? customer_name.trim() : null,
         quote_date,
-        amount,
+        amount: isNaN(amount) ? 0 : amount,
         file_name,
         file_url,
-        file_size,
-        notes: notes.trim() || null,
+        file_size: isNaN(file_size) ? 0 : file_size,
+        notes: notes ? notes.trim() : null,
         created_by_name: userName,
         created_at: now,
       })
       .select()
       .single();
 
-    if (error) throw new Error(error.message);
+    if (error) {
+      console.error("Supabase insert uploaded_quotes error:", error);
+      throw new Error(error.message);
+    }
 
     try {
       revalidatePath("/teklifler");
