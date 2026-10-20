@@ -17,7 +17,7 @@ export default async function TahsilatlarPage() {
   const isActualAdmin = profile.role === "admin";
   const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
 
-  if (activeRole !== "admin" && activeRole !== "muhasebe2") {
+  if (activeRole !== "admin") {
     redirect("/dashboard");
   }
 

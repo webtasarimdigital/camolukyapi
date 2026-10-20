@@ -44,7 +44,7 @@ const CATEGORIES = [
 
 export function PortalClient({ initialPortals, userRole, userName }: Props) {
   const isReadOnly = ["tali_bayi", "bayi", "depo", "sofor"].includes(userRole);
-  const canDelete = ["admin", "muhasebe1", "muhasebe2"].includes(userRole);
+  const canDelete = ["admin", "muhasebe1"].includes(userRole);
 
   const [portals, setPortals] = useState<CompanyPortal[]>(initialPortals);
   const [search, setSearch] = useState("");

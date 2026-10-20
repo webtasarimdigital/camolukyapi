@@ -26,7 +26,7 @@ export default async function PersonelPage() {
   const isActualAdmin = profile?.role === "admin";
   const activeRole = isActualAdmin ? (cookieRole || "admin") : (profile?.role || "staff");
 
-  if (activeRole !== "admin" && activeRole !== "muhasebe2") {
+  if (activeRole !== "admin") {
     redirect("/dashboard");
   }
 

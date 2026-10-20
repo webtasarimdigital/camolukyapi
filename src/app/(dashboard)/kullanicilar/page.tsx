@@ -14,32 +14,27 @@ const ROLE_CONFIG: Record<string, { label: string; desc: string; badge: string }
     desc: "Genel muhasebe, teklif, satış ve ödemeler (Personel, Kiralar, Finans & Ortak Cari hariç)",
     badge: "bg-blue-100 text-blue-800 border-blue-200",
   },
-  muhasebe2: {
-    label: "Muhasebe 2 (Yetkili)",
-    desc: "Tüm muhasebe + Finans & Ortak Cari erişimi",
-    badge: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  },
-  sevkiyat: {
-    label: "Sevkiyat Sorumlusu",
-    desc: "Sevkiyat, Otobil GPS ve Ürünler/Stok erişimi",
-    badge: "bg-amber-100 text-amber-800 border-amber-200",
+  satis: {
+    label: "Satış Temsilcisi",
+    desc: "Teklif, Satış, Sevkiyat, Müşteriler ve Ürünler erişimi (Silme yapamaz)",
+    badge: "bg-indigo-100 text-indigo-800 border-indigo-200",
   },
   depo: {
     label: "Depo Sorumlusu",
-    desc: "Yalnızca Sevkiyat ve Yükleme modülü erişimi",
+    desc: "Yalnızca Sevkiyat ve Yükleme modülü erişimi (Salt okunur)",
     badge: "bg-orange-100 text-orange-800 border-orange-200",
   },
   sofor: {
     label: "Şoför",
-    desc: "Yalnızca Sevkiyat ve Yükleme modülü erişimi",
+    desc: "Yalnızca Sevkiyat ve Yükleme modülü erişimi (Salt okunur)",
     badge: "bg-cyan-100 text-cyan-800 border-cyan-200",
   },
-  satis: {
-    label: "Satış Temsilcisi",
-    desc: "Teklif, Satış, Sevkiyat, Müşteriler ve Ürünler erişimi",
-    badge: "bg-indigo-100 text-indigo-800 border-indigo-200",
-  },
   tali_bayi: {
+    label: "Tali Bayi",
+    desc: "Yalnızca Stok / Ürün Kataloğu ve Şirket Portalları (Görüntüleme)",
+    badge: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  },
+  bayi: {
     label: "Tali Bayi",
     desc: "Yalnızca Stok / Ürün Kataloğu ve Şirket Portalları (Görüntüleme)",
     badge: "bg-emerald-100 text-emerald-800 border-emerald-200",
@@ -51,19 +46,81 @@ const ROLE_CONFIG: Record<string, { label: string; desc: string; badge: string }
   },
 };
 
-const DEFAULT_ACCOUNTS = [
-  { email: "camoluk@camolukyapi.com", pass: "camoluk2861", role: "admin", note: "Ana Yönetici hesabı (Kullanıcı: camoluk veya admin)" },
-  { email: "muhasebe1@camolukyapi.com", pass: "camoluk123", role: "muhasebe1", note: "Personel, Kiralar, Finans & Ortak Cari hariç (Kullanıcı: muhasebe1)" },
-  { email: "muhasebe2@camolukyapi.com", pass: "camoluk123", role: "muhasebe2", note: "Finans & Ortak Cari dahil (Kullanıcı: muhasebe2)" },
-  { email: "sevkiyat@camolukyapi.com", pass: "camoluk123", role: "sevkiyat", note: "Sevkiyat, GPS & Stok (Kullanıcı: sevkiyat)" },
-  { email: "depo@camolukyapi.com", pass: "camolukdepo0", role: "depo", note: "Yalnızca Sevkiyat modülü (Kullanıcı: depo)" },
-  { email: "sofor@camolukyapi.com", pass: "camolukşoför1", role: "sofor", note: "Yalnızca Sevkiyat modülü (Kullanıcı: şoför)" },
-  { email: "satis@camolukyapi.com", pass: "camoluksatış2", role: "satis", note: "Teklif, Satış, Sevkiyat (Kullanıcı: satış)" },
-  { email: "bayi@camolukyapi.com", pass: "camolukbayi0", role: "tali_bayi", note: "Stok ve Şirket Portalları (Kullanıcı: bayi)" },
+const DEFAULT_ACCOUNTS: AccountInfo[] = [
+  {
+    role: "admin",
+    title: "👑 Yönetici (Admin)",
+    username: "camoluk",
+    email: "camoluk@camolukyapi.com",
+    pass: "camoluk2861",
+    badge: "bg-purple-100 text-purple-800 border-purple-200",
+    allowedSummary: "Tüm sistem, finans, ortak cari, personel, kiralar & ayarlar tam yetki",
+    note: "Girişte 'camoluk' veya 'admin' yazabilirsiniz.",
+  },
+  {
+    role: "muhasebe1",
+    title: "💼 Muhasebe 1",
+    username: "muhasebe1",
+    email: "muhasebe1@camolukyapi.com",
+    pass: "camoluk123",
+    badge: "bg-blue-100 text-blue-800 border-blue-200",
+    allowedSummary: "Teklif, satış, ödemeler & sevkiyat açık",
+    note: "Personel, Kiralar, Finans ve Ortak Cari kapalıdır.",
+  },
+  {
+    role: "satis",
+    title: "💼 Satış Temsilcisi",
+    username: "satış",
+    email: "satis@camolukyapi.com",
+    pass: "camoluksatış2",
+    badge: "bg-indigo-100 text-indigo-800 border-indigo-200",
+    allowedSummary: "Teklif, satış, sevkiyat, müşteriler & ürünler açık",
+    note: "Girişte 'satış' veya 'satis' yazabilirsiniz. Silme yapamaz.",
+  },
+  {
+    role: "depo",
+    title: "📦 Depo Sorumlusu",
+    username: "depo",
+    email: "depo@camolukyapi.com",
+    pass: "camolukdepo0",
+    badge: "bg-orange-100 text-orange-800 border-orange-200",
+    allowedSummary: "Yalnızca Sevkiyat & Yükleme (Görüntüleme)",
+    note: "Veri silme/ekleme yapamaz, sadece sevkiyatları görür.",
+  },
+  {
+    role: "sofor",
+    title: "🚚 Şoför",
+    username: "şoför",
+    email: "sofor@camolukyapi.com",
+    pass: "camolukşoför1",
+    badge: "bg-cyan-100 text-cyan-800 border-cyan-200",
+    allowedSummary: "Yalnızca Sevkiyat & Yükleme (Görüntüleme)",
+    note: "Girişte 'şoför' veya 'sofor' yazabilirsiniz.",
+  },
+  {
+    role: "tali_bayi",
+    title: "🏪 Tali Bayi",
+    username: "bayi",
+    email: "bayi@camolukyapi.com",
+    pass: "camolukbayi0",
+    badge: "bg-emerald-100 text-emerald-800 border-emerald-200",
+    allowedSummary: "Yalnızca Ürünler/Stok ve Şirket Portalları",
+    note: "Girişte 'bayi' yazabilirsiniz. Fiyat & stok inceler.",
+  },
 ];
 
+const ACCOUNT_CREDENTIALS_MAP: Record<string, { username: string; pass: string }> = {
+  admin: { username: "camoluk (veya admin)", pass: "camoluk2861" },
+  muhasebe1: { username: "muhasebe1 (veya muhasebe)", pass: "camoluk123" },
+  satis: { username: "satış (veya satis)", pass: "camoluksatış2" },
+  depo: { username: "depo", pass: "camolukdepo0" },
+  sofor: { username: "şoför (veya sofor)", pass: "camolukşoför1" },
+  tali_bayi: { username: "bayi", pass: "camolukbayi0" },
+  bayi: { username: "bayi", pass: "camolukbayi0" },
+};
+
 import { cookies } from "next/headers";
-import { AccountCredentialsCard } from "./AccountCredentialsCard";
+import { AccountCredentialsCard, AccountInfo } from "./AccountCredentialsCard";
 import { UserRowActions } from "./UserRowActions";
 
 export default async function KullanicilarPage() {
@@ -111,15 +168,15 @@ export default async function KullanicilarPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-xl font-bold text-text">Kullanıcılar & Roller</h1>
+          <h1 className="text-xl font-bold text-text">Kullanıcılar & Şifre Yönetimi</h1>
           <p className="text-sm text-text-muted">
-            Sistem kullanıcıları, rolleri ve oturum açma yetkileri (Yalnızca Yönetici Görür)
+            Sistem kullanıcıları, şifreleri ve oturum açma yetkileri (Yalnızca Yönetici Görür)
           </p>
         </div>
         <NewUserModal companyId={profile.company_id} />
       </div>
 
-      {/* Hazır Hesaplar Bilgi Kartı (Şifre Göster/Gizle Butonlu, Yalnızca Admin) */}
+      {/* Hazır Hesaplar ve Şifreler Bilgi Kartı (Yalnızca Admin) */}
       <AccountCredentialsCard accounts={DEFAULT_ACCOUNTS} />
 
       {/* Veritabanı Kullanıcı Listesi */}
@@ -131,7 +188,10 @@ export default async function KullanicilarPage() {
                 Ad Soyad
               </th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase">
-                E-posta / Giriş
+                E-posta
+              </th>
+              <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase">
+                Giriş Kullanıcı Adı & Şifresi
               </th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase">
                 Yetki & Rol
@@ -156,6 +216,7 @@ export default async function KullanicilarPage() {
                     ? "camoluk@camolukyapi.com"
                     : `${p.role}@camolukyapi.com`);
                 const roleInfo = ROLE_CONFIG[p.role] || ROLE_CONFIG.staff;
+                const cred = ACCOUNT_CREDENTIALS_MAP[p.role];
                 const isSelf = p.id === userData.user.id;
                 const isProtected = email === "camoluk@camolukyapi.com";
                 return (
@@ -170,6 +231,26 @@ export default async function KullanicilarPage() {
                     </td>
                     <td className="px-4 py-3 font-mono text-xs text-text-muted">
                       {email}
+                    </td>
+                    <td className="px-4 py-3">
+                      {cred ? (
+                        <div className="flex flex-col gap-1">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-text-muted font-medium">Şifre:</span>
+                            <span className="font-mono font-bold text-xs text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300 select-all tracking-wide">
+                              {cred.pass}
+                            </span>
+                          </div>
+                          <div className="flex items-center gap-1 text-[11px] text-text-muted">
+                            <span>Giriş Adı:</span>
+                            <span className="font-mono font-semibold text-brand-navy bg-surface px-1.5 py-0.2 rounded border border-border">
+                              {cred.username}
+                            </span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span className="text-xs text-text-muted italic">Özel Şifre</span>
+                      )}
                     </td>
                     <td className="px-4 py-3">
                       <span
@@ -199,7 +280,7 @@ export default async function KullanicilarPage() {
               })
             ) : (
               <tr>
-                <td colSpan={6} className="px-4 py-6 text-center text-text-muted">
+                <td colSpan={7} className="px-4 py-6 text-center text-text-muted">
                   Kayıtlı profil bulunamadı.
                 </td>
               </tr>

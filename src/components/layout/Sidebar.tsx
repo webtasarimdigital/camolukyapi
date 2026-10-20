@@ -45,113 +45,113 @@ const navItems: NavItem[] = [
     href: "/dashboard",
     label: "Dashboard",
     icon: LayoutDashboard,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2"],
+    allowedRoles: ["admin", "muhasebe1"],
   },
   {
     href: "/sevkiyat",
     label: "Sevkiyat & Yükleme",
     icon: Truck,
     badge: "Canlı",
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat", "depo", "sofor", "satis"],
+    allowedRoles: ["admin", "muhasebe1", "depo", "sofor", "satis"],
   },
   {
     href: "/otobil-gps",
     label: "Araç & Filo Takip",
     icon: Truck,
     badge: "Filo",
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat"],
+    allowedRoles: ["admin", "muhasebe1", "sofor"],
   },
   {
     href: "/portallar",
     label: "Şirket Portalları",
     icon: Globe,
     badge: "B2B",
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat", "tali_bayi", "bayi"],
+    allowedRoles: ["admin", "muhasebe1", "tali_bayi", "bayi"],
   },
   {
     href: "/urunler",
     label: "Ürünler & Stok",
     icon: Package,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat", "satis", "tali_bayi", "bayi"],
+    allowedRoles: ["admin", "muhasebe1", "satis", "tali_bayi", "bayi"],
   },
   {
     href: "/import",
     label: "Excel & PDF İçe Aktar",
     icon: FileSpreadsheet,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2"],
+    allowedRoles: ["admin", "muhasebe1"],
   },
   {
     href: "/musteriler",
     label: "Müşteriler",
     icon: Users,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "satis"],
+    allowedRoles: ["admin", "muhasebe1", "satis"],
   },
   {
     href: "/teklif/yeni",
     label: "Teklif Oluştur",
     icon: FileText,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "satis"],
+    allowedRoles: ["admin", "muhasebe1", "satis"],
   },
   {
     href: "/teklifler",
     label: "Teklifler",
     icon: ClipboardList,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "satis"],
+    allowedRoles: ["admin", "muhasebe1", "satis"],
   },
   {
     href: "/satis/yeni",
     label: "Satış Oluştur",
     icon: ShoppingCart,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "satis"],
+    allowedRoles: ["admin", "muhasebe1", "satis"],
   },
   {
     href: "/satislar",
     label: "Satışlar",
     icon: ReceiptText,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "satis"],
+    allowedRoles: ["admin", "muhasebe1", "satis"],
   },
   {
     href: "/odemeler",
     label: "Ödeme & Vadeler",
     icon: CalendarClock,
     badge: "Vade",
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2"],
+    allowedRoles: ["admin", "muhasebe1"],
   },
   {
     href: "/nakliyeler",
     label: "Nakliyeler (12 Gün)",
     icon: Navigation,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2"],
+    allowedRoles: ["admin", "muhasebe1"],
   },
   {
     href: "/finans",
     label: "Finans & Analiz",
     icon: Wallet,
-    allowedRoles: ["admin", "muhasebe2"],
+    allowedRoles: ["admin"],
   },
   {
     href: "/ortak-cari",
     label: "Ortak Finans (Cari)",
     icon: Handshake,
-    allowedRoles: ["admin", "muhasebe2"],
+    allowedRoles: ["admin"],
   },
   {
     href: "/kiralar",
     label: "Kiralar (Gelir/Gider)",
     icon: Building2,
-    allowedRoles: ["admin", "muhasebe2"],
+    allowedRoles: ["admin"],
   },
   {
     href: "/personel",
     label: "Personel & İzinler",
     icon: UserCheck,
-    allowedRoles: ["admin", "muhasebe2"],
+    allowedRoles: ["admin"],
   },
   {
     href: "/raporlar",
     label: "Raporlar",
     icon: BarChart3,
-    allowedRoles: ["admin", "muhasebe2"],
+    allowedRoles: ["admin"],
   },
   {
     href: "/kullanicilar",
@@ -184,7 +184,7 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
   );
 
   const homeHref =
-    roleKey === "depo" || roleKey === "sofor" || roleKey === "sevkiyat"
+    roleKey === "depo" || roleKey === "sofor"
       ? "/sevkiyat"
       : roleKey === "satis"
       ? "/teklifler"
@@ -195,11 +195,9 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
   const roleBadgeMap: Record<string, string> = {
     admin: "👑 Yönetici",
     muhasebe1: "💼 Muhasebe 1",
-    muhasebe2: "📊 Muhasebe 2",
-    sevkiyat: "🚚 Sevkiyat",
+    satis: "💼 Satış",
     depo: "📦 Depo Sorumlusu",
     sofor: "🚚 Şoför",
-    satis: "💼 Satış",
     tali_bayi: "🏪 Tali Bayi",
     bayi: "🏪 Tali Bayi",
   };

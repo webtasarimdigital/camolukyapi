@@ -26,7 +26,7 @@ export async function cancelSale(saleId: string, reason: string) {
   
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", userData.user.id).single();
   const role = (profile as any)?.role || "staff";
-  if (!["admin", "muhasebe1", "muhasebe2"].includes(role)) {
+  if (!["admin", "muhasebe1"].includes(role)) {
     throw new Error("Yetkiniz bulunmuyor! Yalnızca muhasebe ve yöneticiler satışı iptal edebilir.");
   }
 
@@ -119,7 +119,7 @@ export async function deleteSale(saleId: string) {
 
   const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
   const role = (profile as any)?.role || "staff";
-  if (!["admin", "muhasebe1", "muhasebe2"].includes(role)) {
+  if (!["admin", "muhasebe1"].includes(role)) {
     throw new Error("Yetkiniz bulunmuyor! Yalnızca muhasebe ve yöneticiler satış kaydını silebilir.");
   }
 

@@ -53,7 +53,7 @@ export async function middleware(request: NextRequest) {
   if (user && pathname === "/login") {
     const role = request.cookies.get("app_active_role")?.value;
     const url = request.nextUrl.clone();
-    if (role === "depo" || role === "sofor" || role === "sevkiyat") {
+    if (role === "depo" || role === "sofor") {
       url.pathname = "/sevkiyat";
     } else if (role === "tali_bayi" || role === "bayi") {
       url.pathname = "/urunler";

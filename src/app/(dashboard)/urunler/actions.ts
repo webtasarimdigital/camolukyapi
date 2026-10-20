@@ -100,7 +100,7 @@ export async function updateProduct(id: string, formData: FormData) {
 
 export async function deactivateProduct(id: string) {
   const { supabase, role } = await getRoleAndCompany();
-  if (!['admin', 'muhasebe1', 'muhasebe2'].includes(role)) {
+  if (!['admin', 'muhasebe1'].includes(role)) {
     throw new Error('Yetkiniz bulunmuyor! Yalnızca yöneticiler ürün silebilir.');
   }
   const { error } = await supabase.from('products').update({ deleted_at: new Date().toISOString() } as never).eq('id', id);

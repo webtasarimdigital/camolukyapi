@@ -29,7 +29,7 @@ export function SaleDetailActions({
   userRole?: string;
 }) {
   const router = useRouter();
-  const canManageSale = ["admin", "muhasebe1", "muhasebe2"].includes(userRole);
+  const canManageSale = ["admin", "muhasebe1"].includes(userRole);
 
   // Payment Modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);

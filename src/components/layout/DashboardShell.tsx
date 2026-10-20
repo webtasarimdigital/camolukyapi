@@ -47,26 +47,9 @@ function isRouteAllowed(role: UserRole, pathname: string): boolean {
     );
   }
 
-  // Sevkiyat Görevlisi
-  if (role === "sevkiyat") {
-    return (
-      pathname.startsWith("/sevkiyat") ||
-      pathname.startsWith("/otobil-gps") ||
-      pathname.startsWith("/portallar") ||
-      pathname.startsWith("/urunler") ||
-      pathname.startsWith("/stok")
-    );
-  }
-
   // Muhasebe 1: Personel & İzinler, Kiralar, Ortak Finans (Cari), Finans & Analiz, Raporlar, Kullanıcılar, Ayarlar hariç açık
   if (role === "muhasebe1") {
     const forbidden = ["/personel", "/kiralar", "/ortak-cari", "/finans", "/raporlar", "/kullanicilar", "/ayarlar", "/audit"];
-    return !forbidden.some((prefix) => pathname.startsWith(prefix));
-  }
-
-  // Muhasebe 2: Kullanıcılar, Ayarlar hariç açık
-  if (role === "muhasebe2") {
-    const forbidden = ["/kullanicilar", "/ayarlar", "/audit"];
     return !forbidden.some((prefix) => pathname.startsWith(prefix));
   }
 
@@ -91,7 +74,7 @@ export function DashboardShell({
 
   let defaultRoute = "/dashboard";
   let defaultRouteLabel = "Dashboard'a Dön";
-  if (roleKey === "depo" || roleKey === "sofor" || roleKey === "sevkiyat") {
+  if (roleKey === "depo" || roleKey === "sofor") {
     defaultRoute = "/sevkiyat";
     defaultRouteLabel = "Sevkiyat ve Yükleme Modülüne Git";
   } else if (roleKey === "tali_bayi" || (roleKey as string) === "bayi") {

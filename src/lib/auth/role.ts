@@ -10,10 +10,6 @@ function getDefaultName(role: UserRole): string {
       return "Çamoluk Yönetici";
     case "muhasebe1":
       return "Muhasebe 1 Personeli";
-    case "muhasebe2":
-      return "Muhasebe 2 Personeli";
-    case "sevkiyat":
-      return "Sevkiyat Sorumlusu";
     case "depo":
       return "Depo Sorumlusu";
     case "sofor":

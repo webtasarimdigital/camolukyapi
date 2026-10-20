@@ -56,8 +56,6 @@ async function getCurrentUserName(): Promise<string> {
     if (profile?.full_name) return profile.full_name;
     if (profile?.role) {
       if (profile.role === "muhasebe1") return "Muhasebe 1";
-      if (profile.role === "muhasebe2") return "Muhasebe 2";
-      if (profile.role === "sevkiyat") return "Sevkiyat Sorumlusu";
       if (profile.role === "depo") return "Depo Sorumlusu";
       if (profile.role === "sofor") return "Şoför";
       if (profile.role === "satis") return "Satış Temsilcisi";
@@ -182,7 +180,7 @@ export async function actionUpdateShipmentStatus(id: string, status: Shipment["s
 export async function actionDeleteShipment(id: string) {
   try {
     const role = await getCallerRole();
-    if (role !== "admin" && role !== "muhasebe2" && role !== "muhasebe1") {
+    if (role !== "admin" && role !== "muhasebe1") {
       return { success: false, error: "Yetkiniz bulunmuyor! Sevkiyat silme yetkiniz yoktur." };
     }
 
@@ -409,7 +407,7 @@ export async function actionDeleteAllTransporters() {
 export async function actionGetEmployees() {
   try {
     const role = await getCallerRole();
-    if (role !== "admin" && role !== "muhasebe2") {
+    if (role !== "admin") {
       return [];
     }
     return await getEmployees();
@@ -422,8 +420,8 @@ export async function actionGetEmployees() {
 export async function actionSaveEmployee(formData: FormData) {
   try {
     const role = await getCallerRole();
-    if (role !== "admin" && role !== "muhasebe2") {
-      return { success: false, error: "Yetkiniz bulunmuyor! Personel yönetimi yalnızca Yönetici ve Muhasebe 2 yetkisindedir." };
+    if (role !== "admin") {
+      return { success: false, error: "Yetkiniz bulunmuyor! Personel yönetimi yalnızca Yönetici yetkisindedir." };
     }
 
     const userName = await getCurrentUserName();
@@ -476,7 +474,7 @@ export async function actionSaveEmployee(formData: FormData) {
 export async function actionDeleteEmployee(id: string) {
   try {
     const role = await getCallerRole();
-    if (role !== "admin" && role !== "muhasebe2") {
+    if (role !== "admin") {
       return { success: false, error: "Yetkiniz bulunmuyor! Personel silme yetkiniz yoktur." };
     }
 
@@ -495,7 +493,7 @@ export async function actionDeleteEmployee(id: string) {
 export async function actionGetEmployeeTransactions(employeeId: string) {
   try {
     const role = await getCallerRole();
-    if (role !== "admin" && role !== "muhasebe2") {
+    if (role !== "admin") {
       return [];
     }
     return await getEmployeeTransactions(employeeId);
@@ -508,7 +506,7 @@ export async function actionGetEmployeeTransactions(employeeId: string) {
 export async function actionSaveEmployeeTransaction(formData: FormData) {
   try {
     const role = await getCallerRole();
-    if (role !== "admin" && role !== "muhasebe2") {
+    if (role !== "admin") {
       return { success: false, error: "Yetkiniz bulunmuyor!" };
     }
 
@@ -547,7 +545,7 @@ export async function actionSaveEmployeeTransaction(formData: FormData) {
 export async function actionDeleteEmployeeTransaction(id: string, employeeId: string) {
   try {
     const role = await getCallerRole();
-    if (role !== "admin" && role !== "muhasebe2") {
+    if (role !== "admin") {
       return { success: false, error: "Yetkiniz bulunmuyor!" };
     }
 
@@ -567,7 +565,7 @@ export async function actionDeleteEmployeeTransaction(id: string, employeeId: st
 export async function actionGetRents() {
   try {
     const role = await getCallerRole();
-    if (role !== "admin" && role !== "muhasebe2") {
+    if (role !== "admin") {
       return [];
     }
     return await getRents();
@@ -580,8 +578,8 @@ export async function actionGetRents() {
 export async function actionSaveRent(formData: FormData) {
   try {
     const role = await getCallerRole();
-    if (role !== "admin" && role !== "muhasebe2") {
-      return { success: false, error: "Yetkiniz bulunmuyor! Kira yönetimi yalnızca Yönetici ve Muhasebe 2 yetkisindedir." };
+    if (role !== "admin") {
+      return { success: false, error: "Yetkiniz bulunmuyor! Kira yönetimi yalnızca Yönetici yetkisindedir." };
     }
 
     const userName = await getCurrentUserName();
@@ -622,7 +620,7 @@ export async function actionSaveRent(formData: FormData) {
 export async function actionDeleteRent(id: string) {
   try {
     const role = await getCallerRole();
-    if (role !== "admin" && role !== "muhasebe2") {
+    if (role !== "admin") {
       return { success: false, error: "Yetkiniz bulunmuyor! Kira silme yetkiniz yoktur." };
     }
 
@@ -643,7 +641,7 @@ export async function actionAddRentPayment(
 ) {
   try {
     const role = await getCallerRole();
-    if (role !== "admin" && role !== "muhasebe2") {
+    if (role !== "admin") {
       return { success: false, error: "Yetkiniz bulunmuyor!" };
     }
 
@@ -661,7 +659,7 @@ export async function actionAddRentPayment(
 export async function actionDeleteRentPayment(rentId: string, paymentId: string) {
   try {
     const role = await getCallerRole();
-    if (role !== "admin" && role !== "muhasebe2") {
+    if (role !== "admin") {
       return { success: false, error: "Yetkiniz bulunmuyor!" };
     }
 

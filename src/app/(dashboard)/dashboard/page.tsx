@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
+import { UserRole } from "@/lib/auth/role-constants";
 import { formatCurrency } from "@/lib/formatters";
 import {
   TrendingUp,
@@ -56,8 +57,8 @@ export default async function DashboardPage() {
   const cookieStore = await cookies();
   const cookieRole = cookieStore.get("app_active_role")?.value;
   const isActualAdmin = profile.role === "admin";
-  const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
-  const canViewPrivateFinancials = activeRole === "admin" || activeRole === "muhasebe2";
+  const activeRole = (isActualAdmin && cookieRole ? cookieRole : profile.role) as UserRole;
+  const canViewPrivateFinancials = activeRole === "admin";
 
   // Dashboard KPI'ları — tek RPC çağrısı
   const { data: kpiData } = await supabase.rpc("get_dashboard_summary" as never, {

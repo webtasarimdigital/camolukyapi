@@ -22,7 +22,7 @@ export async function saveExcelProducts(payload: {
 
   const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id) throw new Error("Şirket profili bulunamadı.");
-  if (!["admin", "muhasebe1", "muhasebe2"].includes(profile.role || "")) {
+  if (!["admin", "muhasebe1"].includes(profile.role || "")) {
     throw new Error("Yetkiniz bulunmuyor! Yalnızca yetkili kullanıcılar ürün/fiyat listesi yükleyebilir.");
   }
 
@@ -135,7 +135,7 @@ export async function savePdfDocument(formData: FormData) {
 
     const profile = profileData as { company_id: string; role: string } | null;
     if (!profile?.company_id) return { success: false, error: "Şirket profili bulunamadı." };
-    if (!["admin", "muhasebe1", "muhasebe2"].includes(profile.role || "")) {
+    if (!["admin", "muhasebe1"].includes(profile.role || "")) {
       return { success: false, error: "Yetkiniz bulunmuyor! Yalnızca yöneticiler PDF katalog yükleyebilir." };
     }
 
@@ -256,7 +256,7 @@ export async function extractProductsFromPdf(formData: FormData): Promise<{
         .single();
 
       const profile = profileData as { company_id: string; role: string } | null;
-      if (!profile?.company_id || !["admin", "muhasebe1", "muhasebe2"].includes(profile.role || "")) {
+      if (!profile?.company_id || !["admin", "muhasebe1"].includes(profile.role || "")) {
         return {
           success: false,
           fileName: file.name,

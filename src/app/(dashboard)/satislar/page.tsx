@@ -24,7 +24,7 @@ export default async function SalesPage() {
   const cookieRole = cookieStore.get("app_active_role")?.value;
   const isActualAdmin = profile.role === "admin";
   const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
-  const canDeleteSale = ["admin", "muhasebe1", "muhasebe2"].includes(activeRole);
+  const canDeleteSale = ["admin", "muhasebe1"].includes(activeRole);
 
   const { data: salesData } = await supabase
     .from("sales")

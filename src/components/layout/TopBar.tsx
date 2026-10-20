@@ -59,8 +59,12 @@ export function TopBar({ userName, userRole = "admin", onToggleMobile }: TopBarP
     try {
       await setActiveUserRole(targetRole);
       toast.success(`Aktif rol değiştirildi: ${ROLE_DEFINITIONS[targetRole].label}`);
-      if (targetRole === "sevkiyat") {
+      if (targetRole === "depo" || targetRole === "sofor") {
         router.push("/sevkiyat");
+      } else if (targetRole === "tali_bayi") {
+        router.push("/urunler");
+      } else if (targetRole === "satis") {
+        router.push("/teklifler");
       } else {
         router.refresh();
       }

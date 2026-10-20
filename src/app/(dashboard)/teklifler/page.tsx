@@ -41,7 +41,7 @@ export default async function TekliflerPage({
   const cookieRole = cookieStore.get("app_active_role")?.value;
   const isActualAdmin = profile.role === "admin";
   const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
-  const canDeleteQuote = ["admin", "muhasebe1", "muhasebe2"].includes(activeRole);
+  const canDeleteQuote = ["admin", "muhasebe1"].includes(activeRole);
 
   // Tüm teklif istatistiklerini al (filtre uygulanmadan önceki gerçek oranlar için)
   const { data: allQuotesData } = await supabase

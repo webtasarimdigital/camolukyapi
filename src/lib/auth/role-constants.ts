@@ -4,11 +4,9 @@
 export type UserRole =
   | "admin"
   | "muhasebe1"
-  | "muhasebe2"
-  | "sevkiyat"
+  | "satis"
   | "depo"
   | "sofor"
-  | "satis"
   | "tali_bayi"
   | "bayi";
 
@@ -26,15 +24,10 @@ export const ROLE_DEFINITIONS: Record<
     description: "Operasyonlar, teklif, satış, ödemeler açık; Personel, Kiralar, Finans ve Ortak Cari kapalı",
     defaultName: "Muhasebe 1 Personeli",
   },
-  muhasebe2: {
-    label: "📊 Muhasebe 2",
-    description: "Finans ve Ortak Cari dahil tüm finansal modüller açık",
-    defaultName: "Muhasebe 2 Personeli",
-  },
-  sevkiyat: {
-    label: "🚚 Sevkiyat Görevlisi",
-    description: "Sevkiyat, Otobil GPS ve Ürünler / Stok modülleri açık",
-    defaultName: "Sevkiyat Sorumlusu",
+  satis: {
+    label: "💼 Satış Temsilcisi",
+    description: "Teklif, Satış, Sevkiyat, Müşteriler ve Ürünler açık (Silme yetkisi yok)",
+    defaultName: "Satış Temsilcisi",
   },
   depo: {
     label: "📦 Depo Sorumlusu",
@@ -45,11 +38,6 @@ export const ROLE_DEFINITIONS: Record<
     label: "🚚 Şoför",
     description: "Yalnızca Sevkiyat ve Yükleme modülü (Görüntüleme)",
     defaultName: "Şoför",
-  },
-  satis: {
-    label: "💼 Satış Temsilcisi",
-    description: "Teklif, Satış, Sevkiyat, Müşteriler ve Ürünler açık",
-    defaultName: "Satış Temsilcisi",
   },
   tali_bayi: {
     label: "🏪 Tali Bayi",

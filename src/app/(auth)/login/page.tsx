@@ -87,7 +87,7 @@ export default function LoginPage() {
     });
 
     // Role göre yetkili ana sayfaya yönlendir
-    if (actualRole === "depo" || actualRole === "sofor" || actualRole === "sevkiyat") {
+    if (actualRole === "depo" || actualRole === "sofor") {
       router.push("/sevkiyat");
     } else if (actualRole === "tali_bayi" || (actualRole as string) === "bayi") {
       router.push("/urunler");

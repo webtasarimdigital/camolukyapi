@@ -22,7 +22,7 @@ export default async function QuoteDetailPage({
   const cookieRole = cookieStore.get("app_active_role")?.value;
   const isActualAdmin = (userProfile as any)?.role === "admin";
   const activeRole = isActualAdmin ? (cookieRole || "admin") : (userProfile as any)?.role;
-  const canDeleteQuote = ["admin", "muhasebe1", "muhasebe2"].includes(activeRole);
+  const canDeleteQuote = ["admin", "muhasebe1"].includes(activeRole);
 
   const { data: quoteData } = await supabase
     .from("quotes")

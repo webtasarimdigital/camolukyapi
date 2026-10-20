@@ -160,7 +160,7 @@ export async function savePortal(input: {
 export async function deletePortal(id: string) {
   try {
     const { supabase, userRole } = await getCompanyAndUser();
-    if (!["admin", "muhasebe1", "muhasebe2"].includes(userRole)) {
+    if (!["admin", "muhasebe1"].includes(userRole)) {
       return { success: false, error: "Yetkiniz bulunmuyor! Yalnızca yöneticiler portal silebilir." };
     }
     const { error } = await (supabase.from("portals") as any).delete().eq("id", id);

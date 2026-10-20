@@ -22,10 +22,10 @@ async function verifyPartnerAuth() {
   const isActualAdmin = profile?.role === "admin";
   const effectiveRole = isActualAdmin ? (cookieStore.get("app_active_role")?.value || "admin") : profile?.role;
 
-  const isAllowed = effectiveRole === "admin" || effectiveRole === "muhasebe2";
+  const isAllowed = effectiveRole === "admin";
 
   if (!profile?.company_id || !isAllowed) {
-    throw new Error("Bu işlemi yapmaya yetkiniz bulunmuyor (Yalnızca Yönetici ve Muhasebe 2).");
+    throw new Error("Bu işlemi yapmaya yetkiniz bulunmuyor (Yalnızca Yönetici).");
   }
 
   const serviceClient = await createServiceClient();

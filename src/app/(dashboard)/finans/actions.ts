@@ -18,8 +18,8 @@ export async function addExpense(formData: FormData) {
   const isActualAdmin = profile.role === "admin";
   const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
 
-  if (activeRole !== "admin" && activeRole !== "muhasebe2") {
-    throw new Error("Yetkiniz bulunmuyor! Gider ekleme yetkisi yalnızca Yönetici ve Muhasebe 2'dedir.");
+  if (activeRole !== "admin") {
+    throw new Error("Yetkiniz bulunmuyor! Gider ekleme yetkisi yalnızca Yönetici'dedir.");
   }
 
   const amount = parseFloat(formData.get("amount") as string);

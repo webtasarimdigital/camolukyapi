@@ -20,7 +20,7 @@ export default function DuzenleUrunPage() {
   const supabase = createClient();
 
   const isReadOnly = ["tali_bayi", "bayi", "depo", "sofor"].includes(userRole);
-  const canDelete = ["admin", "muhasebe1", "muhasebe2"].includes(userRole);
+  const canDelete = ["admin", "muhasebe1"].includes(userRole);
 
   useEffect(() => {
     async function loadProduct() {

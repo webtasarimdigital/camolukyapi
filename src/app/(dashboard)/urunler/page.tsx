@@ -32,9 +32,9 @@ export default async function UrunlerPage({
   const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
 
   const isReadOnly = ["tali_bayi", "bayi", "depo", "sofor"].includes(activeRole);
-  const canImport = !isReadOnly && ["admin", "muhasebe1", "muhasebe2"].includes(activeRole);
+  const canImport = !isReadOnly && ["admin", "muhasebe1"].includes(activeRole);
   const canDeleteAllStock = isActualAdmin && activeRole === "admin";
-  const canCreateProduct = !isReadOnly && ["admin", "muhasebe1", "muhasebe2", "staff"].includes(activeRole);
+  const canCreateProduct = !isReadOnly && ["admin", "muhasebe1", "staff"].includes(activeRole);
 
   const q = typeof sp.q === 'string' ? sp.q : '';
   const page = typeof sp.page === 'string' ? parseInt(sp.page, 10) : 1;

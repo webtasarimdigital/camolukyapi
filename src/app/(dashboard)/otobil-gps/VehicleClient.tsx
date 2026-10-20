@@ -61,7 +61,7 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
   const [filterAlertOnly, setFilterAlertOnly] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const isAdmin = userRole === "admin" || userRole === "muhasebe1" || userRole === "muhasebe2";
+  const isAdmin = userRole === "admin" || userRole === "muhasebe1";
 
   // ── 1 AY KALA VE 1 HAFTA KALA HATIRLATICI HESABI ──
   const allAlerts = useMemo(() => {
