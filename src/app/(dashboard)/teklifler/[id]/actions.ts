@@ -80,6 +80,8 @@ export async function updateQuote(
       discount_type?: "percent" | "fixed" | null;
       discount_value?: number;
     }>;
+    customerId?: string | null;
+    customerSnapshot?: any;
     generalDiscountType?: "percent" | "fixed" | null;
     generalDiscountValue?: number;
     vatRate?: number;
@@ -107,25 +109,34 @@ export async function updateQuote(
   const totals = calculateTotals(lines, vatRate, data.generalDiscountType, data.generalDiscountValue);
 
   // 1. Quotes tablosunu güncelle
+  const updatePayload: Record<string, any> = {
+    subtotal: totals.subtotal,
+    line_discount_total: totals.line_discount_total,
+    general_discount_type: data.generalDiscountType,
+    general_discount_value: data.generalDiscountValue,
+    general_discount_amount: totals.general_discount_amount,
+    net_total: totals.net_total,
+    vat_rate: vatRate,
+    vat_total: totals.vat_total,
+    grand_total: totals.grand_total,
+    valid_until: data.validUntil,
+    delivery_terms: data.deliveryTerms,
+    payment_terms: data.paymentTerms,
+    notes: data.notes,
+    updated_at: new Date().toISOString(),
+    updated_by: user.id,
+  };
+
+  if (data.customerId !== undefined) {
+    updatePayload.customer_id = data.customerId;
+  }
+  if (data.customerSnapshot !== undefined) {
+    updatePayload.customer_snapshot = data.customerSnapshot;
+  }
+
   const { error: quoteErr } = await supabase
     .from("quotes")
-    .update({
-      subtotal: totals.subtotal,
-      line_discount_total: totals.line_discount_total,
-      general_discount_type: data.generalDiscountType,
-      general_discount_value: data.generalDiscountValue,
-      general_discount_amount: totals.general_discount_amount,
-      net_total: totals.net_total,
-      vat_rate: vatRate,
-      vat_total: totals.vat_total,
-      grand_total: totals.grand_total,
-      valid_until: data.validUntil,
-      delivery_terms: data.deliveryTerms,
-      payment_terms: data.paymentTerms,
-      notes: data.notes,
-      updated_at: new Date().toISOString(),
-      updated_by: user.id,
-    } as never)
+    .update(updatePayload as never)
     .eq("id", quoteId);
 
   if (quoteErr) throw new Error(quoteErr.message);
@@ -156,6 +167,8 @@ export async function updateQuote(
 
   revalidatePath(`/teklifler`);
   revalidatePath(`/teklifler/${quoteId}`);
+  revalidatePath(`/teklif-onizleme/${quoteId}`);
+  revalidatePath(`/teklif-yazdir/${quoteId}`);
 
   return { success: true };
 }

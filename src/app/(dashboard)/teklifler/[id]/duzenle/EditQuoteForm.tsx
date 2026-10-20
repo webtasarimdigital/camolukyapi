@@ -7,7 +7,17 @@ import { formatCurrency } from "@/lib/formatters";
 import { calculateLine, calculateTotals } from "@/lib/calculations";
 import { updateQuote } from "../actions";
 import { toast } from "sonner";
-import { ArrowLeft, Trash2, Plus, Save, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Trash2,
+  Plus,
+  Save,
+  Loader2,
+  Building2,
+  Search,
+  PenLine,
+  CheckCircle2,
+} from "lucide-react";
 
 interface ItemState {
   id: string;
@@ -21,15 +31,84 @@ interface ItemState {
   discount_value: number;
 }
 
+export interface CustomerOption {
+  id: string;
+  company_name: string | null;
+  contact_name: string | null;
+  phone: string;
+  address?: string | null;
+  tax_office?: string | null;
+  tax_number?: string | null;
+  email?: string | null;
+}
+
 export function EditQuoteForm({
   quote,
   initialItems,
+  customers = [],
 }: {
   quote: any;
   initialItems: any[];
+  customers?: CustomerOption[];
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+
+  // Müşteri / Firma Bilgileri Modu
+  const initialHasRegistered = Boolean(
+    quote.customer_id && customers.some((c) => c.id === quote.customer_id)
+  );
+  const [customerMode, setCustomerMode] = useState<"registered" | "manual">(
+    initialHasRegistered ? "registered" : "manual"
+  );
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(
+    quote.customer_id || ""
+  );
+  const [customerSearch, setCustomerSearch] = useState<string>("");
+
+  // Elle Girilen Firma / Müşteri Bilgileri
+  const [manualCompanyName, setManualCompanyName] = useState<string>(
+    quote.customer_snapshot?.company_name ||
+      quote.customer_snapshot?.contact_name ||
+      quote.customer?.company_name ||
+      quote.customer?.contact_name ||
+      ""
+  );
+  const [manualContactName, setManualContactName] = useState<string>(
+    quote.customer_snapshot?.contact_name ||
+      quote.customer?.contact_name ||
+      ""
+  );
+  const [manualPhone, setManualPhone] = useState<string>(
+    quote.customer_snapshot?.phone || quote.customer?.phone || ""
+  );
+  const [manualAddress, setManualAddress] = useState<string>(
+    quote.customer_snapshot?.address || quote.customer?.address || ""
+  );
+  const [manualTaxOffice, setManualTaxOffice] = useState<string>(
+    quote.customer_snapshot?.tax_office || quote.customer?.tax_office || ""
+  );
+  const [manualTaxNumber, setManualTaxNumber] = useState<string>(
+    quote.customer_snapshot?.tax_number || quote.customer?.tax_number || ""
+  );
+
+  const selectedCustomerObj = useMemo(() => {
+    return customers.find((c) => c.id === selectedCustomerId) || null;
+  }, [customers, selectedCustomerId]);
+
+  function handleSelectCustomer(custId: string) {
+    setSelectedCustomerId(custId);
+    const found = customers.find((c) => c.id === custId);
+    if (found) {
+      setManualCompanyName(found.company_name || found.contact_name || "");
+      setManualContactName(found.contact_name || "");
+      setManualPhone(found.phone || "");
+      setManualAddress(found.address || "");
+      setManualTaxOffice(found.tax_office || "");
+      setManualTaxNumber(found.tax_number || "");
+    }
+  }
+
   const [items, setItems] = useState<ItemState[]>(
     initialItems.map((it) => ({
       id: it.id || crypto.randomUUID(),
@@ -119,9 +198,46 @@ export function EditQuoteForm({
       return;
     }
 
+    let finalCustomerId: string | null = null;
+    let finalCustomerSnapshot: any = null;
+
+    if (customerMode === "registered") {
+      if (!selectedCustomerId || !selectedCustomerObj) {
+        toast.error("Lütfen listeden bir müşteri seçiniz veya 'Elle Firma İsmi Gir' seçeneğini kullanınız.");
+        return;
+      }
+      finalCustomerId = selectedCustomerObj.id;
+      finalCustomerSnapshot = {
+        company_name: selectedCustomerObj.company_name || selectedCustomerObj.contact_name,
+        contact_name: selectedCustomerObj.contact_name || selectedCustomerObj.company_name,
+        phone: selectedCustomerObj.phone || "-",
+        address: selectedCustomerObj.address || "-",
+        tax_office: selectedCustomerObj.tax_office || null,
+        tax_number: selectedCustomerObj.tax_number || null,
+        email: selectedCustomerObj.email || null,
+      };
+    } else {
+      if (!manualCompanyName.trim()) {
+        toast.error("Lütfen firma veya müşteri adını giriniz.");
+        return;
+      }
+      finalCustomerId = null;
+      finalCustomerSnapshot = {
+        company_name: manualCompanyName.trim(),
+        contact_name: manualContactName.trim() || manualCompanyName.trim(),
+        phone: manualPhone.trim() || "-",
+        address: manualAddress.trim() || "-",
+        tax_office: manualTaxOffice.trim() || null,
+        tax_number: manualTaxNumber.trim() || null,
+        email: null,
+      };
+    }
+
     setLoading(true);
     try {
       await updateQuote(quote.id, {
+        customerId: finalCustomerId,
+        customerSnapshot: finalCustomerSnapshot,
         items: items.map((it) => ({
           product_id: it.product_id,
           product_code_snapshot: it.product_code_snapshot,
@@ -165,10 +281,12 @@ export function EditQuoteForm({
               Teklifi Düzenle (TKF-{quote.quote_code})
             </h1>
             <p className="text-xs text-text-muted">
-              Müşteri:{" "}
-              {quote.customer_snapshot?.company_name ||
-                quote.customer_snapshot?.contact_name ||
-                "Müşteri"}
+              Firma / Müşteri:{" "}
+              <strong className="text-brand-navy font-semibold">
+                {customerMode === "registered" && selectedCustomerObj
+                  ? selectedCustomerObj.company_name || selectedCustomerObj.contact_name
+                  : manualCompanyName || "Belirtilmedi"}
+              </strong>
             </p>
           </div>
         </div>
@@ -199,6 +317,237 @@ export function EditQuoteForm({
             )}
           </button>
         </div>
+      </div>
+
+      {/* Müşteri / Firma Seçimi & Değiştirme */}
+      <div className="bg-white rounded-xl border border-border p-4 sm:p-5 space-y-4 shadow-xs">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-brand-navy/10 text-brand-navy flex items-center justify-center font-bold">
+              <Building2 size={18} />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-text">Müşteri & Firma Bilgileri</h2>
+              <p className="text-xs text-text-muted">
+                Firma ismini listeden seçebilir veya müşteri yoksa doğrudan elle yazabilirsiniz.
+              </p>
+            </div>
+          </div>
+
+          {/* Mod Değiştirme Butonları */}
+          <div className="flex items-center bg-surface p-1 rounded-lg border border-border text-xs font-semibold">
+            <button
+              type="button"
+              onClick={() => setCustomerMode("registered")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition cursor-pointer ${
+                customerMode === "registered"
+                  ? "bg-white text-brand-navy shadow-xs font-bold"
+                  : "text-text-muted hover:text-text"
+              }`}
+            >
+              <Building2 size={13} />
+              <span>Listeden Seç ({customers.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setCustomerMode("manual")}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md transition cursor-pointer ${
+                customerMode === "manual"
+                  ? "bg-white text-brand-navy shadow-xs font-bold"
+                  : "text-text-muted hover:text-text"
+              }`}
+            >
+              <PenLine size={13} />
+              <span>Elle Firma İsmi Gir</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Seçenek 1: Kayıtlı Müşterilerden Seç */}
+        {customerMode === "registered" ? (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-text mb-1">
+                  Müşteri / Firma Listesi *
+                </label>
+                <select
+                  value={selectedCustomerId}
+                  onChange={(e) => handleSelectCustomer(e.target.value)}
+                  className="w-full border border-border rounded-lg px-3 py-2 bg-white text-xs font-medium outline-none focus:border-brand-navy focus:ring-1 focus:ring-brand-navy"
+                >
+                  <option value="">-- Müşteri Seçiniz --</option>
+                  {customers.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.company_name || c.contact_name} {c.phone ? `(${c.phone})` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-text mb-1">
+                  Müşteri Ara / Filtrele
+                </label>
+                <div className="relative">
+                  <input
+                    type="text"
+                    value={customerSearch}
+                    onChange={(e) => setCustomerSearch(e.target.value)}
+                    placeholder="Firma adı veya telefon..."
+                    className="w-full border border-border rounded-lg pl-8 pr-3 py-2 bg-surface text-xs outline-none focus:bg-white focus:border-brand-navy"
+                  />
+                  <Search size={14} className="absolute left-2.5 top-2.5 text-text-muted" />
+                </div>
+              </div>
+            </div>
+
+            {/* Arama yapılmışsa hızlı seçim hapları */}
+            {customerSearch.trim() && (
+              <div className="space-y-1">
+                <span className="text-[11px] text-text-muted font-medium">Eşleşen Müşteriler:</span>
+                <div className="flex flex-wrap gap-1.5 max-h-28 overflow-y-auto p-1.5 bg-surface rounded-lg border border-border">
+                  {customers
+                    .filter((c) => {
+                      const q = customerSearch.toLowerCase();
+                      return (
+                        (c.company_name && c.company_name.toLowerCase().includes(q)) ||
+                        (c.contact_name && c.contact_name.toLowerCase().includes(q)) ||
+                        (c.phone && c.phone.includes(q))
+                      );
+                    })
+                    .slice(0, 15)
+                    .map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          handleSelectCustomer(c.id);
+                          setCustomerSearch("");
+                        }}
+                        className={`text-xs px-2.5 py-1 rounded-md border text-left transition cursor-pointer flex items-center gap-1 ${
+                          selectedCustomerId === c.id
+                            ? "bg-brand-navy text-white border-brand-navy font-bold"
+                            : "bg-white text-text border-border hover:border-brand-navy"
+                        }`}
+                      >
+                        <Building2 size={11} />
+                        <span>{c.company_name || c.contact_name}</span>
+                        {c.phone && <span className="opacity-75 text-[10px]">({c.phone})</span>}
+                      </button>
+                    ))}
+                </div>
+              </div>
+            )}
+
+            {/* Seçili Müşteri Bilgi Kartı */}
+            {selectedCustomerObj ? (
+              <div className="p-3 bg-brand-navy/5 border border-brand-navy/15 rounded-lg flex flex-wrap items-center justify-between gap-3 text-xs">
+                <div className="space-y-0.5">
+                  <div className="font-bold text-brand-navy text-sm flex items-center gap-1.5">
+                    <CheckCircle2 size={15} className="text-emerald-600" />
+                    <span>{selectedCustomerObj.company_name || selectedCustomerObj.contact_name}</span>
+                  </div>
+                  <div className="text-text-muted flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+                    {selectedCustomerObj.contact_name && (
+                      <span>Yetkili: <strong className="text-text">{selectedCustomerObj.contact_name}</strong></span>
+                    )}
+                    {selectedCustomerObj.phone && (
+                      <span>Tel: <strong className="text-text">{selectedCustomerObj.phone}</strong></span>
+                    )}
+                    {selectedCustomerObj.address && (
+                      <span>Adres: <strong className="text-text">{selectedCustomerObj.address}</strong></span>
+                    )}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setCustomerMode("manual")}
+                  className="text-[11px] font-semibold text-brand-navy hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <PenLine size={12} /> Bilgileri Elle Düzenle
+                </button>
+              </div>
+            ) : (
+              <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 p-2.5 rounded-lg">
+                ℹ️ Listede müşteri bulunamadıysa veya yeni bir firma ise yukarıdaki <strong>&quot;Elle Firma İsmi Gir&quot;</strong> butonuna tıklayarak doğrudan yazabilirsiniz.
+              </p>
+            )}
+          </div>
+        ) : (
+          /* Seçenek 2: Elle Giriş */
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-text mb-1">
+                  Firma / Müşteri Adı *
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={manualCompanyName}
+                  onChange={(e) => setManualCompanyName(e.target.value)}
+                  placeholder="Örn: ABC İnşaat Ltd. Şti. veya Ahmet Yılmaz"
+                  className="w-full border border-border rounded-lg px-3 py-2 bg-white text-xs font-semibold outline-none focus:border-brand-navy focus:ring-1 focus:ring-brand-navy"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text mb-1">
+                  Yetkili Kişi
+                </label>
+                <input
+                  type="text"
+                  value={manualContactName}
+                  onChange={(e) => setManualContactName(e.target.value)}
+                  placeholder="Örn: Mehmet Bey"
+                  className="w-full border border-border rounded-lg px-3 py-2 bg-white text-xs outline-none focus:border-brand-navy"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-text mb-1">Telefon</label>
+                <input
+                  type="text"
+                  value={manualPhone}
+                  onChange={(e) => setManualPhone(e.target.value)}
+                  placeholder="0532 000 00 00"
+                  className="w-full border border-border rounded-lg px-3 py-2 bg-white text-xs outline-none focus:border-brand-navy"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text mb-1">Vergi Dairesi / No</label>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <input
+                    type="text"
+                    value={manualTaxOffice}
+                    onChange={(e) => setManualTaxOffice(e.target.value)}
+                    placeholder="Vergi Dairesi"
+                    className="w-full border border-border rounded-lg px-2.5 py-2 bg-white text-xs outline-none focus:border-brand-navy"
+                  />
+                  <input
+                    type="text"
+                    value={manualTaxNumber}
+                    onChange={(e) => setManualTaxNumber(e.target.value)}
+                    placeholder="Vergi / TC No"
+                    className="w-full border border-border rounded-lg px-2.5 py-2 bg-white text-xs outline-none focus:border-brand-navy"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-text mb-1">Adres / Şantiye</label>
+                <input
+                  type="text"
+                  value={manualAddress}
+                  onChange={(e) => setManualAddress(e.target.value)}
+                  placeholder="Şantiye adresi veya ilçe..."
+                  className="w-full border border-border rounded-lg px-3 py-2 bg-white text-xs outline-none focus:border-brand-navy"
+                />
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Kalemler Tablosu (Düzenlenebilir) */}

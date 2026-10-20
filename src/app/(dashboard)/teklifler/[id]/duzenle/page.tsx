@@ -26,5 +26,29 @@ export default async function EditQuotePage({
     redirect(`/teklifler/${id}`);
   }
 
-  return <EditQuoteForm quote={quote} initialItems={quote.items || []} />;
+  // Şirkete ait müşterileri çek
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", user.id)
+    .single();
+
+  const companyId = (profile as any)?.company_id || quote.company_id;
+
+  const { data: customersData } = await supabase
+    .from("customers")
+    .select("id, company_name, contact_name, phone, address, tax_office, tax_number, email")
+    .eq("company_id", companyId)
+    .is("deleted_at", null)
+    .order("company_name", { ascending: true });
+
+  const customers = (customersData || []) as any[];
+
+  return (
+    <EditQuoteForm
+      quote={quote}
+      initialItems={quote.items || []}
+      customers={customers}
+    />
+  );
 }
