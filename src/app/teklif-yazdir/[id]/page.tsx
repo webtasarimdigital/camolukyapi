@@ -93,33 +93,26 @@ export default async function PrintQuotePage({
   const salesRepName = creator?.full_name || quote.creator_name || "Ahmet Duvarbaşı";
   const salesRepPhone = creator?.phone || company?.phone || "0555 997 29 14";
 
-  const headersList = await headers();
-  let host = headersList.get("x-forwarded-host") || headersList.get("host") || "";
-  let proto = headersList.get("x-forwarded-proto") || "https";
+  // Sayısal teklif numarası (harf ve prefix olmadan, sadece rakamlar)
+  const displayQuoteNo = (quote.quote_code || "").replace(/^[^\d]+/g, "") || String(quote.quote_code || "20260001");
 
-  if (!host || host.includes("localhost") || host.includes("127.0.0.1")) {
-    host = "camolukyapi.vercel.app";
-    proto = "https";
-  }
-  const currentOrigin = `${proto}://${host}`;
-  const quoteDirectUrl = `${currentOrigin}/teklif-onizleme/${quote.id}`;
-  const qrIbanUrl = `https://api.qrserver.com/v1/create-qr-code/?size=160x160&margin=0&data=${encodeURIComponent(quoteDirectUrl)}`;
-
-  const partners = [
-    { name: "NG KÜTAHYA", sub: "SERAMİK", bold: true },
-    { name: "VitrA", sub: "", bold: true },
-    { name: "ARTEMA", sub: "", bold: true },
-    { name: "KYK", sub: "YAPI KİMYASALLARI", bold: true },
-    { name: "Artemis", sub: "FUGA", bold: false },
-    { name: "GROHE", sub: "", bold: true },
-    { name: "YTONG", sub: "", bold: true },
-    { name: "DURAVIT", sub: "", bold: true },
-    { name: "GEBERIT", sub: "", bold: true },
-    { name: "SAFI", sub: "ÇİMENTO", bold: true },
-    { name: "Filli Boya", sub: "", bold: false },
-    { name: "newarc", sub: "choose your own style", bold: false },
-    { name: "ISVEA", sub: "1962 ITALIA", bold: true },
-    { name: "VIVADUS", sub: "Banyo & Yaşam", bold: true }
+  // Çözüm Ortakları Logoları (Önce NG Kütahya, sonra VitrA, Artema...)
+  const partnerLogos = [
+    { name: "NG Kütahya Seramik", src: "/teklif-logo/ng-kutahya.jpeg" },
+    { name: "VitrA", src: "/teklif-logo/vitra.jpeg" },
+    { name: "Artema", src: "/teklif-logo/artema.jpeg" },
+    { name: "KYK Yapı Kimyasalları", src: "/teklif-logo/kyk.jpeg" },
+    { name: "Weber", src: "/teklif-logo/weber.jpeg" },
+    { name: "Grohe", src: "/teklif-logo/grohe.jpeg" },
+    { name: "Geberit", src: "/teklif-logo/geberit.jpeg" },
+    { name: "Duravit", src: "/teklif-logo/duravit.jpeg" },
+    { name: "Isvea", src: "/teklif-logo/isvea.jpeg" },
+    { name: "Ideal Standard", src: "/teklif-logo/ideal.jpeg" },
+    { name: "Artemis", src: "/teklif-logo/artemis.jpeg" },
+    { name: "Newarc", src: "/teklif-logo/nevarc.jpeg" },
+    { name: "Lavissa", src: "/teklif-logo/lavissa.jpeg" },
+    { name: "Safi Çimento", src: "/teklif-logo/safi.jpeg" },
+    { name: "Filli Boya", src: "/teklif-logo/filli-boya.jpeg" },
   ];
 
   return (
@@ -151,7 +144,7 @@ export default async function PrintQuotePage({
         }
       `}} />
 
-      <PrintActions quoteId={quote.id} quoteCode={quote.quote_code || quote.id.substring(0, 6)} />
+      <PrintActions quoteId={quote.id} quoteCode={displayQuoteNo} />
 
       {/* A4 PROPOSAL DOCUMENT - Temiz, bağımsız A4 şablonu */}
       <div className="print-clean w-full max-w-[210mm] mx-auto bg-white p-4 sm:p-5 md:p-6 text-[10px] leading-tight text-neutral-800 shadow-md border border-neutral-200 rounded-xl space-y-2.5">
@@ -166,15 +159,11 @@ export default async function PrintQuotePage({
             />
 
             <div className="h-8 w-[1.5px] bg-neutral-300" />
-
-            <div className="flex flex-col">
-              <span className="text-[14px] sm:text-[16px] font-light tracking-[0.2em] text-neutral-800 leading-none">
-                <strong className="font-black mr-1">NG</strong>KÜTAHYA
-              </span>
-              <span className="text-[7px] sm:text-[7.5px] tracking-[0.3em] text-neutral-500 font-semibold mt-1">
-                SERAMİK
-              </span>
-            </div>
+            <img
+              src="/kutahya-seramik-logo-.png"
+              alt="Kütahya Seramik"
+              className="h-8 sm:h-10 w-auto max-w-[150px] object-contain"
+            />
           </div>
 
           <div className="flex items-center gap-2 bg-neutral-900 text-white px-3.5 sm:px-4 py-1.5 rounded-lg">
@@ -224,7 +213,7 @@ export default async function PrintQuotePage({
             <div className="p-2 space-y-0.5 text-[9px]">
               <div className="grid grid-cols-5 items-center">
                 <span className="col-span-2 text-neutral-500 font-medium">TEKLİF NO</span>
-                <span className="col-span-3 font-mono font-bold text-neutral-900">: TKF-{quote.quote_code}</span>
+                <span className="col-span-3 font-mono font-bold text-neutral-900">: {displayQuoteNo}</span>
               </div>
               <div className="grid grid-cols-5 items-center">
                 <span className="col-span-2 text-neutral-500 font-medium">TARİH</span>
@@ -362,18 +351,15 @@ export default async function PrintQuotePage({
                 </div>
               </div>
 
-              <a 
-                href={quoteDirectUrl} 
-                target="_blank" 
-                rel="noopener noreferrer" 
-                className="flex flex-col items-center justify-center border border-neutral-300 p-1 rounded-lg bg-white shrink-0 hover:border-brand-navy hover:shadow-xs transition cursor-pointer"
-                title="Teklifi Görüntüle"
+              <div 
+                className="flex flex-col items-center justify-center border border-neutral-300 p-1 rounded-lg bg-white shrink-0"
+                title="Halkbank Hesap QR Kodu"
               >
-                <img src={qrIbanUrl} alt="Teklif QR Kodu" className="w-14 h-14" />
-                <span className="text-[7px] font-bold text-center text-neutral-600 mt-0.5 uppercase leading-none">
-                  TEKLİFİ GÖR<br/>OKUTUN
+                <img src="/qr.jpeg" alt="Halkbank QR Kodu" className="w-16 h-16 object-contain" />
+                <span className="text-[7px] font-bold text-center text-neutral-700 mt-0.5 uppercase leading-none">
+                  BANKA QR İLE<br/>HIZLI ÖDEME
                 </span>
-              </a>
+              </div>
             </div>
 
             {/* Sağ Sütun: Ara Toplam, İskonto, Net Tutar, KDV */}
@@ -446,53 +432,45 @@ export default async function PrintQuotePage({
         </div>
 
         {/* Çözüm Ortaklarımız */}
-        <div className="border border-neutral-300 rounded-lg p-2 text-center">
-          <span className="text-[8.5px] font-black text-neutral-400 uppercase tracking-widest block mb-1">
+        <div className="border border-neutral-300 rounded-lg p-2 text-center bg-white">
+          <span className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1.5">
             — ÇÖZÜM ORTAKLARIMIZ —
           </span>
-          <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-neutral-700 text-[9px]">
-            {partners.map((p, idx) => (
-              <span key={idx} className={`${p.bold ? "font-black text-neutral-900" : "font-medium text-neutral-600"}`}>
-                {p.name} {p.sub && <span className="text-[7.5px] font-normal text-neutral-500 uppercase">{p.sub}</span>}
-              </span>
+          <div className="flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1.5 px-1">
+            {partnerLogos.map((p, idx) => (
+              <div key={idx} className="flex items-center justify-center h-5 sm:h-6 px-1">
+                <img
+                  src={p.src}
+                  alt={p.name}
+                  title={p.name}
+                  className="max-h-4 sm:max-h-5 w-auto max-w-[55px] sm:max-w-[70px] object-contain filter contrast-125"
+                />
+              </div>
             ))}
           </div>
         </div>
 
-        {/* Temsilci & Teklif Onayı */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
-          <div className="border border-neutral-300 rounded-lg p-2.5 flex items-center justify-between">
-            <div className="space-y-0.5">
-              <span className="text-[9px] font-bold text-neutral-500 uppercase">SATIŞ TEMSİLCİSİ</span>
-              <p className="font-bold text-[11px] text-neutral-900">{salesRepName}</p>
-              <p className="text-[9px] text-neutral-600 font-medium">Satış Müdürü</p>
-              <p className="text-[8.5px] text-neutral-500">📞 {salesRepPhone}</p>
-            </div>
-            <div className="text-center pr-2">
-              <div className="h-9 w-20 border-b border-neutral-400 italic text-neutral-400 flex items-center justify-center text-[9px]">
-                İmza
-              </div>
-              <span className="text-[7.5px] font-bold uppercase text-neutral-500 mt-0.5 block">İMZA</span>
-            </div>
-          </div>
-
-          <div className="border border-neutral-300 rounded-lg p-2.5 flex items-center justify-between">
+        {/* Teklif Onayı */}
+        <div className="flex justify-end pt-1">
+          <div className="w-full sm:w-1/2 border border-neutral-300 rounded-lg p-2.5 flex items-center justify-between bg-white">
             <div className="space-y-1 text-[9px] flex-1">
-              <span className="font-bold text-neutral-500 uppercase block">TEKLİF ONAYI</span>
+              <span className="font-bold text-neutral-700 uppercase block border-b border-neutral-200 pb-0.5">
+                TEKLİF ONAYI
+              </span>
               <div className="grid grid-cols-3">
-                <span className="text-neutral-500">Firma Yetkilisi</span>
-                <span className="col-span-2">: .......................................</span>
+                <span className="text-neutral-500 font-medium">Firma Yetkilisi</span>
+                <span className="col-span-2 text-neutral-800">: .......................................</span>
               </div>
               <div className="grid grid-cols-3">
-                <span className="text-neutral-500">Kaşe / İmza</span>
-                <span className="col-span-2">: .......................................</span>
+                <span className="text-neutral-500 font-medium">Kaşe / İmza</span>
+                <span className="col-span-2 text-neutral-800">: .......................................</span>
               </div>
               <div className="grid grid-cols-3">
-                <span className="text-neutral-500">Tarih</span>
-                <span className="col-span-2">: ...... / ...... / 20.....</span>
+                <span className="text-neutral-500 font-medium">Tarih</span>
+                <span className="col-span-2 text-neutral-800">: ...... / ...... / 20.....</span>
               </div>
             </div>
-            <div className="w-16 h-12 border border-dashed border-neutral-400 rounded flex items-center justify-center text-neutral-400 text-[8.5px] font-bold uppercase">
+            <div className="w-16 h-12 border border-dashed border-neutral-400 rounded flex items-center justify-center text-neutral-400 text-[8.5px] font-bold uppercase ml-3 shrink-0">
               KAŞE
             </div>
           </div>
@@ -501,7 +479,7 @@ export default async function PrintQuotePage({
         {/* Footer */}
         <div className="bg-neutral-900 text-white px-3 py-1.5 rounded-lg flex flex-col sm:flex-row items-center justify-between gap-1 text-[8.5px] font-medium text-center sm:text-left">
           <div className="flex flex-wrap items-center justify-center sm:justify-start gap-x-3 gap-y-0.5">
-            <span>📍 Çamlıca Mah. Libadiye Cad. No:35 Üsküdar / İstanbul</span>
+            <span>📍 Bahçelievler Mah. Bosna Bulvarı No:102/3-4 Üsküdar / İstanbul</span>
             <span>📞 0535 742 28 61</span>
             <span>🌐 www.camolukyapi.com</span>
           </div>

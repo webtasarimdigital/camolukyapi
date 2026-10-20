@@ -27,12 +27,18 @@ export async function saveQuote(data: any) {
 
   const totals = calculateTotals(lines, data.vatRate, data.generalDiscountType, data.generalDiscountValue);
 
-  // Generate Code (Simulation for missing RPC, fallback to timestamp for now if RPC fails)
-  let quoteCode = Math.floor(Date.now() / 1000).toString();
-  
-  // Try RPC if it exists
-  const { data: generatedCode } = await supabase.rpc("generate_unique_quote_code" as never);
-  if (generatedCode) quoteCode = generatedCode as string;
+  // Sayısal teklif numarası üret (Örn: 20260007)
+  let quoteCode = "";
+  try {
+    const { count } = await supabase
+      .from("quotes")
+      .select("*", { count: "exact", head: true });
+    const year = new Date().getFullYear();
+    const seq = String((count || 0) + 1).padStart(4, "0");
+    quoteCode = `${year}${seq}`;
+  } catch {
+    quoteCode = Math.floor(Date.now() / 1000).toString();
+  }
 
   const { data: quote, error: quoteError } = await supabase
     .from("quotes")
