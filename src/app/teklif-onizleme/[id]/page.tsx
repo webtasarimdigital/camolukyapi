@@ -135,13 +135,13 @@ export default async function PublicQuotePreviewPage({
             <img
               src="/camoluk-logo.png"
               alt="ÇAMOLUK YAPI"
-              className="h-9 sm:h-11 w-auto max-w-[190px] object-contain"
+              className="h-10 sm:h-12 w-auto max-w-[200px] object-contain"
             />
-            <div className="h-8 w-[1.5px] bg-neutral-300" />
+            <div className="h-9 w-[1.5px] bg-neutral-300" />
             <img
               src="/kutahya-seramik-logo-.png"
               alt="Kütahya Seramik"
-              className="h-8 sm:h-10 w-auto max-w-[150px] object-contain"
+              className="h-9 sm:h-11 w-auto max-w-[190px] object-contain"
             />
           </div>
 
@@ -331,11 +331,11 @@ export default async function PublicQuotePreviewPage({
               </div>
 
               <div 
-                className="flex flex-col items-center justify-center border border-neutral-300 p-1 rounded-lg bg-white shrink-0"
+                className="flex flex-col items-center justify-center border border-neutral-300 p-1.5 rounded-lg bg-white shrink-0 shadow-xs"
                 title="Halkbank Hesap QR Kodu"
               >
-                <img src="/qr.jpeg" alt="Halkbank QR Kodu" className="w-16 h-16 object-contain" />
-                <span className="text-[7px] font-bold text-center text-neutral-700 mt-0.5 uppercase leading-none">
+                <img src="/qr.jpeg" alt="Halkbank QR Kodu" className="w-20 h-20 sm:w-22 sm:h-22 object-contain rounded" />
+                <span className="text-[7.5px] font-bold text-center text-neutral-700 mt-1 uppercase leading-tight">
                   BANKA QR İLE<br/>HIZLI ÖDEME
                 </span>
               </div>
@@ -410,46 +410,67 @@ export default async function PublicQuotePreviewPage({
           </div>
         </div>
 
-        {/* Çözüm Ortaklarımız */}
-        <div className="border border-neutral-300 rounded-lg p-2 text-center bg-white">
-          <span className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-1.5">
+        {/* Çözüm Ortaklarımız - 2 Satır Halinde ve Daha Büyük */}
+        <div className="border border-neutral-300 rounded-lg p-2.5 text-center bg-white">
+          <span className="text-[8px] font-black text-neutral-400 uppercase tracking-widest block mb-2">
             — ÇÖZÜM ORTAKLARIMIZ —
           </span>
-          <div className="flex flex-wrap items-center justify-center gap-x-3 sm:gap-x-4 gap-y-1.5 px-1">
-            {partnerLogos.map((p, idx) => (
-              <div key={idx} className="flex items-center justify-center h-5 sm:h-6 px-1">
-                <img
-                  src={p.src}
-                  alt={p.name}
-                  title={p.name}
-                  className="max-h-4 sm:max-h-5 w-auto max-w-[55px] sm:max-w-[70px] object-contain filter contrast-125"
-                />
-              </div>
-            ))}
+          <div className="space-y-2">
+            {/* 1. Satır: 8 Logo */}
+            <div className="grid grid-cols-8 gap-2 items-center justify-items-center">
+              {partnerLogos.slice(0, 8).map((p, idx) => (
+                <div key={idx} className="flex items-center justify-center h-7 sm:h-8 w-full px-1">
+                  <img
+                    src={p.src}
+                    alt={p.name}
+                    title={p.name}
+                    className="max-h-6 sm:max-h-7 w-auto max-w-full object-contain filter contrast-125"
+                  />
+                </div>
+              ))}
+            </div>
+            {/* 2. Satır: 7 Logo */}
+            <div className="flex flex-wrap items-center justify-center gap-x-6 gap-y-2">
+              {partnerLogos.slice(8).map((p, idx) => (
+                <div key={idx} className="flex items-center justify-center h-7 sm:h-8 px-1">
+                  <img
+                    src={p.src}
+                    alt={p.name}
+                    title={p.name}
+                    className="max-h-6 sm:max-h-7 w-auto max-w-[85px] object-contain filter contrast-125"
+                  />
+                </div>
+              ))}
+            </div>
           </div>
         </div>
 
-        {/* Teklif Onayı */}
-        <div className="flex justify-end pt-1">
-          <div className="w-full sm:w-1/2 border border-neutral-300 rounded-lg p-2.5 flex items-center justify-between bg-white">
-            <div className="space-y-1 text-[9px] flex-1">
-              <span className="font-bold text-neutral-700 uppercase block border-b border-neutral-200 pb-0.5">
-                TEKLİF ONAYI
-              </span>
-              <div className="grid grid-cols-3">
-                <span className="text-neutral-500 font-medium">Firma Yetkilisi</span>
-                <span className="col-span-2 text-neutral-800">: .......................................</span>
+        {/* Teklif Onayı - Satıra Tam Sığdırılmış */}
+        <div className="w-full border border-neutral-300 rounded-lg p-2.5 bg-white">
+          <div className="flex items-center justify-between border-b border-neutral-200 pb-1 mb-2">
+            <span className="font-bold text-neutral-800 text-[9.5px] uppercase tracking-wide">
+              MÜŞTERİ TEKLİF ONAYI
+            </span>
+            <span className="text-[8px] text-neutral-500 italic">
+              Teklifi onaylamak için lütfen kaşeleyip imzalayarak tarafımıza iletiniz.
+            </span>
+          </div>
+          <div className="flex items-center justify-between gap-6">
+            <div className="grid grid-cols-3 gap-6 text-[9px] flex-1">
+              <div>
+                <span className="text-neutral-500 font-semibold block mb-0.5">Firma Yetkilisi:</span>
+                <div className="border-b border-dotted border-neutral-400 pt-3"></div>
               </div>
-              <div className="grid grid-cols-3">
-                <span className="text-neutral-500 font-medium">Kaşe / İmza</span>
-                <span className="col-span-2 text-neutral-800">: .......................................</span>
+              <div>
+                <span className="text-neutral-500 font-semibold block mb-0.5">Kaşe / İmza:</span>
+                <div className="border-b border-dotted border-neutral-400 pt-3"></div>
               </div>
-              <div className="grid grid-cols-3">
-                <span className="text-neutral-500 font-medium">Tarih</span>
-                <span className="col-span-2 text-neutral-800">: ...... / ...... / 20.....</span>
+              <div>
+                <span className="text-neutral-500 font-semibold block mb-0.5">Tarih:</span>
+                <div className="text-neutral-700 font-medium pt-1">...... / ...... / 20.....</div>
               </div>
             </div>
-            <div className="w-16 h-12 border border-dashed border-neutral-400 rounded flex items-center justify-center text-neutral-400 text-[8.5px] font-bold uppercase ml-3 shrink-0">
+            <div className="w-20 h-14 border-2 border-dashed border-neutral-300 rounded-lg flex items-center justify-center text-neutral-400 text-[8.5px] font-bold uppercase shrink-0 bg-neutral-50/50">
               KAŞE
             </div>
           </div>
