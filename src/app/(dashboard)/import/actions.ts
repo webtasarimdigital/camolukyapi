@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
 import type { ParsedProductRow } from "./types";
@@ -57,7 +57,8 @@ export async function saveExcelProducts(payload: {
   );
   errors = payload.products.length - validProducts.length;
 
-  // 2. Yüksek Performanslı Batch Upsert (100'lük gruplar halinde)
+  // 2. Yüksek Performanslı Batch Upsert (100'lük gruplar halinde, serviceClient ile)
+  const serviceClient = await createServiceClient();
   const CHUNK_SIZE = 100;
   for (let i = 0; i < validProducts.length; i += CHUNK_SIZE) {
     const chunk = validProducts.slice(i, i + CHUNK_SIZE);
@@ -68,6 +69,11 @@ export async function saveExcelProducts(payload: {
       const p2 = item.price_quality_2 ?? null;
       const pC = item.price_commercial ?? null;
       const defPrice = item.default_sale_price ?? p1 ?? 0;
+      const rawUnit = item.unit?.trim() || "M2";
+      const normalizedUnit = rawUnit.toLowerCase() === "metrekare" ? "M2" : rawUnit;
+      const finalStockQty = typeof item.stock_qty === "number"
+        ? parseFloat(item.stock_qty.toFixed(6))
+        : (parseTurkishNumber(item.stock_qty) || 0);
 
       return {
         company_id: companyId,
@@ -76,12 +82,12 @@ export async function saveExcelProducts(payload: {
         product_group: item.product_group?.trim() || null,
         series_name: item.series_name?.trim() || null,
         size: item.size?.trim() || null,
-        unit: item.unit?.trim() || "M2",
+        unit: normalizedUnit,
         price_quality_1: p1,
         price_quality_2: p2,
         price_commercial: pC,
         default_sale_price: defPrice,
-        stock_qty: typeof item.stock_qty === "number" ? item.stock_qty : (parseTurkishNumber(item.stock_qty) || 0),
+        stock_qty: finalStockQty,
         min_stock_qty: 0,
         allows_decimal_qty: true,
         last_import_id: importId,
@@ -91,7 +97,7 @@ export async function saveExcelProducts(payload: {
       };
     });
 
-    const { error: upsertErr } = await supabase
+    const { error: upsertErr } = await serviceClient
       .from("products")
       .upsert(rows as never[], { onConflict: "company_id,product_code" });
 

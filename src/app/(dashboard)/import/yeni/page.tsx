@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import * as XLSX from "xlsx";
@@ -16,6 +16,8 @@ import {
   ArrowLeft,
   Loader2,
   FileCheck,
+  AlertTriangle,
+  Settings2,
 } from "lucide-react";
 
 export default function ImportWizardPage() {
@@ -24,8 +26,34 @@ export default function ImportWizardPage() {
 
   // Excel State
   const [excelFile, setExcelFile] = useState<File | null>(null);
+  const [workbookRef, setWorkbookRef] = useState<XLSX.WorkBook | null>(null);
   const [sheets, setSheets] = useState<string[]>([]);
   const [selectedSheet, setSelectedSheet] = useState<string>("");
+  const [rawDataRows, setRawDataRows] = useState<unknown[][]>([]);
+  const [detectedHeaders, setDetectedHeaders] = useState<string[]>([]);
+  const [mapping, setMapping] = useState<{
+    colCode: number;
+    colName: number;
+    colGroup: number;
+    colSeries: number;
+    colSize: number;
+    colUnit: number;
+    colStockQty: number;
+    colQ1: number;
+    colQ2: number;
+    colQCommercial: number;
+  }>({
+    colCode: -1,
+    colName: -1,
+    colGroup: -1,
+    colSeries: -1,
+    colSize: -1,
+    colUnit: -1,
+    colStockQty: -1,
+    colQ1: -1,
+    colQ2: -1,
+    colQCommercial: -1,
+  });
   const [parsedRows, setParsedRows] = useState<ParsedProductRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
@@ -35,6 +63,52 @@ export default function ImportWizardPage() {
   const [pdfTitle, setPdfTitle] = useState("");
   const [pdfCategory, setPdfCategory] = useState("Fiyat Listesi");
   const [pdfNotes, setPdfNotes] = useState("");
+
+  function normalizeUnit(val: unknown): string {
+    if (!val) return "M2";
+    const s = String(val).trim();
+    const lower = s.toLowerCase();
+    if (lower === "metrekare" || lower === "m2" || lower === "m²") return "M2";
+    if (lower === "adet" || lower === "adt") return "Adet";
+    return s;
+  }
+
+  function extractProducts(
+    dataRows: unknown[][],
+    map: typeof mapping
+  ): ParsedProductRow[] {
+    const products: ParsedProductRow[] = [];
+    for (const row of dataRows) {
+      if (!Array.isArray(row) || row.length === 0) continue;
+
+      const codeVal = map.colCode !== -1 ? String(row[map.colCode] || "").trim() : "";
+      const nameVal = map.colName !== -1 ? String(row[map.colName] || "").trim() : "";
+
+      if (!codeVal || !nameVal) continue;
+
+      const p1Val = map.colQ1 !== -1 ? parseTurkishNumber(row[map.colQ1] as string | number) : null;
+      const p2Val = map.colQ2 !== -1 ? parseTurkishNumber(row[map.colQ2] as string | number) : null;
+      const pCVal =
+        map.colQCommercial !== -1 ? parseTurkishNumber(row[map.colQCommercial] as string | number) : null;
+      const stockVal =
+        map.colStockQty !== -1 ? parseTurkishNumber(row[map.colStockQty] as string | number) : null;
+
+      products.push({
+        product_code: codeVal,
+        product_name: nameVal,
+        product_group: map.colGroup !== -1 ? String(row[map.colGroup] || "").trim() : undefined,
+        series_name: map.colSeries !== -1 ? String(row[map.colSeries] || "").trim() : undefined,
+        size: map.colSize !== -1 ? String(row[map.colSize] || "").trim() : undefined,
+        unit: map.colUnit !== -1 ? normalizeUnit(row[map.colUnit]) : "M2",
+        price_quality_1: p1Val,
+        price_quality_2: p2Val,
+        price_commercial: pCVal,
+        default_sale_price: p1Val,
+        stock_qty: stockVal,
+      });
+    }
+    return products;
+  }
 
   // Excel Yükleme İşleyicisi
   async function handleExcelFileChange(e: React.ChangeEvent<HTMLInputElement>) {
@@ -47,6 +121,7 @@ export default function ImportWizardPage() {
     try {
       const buffer = await file.arrayBuffer();
       const workbook = XLSX.read(buffer, { type: "array" });
+      setWorkbookRef(workbook);
       const sheetNames = workbook.SheetNames;
       setSheets(sheetNames);
       const defaultSheet = sheetNames[0] || "";
@@ -73,25 +148,49 @@ export default function ImportWizardPage() {
       return;
     }
 
-    // Başlık satırını bul (kod/ürün/fiyat/stok içeren satır)
-    let headerIndex = 0;
-    for (let i = 0; i < Math.min(rawData.length, 10); i++) {
+    function norm(s: unknown) {
+      return String(s || "")
+        .toLowerCase()
+        .replace(/i̇/g, "i")
+        .replace(/ı/g, "i")
+        .replace(/ğ/g, "g")
+        .replace(/ü/g, "u")
+        .replace(/ş/g, "s")
+        .replace(/ö/g, "o")
+        .replace(/ç/g, "c")
+        .trim();
+    }
+
+    // Akıllı skor bazlı başlık satırı tespiti
+    let bestHeaderIndex = 0;
+    let maxScore = -1;
+    for (let i = 0; i < Math.min(rawData.length, 15); i++) {
       const row = rawData[i];
-      if (Array.isArray(row)) {
-        const rowStr = row.map((c) => String(c).toUpperCase()).join(" ");
-        if (
-          rowStr.includes("KOD") ||
-          rowStr.includes("ÜRÜN") ||
-          rowStr.includes("FİYAT") ||
-          rowStr.includes("STOK")
-        ) {
-          headerIndex = i;
-          break;
-        }
+      if (!Array.isArray(row)) continue;
+      let score = 0;
+      row.forEach((cell) => {
+        const n = norm(cell);
+        if (!n) return;
+        if (n.includes("kod") || n === "stok kodu" || n === "malzeme kodu") score += 3;
+        if (n.includes("urun") || n.includes("malzeme") || n.includes("aciklama") || n.includes("tanim") || n === "stok adi") score += 3;
+        if (n === "stok" || n.includes("stok miktar") || n.includes("kalan") || n.includes("mevcut") || n.includes("bakiye") || n.includes("adet") || n.includes("qty") || n.includes("miktar")) score += 3;
+        if (n.includes("birim") || n.includes("brm")) score += 2;
+        if (n.includes("fiyat") || n.includes("liste") || n.includes("kalite") || n.includes("standart") || n.includes("ticari")) score += 2;
+        if (n.includes("ebat") || n.includes("grup") || n.includes("seri")) score += 2;
+      });
+      if (score > maxScore) {
+        maxScore = score;
+        bestHeaderIndex = i;
       }
     }
 
-    const headers = (rawData[headerIndex] || []).map((h) => String(h || "").trim());
+    const headerIndex = maxScore >= 2 ? bestHeaderIndex : 0;
+    const rawHeaders = (rawData[headerIndex] || []) as unknown[];
+    const headers = rawHeaders.map((h, idx) => {
+      const val = String(h || "").trim();
+      const colLetter = String.fromCharCode(65 + (idx % 26));
+      return val ? `${colLetter}: ${val}` : `Sütun ${colLetter}`;
+    });
     const dataRows = rawData.slice(headerIndex + 1);
 
     // Kolon indekslerini akıllıca eşleştir
@@ -106,46 +205,45 @@ export default function ImportWizardPage() {
     let colQ2 = -1;
     let colQCommercial = -1;
 
-    headers.forEach((h, idx) => {
-      const upper = h.toUpperCase().trim();
-      if ((upper.includes("KOD") || upper === "STOK KODU" || upper === "MALZEME KODU") && colCode === -1) {
+    rawHeaders.forEach((h, idx) => {
+      const n = norm(h);
+      if ((n.includes("kod") || n === "stok kodu" || n === "malzeme kodu") && colCode === -1) {
         colCode = idx;
       } else if (
-        (upper.includes("ÜRÜN AD") || upper.includes("MALZEME") || upper.includes("AÇIKLAMA") || upper === "STOK ADI") &&
+        (n.includes("urun ad") || n.includes("malzeme") || n.includes("aciklama") || n === "stok adi" || n.includes("tanim")) &&
         colName === -1
       ) {
         colName = idx;
-      } else if ((upper.includes("GRUP") || upper === "STOK GRUBU") && colGroup === -1) {
+      } else if ((n.includes("grup") || n === "stok grubu") && colGroup === -1) {
         colGroup = idx;
-      } else if (upper.includes("SERİ") && colSeries === -1) {
+      } else if (n.includes("seri") && colSeries === -1) {
         colSeries = idx;
-      } else if (upper.includes("EBAT") && colSize === -1) {
+      } else if (n.includes("ebat") && colSize === -1) {
         colSize = idx;
-      } else if ((upper.includes("BİRİM") || upper.includes("BRM") || upper === "BİRİMİ") && colUnit === -1) {
+      } else if ((n.includes("birim") || n.includes("brm")) && colUnit === -1) {
         colUnit = idx;
       } else if (
-        (upper === "STOK" ||
-          upper.includes("STOK MİKTAR") ||
-          upper.includes("KALAN") ||
-          upper.includes("MEVCUT") ||
-          upper === "KALAN MİKTAR" ||
-          upper.includes("MIKTAR") ||
-          upper.includes("MİKTAR") ||
-          upper.includes("QTY") ||
-          upper.includes("ADET")) &&
+        (n === "stok" ||
+          n.includes("stok miktar") ||
+          n.includes("kalan") ||
+          n.includes("mevcut") ||
+          n.includes("miktar") ||
+          n.includes("qty") ||
+          n.includes("adet") ||
+          n.includes("bakiye")) &&
         colStockQty === -1 &&
         idx !== colCode &&
         idx !== colName
       ) {
         colStockQty = idx;
       } else if (
-        (upper === "STANDART" || upper.includes("STANDART FİYAT") || upper.includes("1.LİSTE") || upper.includes("1. LİSTE") || upper.includes("1.KALİTE") || upper.includes("1. KALİTE")) &&
+        (n === "standart" || n.includes("standart fiyat") || n.includes("1.liste") || n.includes("1.kalite") || n.includes("1. kalite")) &&
         colQ1 === -1
       ) {
         colQ1 = idx;
-      } else if ((upper.includes("2.LİSTE") || upper.includes("2. LİSTE") || upper.includes("2.KALİTE") || upper.includes("2. KALİTE")) && colQ2 === -1) {
+      } else if ((n.includes("2.liste") || n.includes("2.kalite") || n.includes("2. kalite")) && colQ2 === -1) {
         colQ2 = idx;
-      } else if ((upper.includes("TİCARİ") || upper.includes("TICARI")) && colQCommercial === -1) {
+      } else if (n.includes("ticari") && colQCommercial === -1) {
         colQCommercial = idx;
       }
     });
@@ -155,40 +253,68 @@ export default function ImportWizardPage() {
       colName = colCode === 0 ? 1 : 0;
     }
 
-    const products: ParsedProductRow[] = [];
-    for (const row of dataRows) {
-      if (!Array.isArray(row) || row.length === 0) continue;
+    const initialMap = {
+      colCode,
+      colName,
+      colGroup,
+      colSeries,
+      colSize,
+      colUnit,
+      colStockQty,
+      colQ1,
+      colQ2,
+      colQCommercial,
+    };
 
-      const codeVal = colCode !== -1 ? String(row[colCode] || "").trim() : "";
-      const nameVal = colName !== -1 ? String(row[colName] || "").trim() : "";
+    setDetectedHeaders(headers);
+    setRawDataRows(dataRows);
+    setMapping(initialMap);
 
-      if (!codeVal || !nameVal) continue;
+    const products = extractProducts(dataRows, initialMap);
+    setParsedRows(products);
+    toast.success(`${products.length} ürün ve stok bilgisi hazırlandı.`);
+  }
 
-      const p1Val = colQ1 !== -1 ? parseTurkishNumber(row[colQ1] as string | number) : null;
-      const p2Val = colQ2 !== -1 ? parseTurkishNumber(row[colQ2] as string | number) : null;
-      const pCVal =
-        colQCommercial !== -1 ? parseTurkishNumber(row[colQCommercial] as string | number) : null;
-      const stockVal =
-        colStockQty !== -1 ? parseTurkishNumber(row[colStockQty] as string | number) : null;
+  function handleMappingChange(field: keyof typeof mapping, value: number) {
+    const updated = { ...mapping, [field]: value };
+    setMapping(updated);
+    if (rawDataRows.length > 0) {
+      const prods = extractProducts(rawDataRows, updated);
+      setParsedRows(prods);
+    }
+  }
 
-      products.push({
-        product_code: codeVal,
-        product_name: nameVal,
-        product_group: colGroup !== -1 ? String(row[colGroup] || "") : undefined,
-        series_name: colSeries !== -1 ? String(row[colSeries] || "") : undefined,
-        size: colSize !== -1 ? String(row[colSize] || "") : undefined,
-        unit: colUnit !== -1 ? String(row[colUnit] || "M2").trim() || "M2" : "M2",
-        price_quality_1: p1Val,
-        price_quality_2: p2Val,
-        price_commercial: pCVal,
-        default_sale_price: p1Val,
-        stock_qty: stockVal,
-      });
+  function handleSheetSelect(newSheet: string) {
+    setSelectedSheet(newSheet);
+    if (workbookRef) {
+      parseSheet(workbookRef, newSheet);
+    }
+  }
+
+  const stockStats = useMemo(() => {
+    let nonZeroCount = 0;
+    let decimalCount = 0;
+    let sampleValue: number | null = null;
+    let sampleUnit = "";
+
+    for (const r of parsedRows) {
+      if (r.stock_qty != null && r.stock_qty > 0) {
+        nonZeroCount++;
+        if (r.stock_qty % 1 !== 0) {
+          decimalCount++;
+          if (sampleValue === null) {
+            sampleValue = r.stock_qty;
+            sampleUnit = r.unit || "";
+          }
+        } else if (sampleValue === null) {
+          sampleValue = r.stock_qty;
+          sampleUnit = r.unit || "";
+        }
+      }
     }
 
-    setParsedRows(products);
-    toast.success(`${products.length} ürün ve stok bilgisi başarıyla okundu.`);
-  }
+    return { nonZeroCount, decimalCount, sampleValue, sampleUnit };
+  }, [parsedRows]);
 
   // Excel Aktarımını Başlat
   async function handleStartExcelImport() {
@@ -208,7 +334,7 @@ export default function ImportWizardPage() {
       toast.success(
         `İçe aktarma tamamlandı! ${res.inserted} yeni ürün eklendi, ${res.updated} ürün güncellendi.`
       );
-      router.push("/import");
+      router.push("/urunler");
       router.refresh();
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Aktarım hatası";
@@ -381,7 +507,7 @@ export default function ImportWizardPage() {
             </div>
           ) : (
             <div className="bg-white rounded-xl border border-border p-6 space-y-6">
-              <div className="flex items-center justify-between border-b border-border pb-4">
+              <div className="flex flex-wrap items-center justify-between gap-4 border-b border-border pb-4">
                 <div className="flex items-center gap-3">
                   <div className="bg-emerald-50 text-emerald-600 p-2.5 rounded-lg">
                     <FileCheck size={22} />
@@ -389,12 +515,29 @@ export default function ImportWizardPage() {
                   <div>
                     <h3 className="font-semibold text-text text-sm">{excelFile?.name}</h3>
                     <p className="text-xs text-text-muted">
-                      Toplam {parsedRows.length} ürün satırı tespit edildi.
+                      Toplam <strong className="text-text">{parsedRows.length}</strong> ürün satırı tespit edildi.
                     </p>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  {sheets.length > 1 && (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs text-text-muted">Sayfa:</span>
+                      <select
+                        value={selectedSheet}
+                        onChange={(e) => handleSheetSelect(e.target.value)}
+                        className="bg-surface border border-border rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:border-brand-gold"
+                      >
+                        {sheets.map((s) => (
+                          <option key={s} value={s}>
+                            {s}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
                   <button
                     type="button"
                     onClick={() => {
@@ -410,7 +553,7 @@ export default function ImportWizardPage() {
                     type="button"
                     disabled={loading || parsedRows.length === 0}
                     onClick={handleStartExcelImport}
-                    className="flex items-center gap-2 bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-5 py-2 rounded-lg text-sm font-bold transition disabled:opacity-50"
+                    className="flex items-center gap-2 bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-5 py-2 rounded-lg text-sm font-bold transition disabled:opacity-50 shadow-sm cursor-pointer"
                   >
                     {loading ? (
                       <>
@@ -423,6 +566,176 @@ export default function ImportWizardPage() {
                     )}
                   </button>
                 </div>
+              </div>
+
+              {/* Sütun Eşleştirme Kontrol Paneli */}
+              <div className="bg-surface border border-border rounded-xl p-4 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Settings2 size={18} className="text-brand-navy" />
+                    <h4 className="text-sm font-bold text-text">Sütun Eşleştirmeleri</h4>
+                  </div>
+                  <span className="text-xs text-text-muted">
+                    Otomatik eşleşen sütunları kontrol edebilir veya değiştirebilirsiniz
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block text-xs font-semibold text-text mb-1">
+                      📌 Stok Kodu Sütunu <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={mapping.colCode}
+                      onChange={(e) => handleMappingChange("colCode", Number(e.target.value))}
+                      className="w-full bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:border-brand-gold"
+                    >
+                      <option value={-1}>-- Seçiniz --</option>
+                      {detectedHeaders.map((h, i) => (
+                        <option key={i} value={i}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-text mb-1">
+                      🏷️ Ürün Adı Sütunu <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      value={mapping.colName}
+                      onChange={(e) => handleMappingChange("colName", Number(e.target.value))}
+                      className="w-full bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:border-brand-gold"
+                    >
+                      <option value={-1}>-- Seçiniz --</option>
+                      {detectedHeaders.map((h, i) => (
+                        <option key={i} value={i}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold text-text mb-1">
+                      📏 Birim Sütunu
+                    </label>
+                    <select
+                      value={mapping.colUnit}
+                      onChange={(e) => handleMappingChange("colUnit", Number(e.target.value))}
+                      className="w-full bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs font-medium outline-none focus:border-brand-gold"
+                    >
+                      <option value={-1}>-- Varsayılan (M2) --</option>
+                      {detectedHeaders.map((h, i) => (
+                        <option key={i} value={i}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-bold text-emerald-800 mb-1">
+                      📦 Stok Miktarı Sütunu
+                    </label>
+                    <select
+                      value={mapping.colStockQty}
+                      onChange={(e) => handleMappingChange("colStockQty", Number(e.target.value))}
+                      className="w-full bg-emerald-50 border-2 border-emerald-400 text-emerald-950 font-bold rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-emerald-600"
+                    >
+                      <option value={-1}>-- Stok Aktarma (0 yap) --</option>
+                      {detectedHeaders.map((h, i) => (
+                        <option key={i} value={i}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-text-muted mb-1">
+                      💰 1. Kalite / Fiyat (Opsiyonel)
+                    </label>
+                    <select
+                      value={mapping.colQ1}
+                      onChange={(e) => handleMappingChange("colQ1", Number(e.target.value))}
+                      className="w-full bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-brand-gold"
+                    >
+                      <option value={-1}>-- Yok --</option>
+                      {detectedHeaders.map((h, i) => (
+                        <option key={i} value={i}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-text-muted mb-1">
+                      💰 2. Kalite Fiyat (Opsiyonel)
+                    </label>
+                    <select
+                      value={mapping.colQ2}
+                      onChange={(e) => handleMappingChange("colQ2", Number(e.target.value))}
+                      className="w-full bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-brand-gold"
+                    >
+                      <option value={-1}>-- Yok --</option>
+                      {detectedHeaders.map((h, i) => (
+                        <option key={i} value={i}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-text-muted mb-1">
+                      💰 Ticari Fiyat (Opsiyonel)
+                    </label>
+                    <select
+                      value={mapping.colQCommercial}
+                      onChange={(e) => handleMappingChange("colQCommercial", Number(e.target.value))}
+                      className="w-full bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-brand-gold"
+                    >
+                      <option value={-1}>-- Yok --</option>
+                      {detectedHeaders.map((h, i) => (
+                        <option key={i} value={i}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-medium text-text-muted mb-1">
+                      📐 Ebat (Opsiyonel)
+                    </label>
+                    <select
+                      value={mapping.colSize}
+                      onChange={(e) => handleMappingChange("colSize", Number(e.target.value))}
+                      className="w-full bg-white border border-border rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-brand-gold"
+                    >
+                      <option value={-1}>-- Yok --</option>
+                      {detectedHeaders.map((h, i) => (
+                        <option key={i} value={i}>{h}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Stok Durum Özeti Bildirimi */}
+                {mapping.colStockQty === -1 ? (
+                  <div className="bg-amber-50 border border-amber-300 rounded-lg p-3 flex items-start gap-3 text-amber-900 text-xs">
+                    <AlertTriangle size={18} className="shrink-0 text-amber-600 mt-0.5" />
+                    <div>
+                      <span className="font-bold">⚠️ Stok Miktarı Sütunu Seçilmedi!</span>
+                      <p className="mt-0.5">
+                        Ürünler sisteme <strong>0 stok</strong> ile aktarılacaktır. Eğer dosyanızda stok miktarları varsa, yukarıdaki <strong>&quot;Stok Miktarı Sütunu&quot;</strong> açılır kutusundan <strong>STOK</strong> sütununu seçin.
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="bg-emerald-50 border border-emerald-300 rounded-lg p-3 flex flex-wrap items-center justify-between gap-2 text-emerald-950 text-xs">
+                    <div className="flex items-center gap-2">
+                      <CheckCircle2 size={18} className="shrink-0 text-emerald-600" />
+                      <span>
+                        <strong>Stok Sütunu Bağlandı:</strong> &quot;{detectedHeaders[mapping.colStockQty]}&quot; ({stockStats.nonZeroCount} üründe mevcut stok tespit edildi, {stockStats.decimalCount} üründe hassas ondalık mevcut)
+                      </span>
+                    </div>
+                    {stockStats.sampleValue != null && (
+                      <span className="bg-emerald-200/80 text-emerald-950 font-mono font-bold px-2.5 py-1 rounded">
+                        Örnek Okunan Miktar: {formatQty(stockStats.sampleValue)} {stockStats.sampleUnit}
+                      </span>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Önizleme Tablosu */}

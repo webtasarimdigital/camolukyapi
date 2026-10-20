@@ -34,7 +34,9 @@ export function formatQty(qty: number | null | undefined): string {
 // Türkçe ve uluslararası sayı formatlarını (3.870,00, 4359,32905, 4359.32905, 103000) bozmadan number'a çevirir
 export function parseTurkishNumber(value: string | number | null | undefined): number {
   if (value == null) return 0;
-  if (typeof value === "number") return isNaN(value) || !isFinite(value) ? 0 : value;
+  if (typeof value === "number") {
+    return isNaN(value) || !isFinite(value) ? 0 : parseFloat(value.toFixed(6));
+  }
 
   const raw = String(value).trim();
   if (!raw) return 0;
@@ -72,7 +74,7 @@ export function parseTurkishNumber(value: string | number | null | undefined): n
   }
 
   const num = parseFloat(cleaned);
-  return isNaN(num) ? 0 : num;
+  return isNaN(num) ? 0 : parseFloat(num.toFixed(6));
 }
 
 // Para string input temizle
