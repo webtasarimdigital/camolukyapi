@@ -145,7 +145,7 @@ const navItems: NavItem[] = [
     href: "/personel",
     label: "Personel & İzinler",
     icon: UserCheck,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2"],
+    allowedRoles: ["admin", "muhasebe2"],
   },
   {
     href: "/raporlar",

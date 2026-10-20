@@ -56,10 +56,12 @@ export function DashboardCharts({
   sales,
   partners,
   financials,
+  canViewPrivateFinancials = true,
 }: {
   sales: SaleRecord[];
   partners: PartnerRecord[];
   financials: FinancialTx[];
+  canViewPrivateFinancials?: boolean;
 }) {
   const [chartView, setChartView] = useState<"weekly" | "monthly">("weekly");
 
@@ -396,7 +398,8 @@ export function DashboardCharts({
       </div>
 
       {/* 3. Profit & Loss Gauge + Partner Balances Dual Card Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+      {canViewPrivateFinancials && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         
         {/* Kazanç & Kar-Zarar Tablosu (6 cols) */}
         <div className="lg:col-span-6 bg-white p-6 rounded-2xl border border-border shadow-xs space-y-4">
@@ -534,6 +537,7 @@ export function DashboardCharts({
         </div>
 
       </div>
+      )}
 
     </div>
   );

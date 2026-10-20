@@ -100,6 +100,22 @@ export async function middleware(request: NextRequest) {
         url.pathname = "/teklifler";
         return NextResponse.redirect(url);
       }
+    } else if (role === "muhasebe1") {
+      const forbiddenMuhasebe1 = [
+        "/personel",
+        "/kiralar",
+        "/ortak-cari",
+        "/finans",
+        "/raporlar",
+        "/kullanicilar",
+        "/ayarlar",
+        "/audit",
+      ];
+      if (forbiddenMuhasebe1.some((prefix) => pathname.startsWith(prefix))) {
+        const url = request.nextUrl.clone();
+        url.pathname = "/dashboard";
+        return NextResponse.redirect(url);
+      }
     }
   }
 

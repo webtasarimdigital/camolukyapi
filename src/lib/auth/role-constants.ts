@@ -23,7 +23,7 @@ export const ROLE_DEFINITIONS: Record<
   },
   muhasebe1: {
     label: "💼 Muhasebe 1",
-    description: "Operasyonlar, teklif, satış, ödemeler açık; Finans ve Ortak Cari kapalı",
+    description: "Operasyonlar, teklif, satış, ödemeler açık; Personel, Kiralar, Finans ve Ortak Cari kapalı",
     defaultName: "Muhasebe 1 Personeli",
   },
   muhasebe2: {

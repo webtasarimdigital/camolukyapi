@@ -19,9 +19,10 @@ async function verifyPartnerAuth() {
 
   const profile = profileData as { company_id: string; role: string } | null;
   const cookieStore = await cookies();
-  const activeRole = cookieStore.get("app_active_role")?.value || profile?.role;
+  const isActualAdmin = profile?.role === "admin";
+  const effectiveRole = isActualAdmin ? (cookieStore.get("app_active_role")?.value || "admin") : profile?.role;
 
-  const isAllowed = profile?.role === "admin" || profile?.role === "muhasebe2" || activeRole === "admin" || activeRole === "muhasebe2";
+  const isAllowed = effectiveRole === "admin" || effectiveRole === "muhasebe2";
 
   if (!profile?.company_id || !isAllowed) {
     throw new Error("Bu işlemi yapmaya yetkiniz bulunmuyor (Yalnızca Yönetici ve Muhasebe 2).");

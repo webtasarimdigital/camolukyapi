@@ -2,39 +2,36 @@ import { getEmployees, Employee } from "@/lib/data/store";
 import { EmployeeClient } from "./EmployeeClient";
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function PersonelPage() {
-  let userRole = "staff";
-  let userName = "Kullanıcı";
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
 
-  try {
-    const supabase = await createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
+  if (!user) redirect("/login");
 
-    const cookieStore = await cookies();
-    const cookieRole = cookieStore.get("app_active_role")?.value;
-    const cookieName = cookieStore.get("app_user_name")?.value;
+  const { data: profileData } = await supabase
+    .from("profiles")
+    .select("role, full_name, company_id")
+    .eq("id", user.id)
+    .single();
+  const profile = profileData as { role?: string; full_name?: string; company_id?: string } | null;
 
-    if (user) {
-      const { data: profileData } = await supabase
-        .from("profiles")
-        .select("role, full_name")
-        .eq("id", user.id)
-        .single();
-      const profile = profileData as { role?: string; full_name?: string } | null;
-      if (profile?.role) userRole = profile.role;
-      if (profile?.full_name) userName = profile.full_name;
-    }
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get("app_active_role")?.value;
+  const isActualAdmin = profile?.role === "admin";
+  const activeRole = isActualAdmin ? (cookieRole || "admin") : (profile?.role || "staff");
 
-    if (cookieRole) userRole = cookieRole;
-    if (cookieName) userName = cookieName;
-  } catch (authErr) {
-    console.error("PersonelPage auth error:", authErr);
+  if (activeRole !== "admin" && activeRole !== "muhasebe2") {
+    redirect("/dashboard");
   }
+
+  const userRole = activeRole;
+  const userName = cookieStore.get("app_user_name")?.value || profile?.full_name || "Kullanıcı";
 
   let items: Employee[] = [];
   try {

@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import Link from "next/link";
 
 export default async function RaporlarPage() {
@@ -10,6 +11,15 @@ export default async function RaporlarPage() {
   const { data: profileData } = await supabase.from("profiles").select("company_id, role").eq("id", user.id).single();
   const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id) redirect("/login");
+
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get("app_active_role")?.value;
+  const isActualAdmin = profile.role === "admin";
+  const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
+
+  if (activeRole !== "admin" && activeRole !== "muhasebe2") {
+    redirect("/dashboard");
+  }
 
   const reports = [
     { title: "Satış Raporu", desc: "Günlük ve aylık satış analizleri", href: "/raporlar/satis" },

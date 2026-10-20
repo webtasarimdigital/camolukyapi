@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import { formatCurrency } from "@/lib/formatters";
 import {
   TrendingUp,
@@ -51,6 +52,12 @@ export default async function DashboardPage() {
       </div>
     );
   }
+
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get("app_active_role")?.value;
+  const isActualAdmin = profile.role === "admin";
+  const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
+  const canViewPrivateFinancials = activeRole === "admin" || activeRole === "muhasebe2";
 
   // Dashboard KPI'ları — tek RPC çağrısı
   const { data: kpiData } = await supabase.rpc("get_dashboard_summary" as never, {
@@ -245,8 +252,9 @@ export default async function DashboardPage() {
       {/* Graphical Dashboard & Analytics Charts */}
       <DashboardCharts
         sales={allSales}
-        partners={partners}
-        financials={financials}
+        partners={canViewPrivateFinancials ? partners : []}
+        financials={canViewPrivateFinancials ? financials : []}
+        canViewPrivateFinancials={canViewPrivateFinancials}
       />
 
       {/* Son Satışlar + Son Teklifler */}

@@ -58,9 +58,9 @@ function isRouteAllowed(role: UserRole, pathname: string): boolean {
     );
   }
 
-  // Muhasebe 1: Finans, Ortak Cari, Kiralar, Raporlar, Kullanıcılar, Ayarlar hariç açık
+  // Muhasebe 1: Personel & İzinler, Kiralar, Ortak Finans (Cari), Finans & Analiz, Raporlar, Kullanıcılar, Ayarlar hariç açık
   if (role === "muhasebe1") {
-    const forbidden = ["/finans", "/ortak-cari", "/kiralar", "/raporlar", "/kullanicilar", "/ayarlar", "/audit"];
+    const forbidden = ["/personel", "/kiralar", "/ortak-cari", "/finans", "/raporlar", "/kullanicilar", "/ayarlar", "/audit"];
     return !forbidden.some((prefix) => pathname.startsWith(prefix));
   }
 

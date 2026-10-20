@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import Link from "next/link";
 import { 
@@ -33,12 +34,21 @@ export default async function OrtakDetayPage({
 
   const { data: profileData } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select("company_id, role")
     .eq("id", user.id)
     .single();
 
-  const profile = profileData as { company_id: string } | null;
+  const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id) redirect("/login");
+
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get("app_active_role")?.value;
+  const isActualAdmin = profile.role === "admin";
+  const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
+
+  if (activeRole !== "admin" && activeRole !== "muhasebe2") {
+    redirect("/dashboard");
+  }
 
   const { data: partnerData, error } = await supabase
     .from("partners")

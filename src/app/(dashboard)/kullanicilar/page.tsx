@@ -11,7 +11,7 @@ const ROLE_CONFIG: Record<string, { label: string; desc: string; badge: string }
   },
   muhasebe1: {
     label: "Muhasebe 1",
-    desc: "Genel muhasebe, teklif, satış ve ödemeler (Finans & Ortak Cari hariç)",
+    desc: "Genel muhasebe, teklif, satış ve ödemeler (Personel, Kiralar, Finans & Ortak Cari hariç)",
     badge: "bg-blue-100 text-blue-800 border-blue-200",
   },
   muhasebe2: {
@@ -53,7 +53,7 @@ const ROLE_CONFIG: Record<string, { label: string; desc: string; badge: string }
 
 const DEFAULT_ACCOUNTS = [
   { email: "camoluk@camolukyapi.com", pass: "camoluk2861", role: "admin", note: "Ana Yönetici hesabı (Kullanıcı: camoluk veya admin)" },
-  { email: "muhasebe1@camolukyapi.com", pass: "camoluk123", role: "muhasebe1", note: "Finans & Ortak Cari hariç (Kullanıcı: muhasebe1)" },
+  { email: "muhasebe1@camolukyapi.com", pass: "camoluk123", role: "muhasebe1", note: "Personel, Kiralar, Finans & Ortak Cari hariç (Kullanıcı: muhasebe1)" },
   { email: "muhasebe2@camolukyapi.com", pass: "camoluk123", role: "muhasebe2", note: "Finans & Ortak Cari dahil (Kullanıcı: muhasebe2)" },
   { email: "sevkiyat@camolukyapi.com", pass: "camoluk123", role: "sevkiyat", note: "Sevkiyat, GPS & Stok (Kullanıcı: sevkiyat)" },
   { email: "depo@camolukyapi.com", pass: "camolukdepo0", role: "depo", note: "Yalnızca Sevkiyat modülü (Kullanıcı: depo)" },

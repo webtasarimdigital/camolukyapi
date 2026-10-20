@@ -1,4 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
+import { redirect } from "next/navigation";
 import { formatCurrency } from "@/lib/formatters";
 import {
   Handshake,
@@ -19,15 +21,26 @@ export default async function OrtakCariPage() {
     data: { user },
   } = await supabase.auth.getUser();
 
+  if (!user) redirect("/login");
+
   const { data: profileData } = await supabase
     .from("profiles")
-    .select("company_id")
-    .eq("id", user!.id)
+    .select("company_id, role")
+    .eq("id", user.id)
     .single();
 
-  const profile = profileData as { company_id: string } | null;
+  const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id) {
-    return <div>Şirket bulunamadı.</div>;
+    redirect("/login");
+  }
+
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get("app_active_role")?.value;
+  const isActualAdmin = profile.role === "admin";
+  const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
+
+  if (activeRole !== "admin" && activeRole !== "muhasebe2") {
+    redirect("/dashboard");
   }
 
   // Ortakları çek

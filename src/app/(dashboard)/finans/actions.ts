@@ -2,15 +2,25 @@
 
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
+import { cookies } from "next/headers";
 
 export async function addExpense(formData: FormData) {
   const supabase = await createClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Unauthorized");
 
-  const { data: profileData } = await supabase.from("profiles").select("company_id").eq("id", user.id).single();
-  const profile = profileData as { company_id: string } | null;
+  const { data: profileData } = await supabase.from("profiles").select("company_id, role").eq("id", user.id).single();
+  const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id) throw new Error("Company not found");
+
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get("app_active_role")?.value;
+  const isActualAdmin = profile.role === "admin";
+  const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
+
+  if (activeRole !== "admin" && activeRole !== "muhasebe2") {
+    throw new Error("Yetkiniz bulunmuyor! Gider ekleme yetkisi yalnızca Yönetici ve Muhasebe 2'dedir.");
+  }
 
   const amount = parseFloat(formData.get("amount") as string);
   const category = formData.get("category") as string;

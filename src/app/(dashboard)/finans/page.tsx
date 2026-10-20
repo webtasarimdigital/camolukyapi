@@ -1,5 +1,6 @@
 import { createClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
+import { cookies } from "next/headers";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import Link from "next/link";
 import { getPaymentFollowups, getRents, getTransporters, getEmployees } from "@/lib/data/store";
@@ -33,6 +34,15 @@ export default async function FinansPage() {
     .single();
   const profile = profileData as { company_id: string; role: string; full_name: string } | null;
   if (!profile?.company_id) redirect("/login");
+
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get("app_active_role")?.value;
+  const isActualAdmin = profile.role === "admin";
+  const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
+
+  if (activeRole !== "admin" && activeRole !== "muhasebe2") {
+    redirect("/dashboard");
+  }
 
   // Satışlar verisini çek
   const { data: allSalesData } = await supabase
