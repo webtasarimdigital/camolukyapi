@@ -20,8 +20,10 @@ import {
 import {
   getProductsForStockImport,
   bulkIncreaseStock,
+  bulkSyncStock,
   type StockProductSummary,
   type BulkIncreaseItem,
+  type BulkSyncItem,
 } from "./stock-import-actions";
 import { formatQty, parseTurkishNumber } from "@/lib/formatters";
 
@@ -62,6 +64,7 @@ interface ParsedRow {
   index: number;
   rawCode: string;
   rawName: string;
+  unit: string;
   rawQty: number;
   extractedDigits: string;
   matchedProduct: StockProductSummary | null;
@@ -80,7 +83,12 @@ export function StockQtyImportModal() {
   // Sütun seçimleri
   const [codeCol, setCodeCol] = useState<string>("");
   const [nameCol, setNameCol] = useState<string>("");
+  const [unitCol, setUnitCol] = useState<string>("");
   const [qtyCol, setQtyCol] = useState<string>("");
+
+  // Senkronizasyon Modu: "set" (Excel'deki miktarı doğrudan ata) veya "add" (mevcut stoğun üstüne ekle)
+  const [syncMode, setSyncMode] = useState<"set" | "add">("set");
+  const [createMissing, setCreateMissing] = useState<boolean>(true);
 
   // Eşleştirilmiş satırlar
   const [parsedRows, setParsedRows] = useState<ParsedRow[]>([]);
@@ -147,7 +155,7 @@ export function StockQtyImportModal() {
 
         const json: Record<string, unknown>[] = XLSX.utils.sheet_to_json(worksheet, {
           defval: "",
-          raw: false,
+          raw: true,
         });
 
         if (json.length === 0) {
@@ -162,6 +170,7 @@ export function StockQtyImportModal() {
         // Otomatik sütun tahmini
         let bestCode = "";
         let bestName = "";
+        let bestUnit = "";
         let bestQty = "";
 
         for (const h of detectedHeaders) {
@@ -172,7 +181,10 @@ export function StockQtyImportModal() {
           if (!bestName && (l.includes("ad") || l.includes("tanim") || l.includes("tanım") || l.includes("malzeme") || l.includes("ürün") || l.includes("urun") || l.includes("cins") || l.includes("açıklama") || l.includes("aciklama"))) {
             bestName = h;
           }
-          if (!bestQty && (l.includes("adet") || l.includes("stok") || l.includes("miktar") || l.includes("kalan") || l.includes("bakiye") || l.includes("qty") || l.includes("sayim") || l.includes("sayım"))) {
+          if (!bestUnit && (l.includes("birim") || l.includes("brm"))) {
+            bestUnit = h;
+          }
+          if (!bestQty && (l === "stok" || l.includes("stok") || l.includes("adet") || l.includes("miktar") || l.includes("kalan") || l.includes("bakiye") || l.includes("qty") || l.includes("sayim") || l.includes("sayım"))) {
             bestQty = h;
           }
         }
@@ -184,14 +196,16 @@ export function StockQtyImportModal() {
 
         const selectedCode = bestCode || detectedHeaders[0] || "";
         const selectedName = bestName || detectedHeaders[1] || "";
+        const selectedUnit = bestUnit || "";
         const selectedQty = bestQty || detectedHeaders[detectedHeaders.length - 1] || "";
 
         setCodeCol(selectedCode);
         setNameCol(selectedName);
+        setUnitCol(selectedUnit);
         setQtyCol(selectedQty);
 
         // Eşleştirmeyi çalıştır
-        runMatching(json, catalog, selectedCode, selectedName, selectedQty);
+        runMatching(json, catalog, selectedCode, selectedName, selectedUnit, selectedQty);
         toast.success(`${json.length} satır Excel'den okundu.`);
       } catch (err: any) {
         toast.error("Excel dosyası okunurken hata oluştu: " + err?.message);
@@ -201,30 +215,40 @@ export function StockQtyImportModal() {
     reader.readAsArrayBuffer(file);
   }
 
-  // Eşleştirme Motoru: NG Kırpma + Rakam Yakalama & İsim Kontrolü
+  // Eşleştirme Motoru: Birebir Kod + NG Kırpma + Rakam Yakalama & İsim Kontrolü
   function runMatching(
     rows: Record<string, unknown>[],
     currentCatalog: StockProductSummary[],
     colCode: string,
     colName: string,
+    colUnit: string,
     colQty: string
   ) {
-    if (!currentCatalog || currentCatalog.length === 0) return;
+    if (!rows || rows.length === 0) return;
 
-    // Sistemdeki ürünleri rakam haritasına ve isim haritasına indeksle
+    // Sistemdeki ürünleri indeksle
+    const exactCodeMap = new Map<string, StockProductSummary>();
+    const cleanCodeMap = new Map<string, StockProductSummary>();
     const digitMap = new Map<string, StockProductSummary[]>();
     const nameMap = new Map<string, StockProductSummary>();
 
-    for (const prod of currentCatalog) {
-      const d = extractDigitsWithoutNG(prod.product_code);
-      if (d) {
-        const arr = digitMap.get(d) || [];
-        arr.push(prod);
-        digitMap.set(d, arr);
-      }
-      const n = normalizeName(prod.product_name);
-      if (n) {
-        nameMap.set(n, prod);
+    if (currentCatalog && currentCatalog.length > 0) {
+      for (const prod of currentCatalog) {
+        if (prod.product_code) {
+          exactCodeMap.set(prod.product_code.toUpperCase().trim(), prod);
+          const clean = prod.product_code.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+          if (clean) cleanCodeMap.set(clean, prod);
+        }
+        const d = extractDigitsWithoutNG(prod.product_code);
+        if (d) {
+          const arr = digitMap.get(d) || [];
+          arr.push(prod);
+          digitMap.set(d, arr);
+        }
+        const n = normalizeName(prod.product_name);
+        if (n) {
+          nameMap.set(n, prod);
+        }
       }
     }
 
@@ -233,39 +257,52 @@ export function StockQtyImportModal() {
     rows.forEach((r, idx) => {
       const rawCodeVal = String(r[colCode] || "").trim();
       const rawNameVal = String(r[colName] || "").trim();
+      const rawUnitVal = colUnit ? String(r[colUnit] || "").trim() : "";
       const rawQtyVal = parseTurkishNumber(r[colQty] as string | number);
 
-      // 1. ÖNCELİK: Kullanıcının talebi -> Stok kodundan NG kısmını kırp ve sadece rakamları al
+      // Ürün eşleştirme:
       let matched: StockProductSummary | null = null;
       let digits = extractDigitsWithoutNG(rawCodeVal);
 
-      // Eğer kod sütununda rakam yoksa ürün adı sütunundan da rakam aramayı dene
-      if (!digits && rawNameVal) {
-        digits = extractDigitsWithoutNG(rawNameVal);
+      // 1. Birebir kod eşleşmesi (Örn: ÇAMLICA002)
+      if (rawCodeVal && exactCodeMap.has(rawCodeVal.toUpperCase())) {
+        matched = exactCodeMap.get(rawCodeVal.toUpperCase())!;
       }
 
-      if (digits && digitMap.has(digits)) {
-        const candidates = digitMap.get(digits)!;
-        if (candidates.length === 1) {
-          matched = candidates[0];
-        } else {
-          // Birden fazla aday varsa isim benzerliğine bak
-          const normRowName = normalizeName(rawNameVal);
-          const best = candidates.find((c) => {
-            const normC = normalizeName(c.product_name);
-            return normRowName.includes(normC) || normC.includes(normRowName);
-          });
-          matched = best || candidates[0];
+      // 2. Noktasız/Tiresiz temiz kod eşleşmesi (Örn: NG.55014983RN -> NG55014983RN)
+      if (!matched && rawCodeVal) {
+        const clean = rawCodeVal.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
+        if (cleanCodeMap.has(clean)) {
+          matched = cleanCodeMap.get(clean)!;
         }
       }
 
-      // 2. YEDEK: İsimden tam veya normalize eşleştirme
+      // 3. Rakam yakalama (NG kırpma)
+      if (!matched) {
+        if (!digits && rawNameVal) {
+          digits = extractDigitsWithoutNG(rawNameVal);
+        }
+        if (digits && digitMap.has(digits)) {
+          const candidates = digitMap.get(digits)!;
+          if (candidates.length === 1) {
+            matched = candidates[0];
+          } else {
+            const normRowName = normalizeName(rawNameVal);
+            const best = candidates.find((c) => {
+              const normC = normalizeName(c.product_name);
+              return normRowName.includes(normC) || normC.includes(normRowName);
+            });
+            matched = best || candidates[0];
+          }
+        }
+      }
+
+      // 4. İsim eşleşmesi
       if (!matched && rawNameVal) {
         const normRowName = normalizeName(rawNameVal);
         if (nameMap.has(normRowName)) {
           matched = nameMap.get(normRowName)!;
         } else {
-          // Kısmi içerik kontrolü
           for (const [normDbName, prod] of nameMap.entries()) {
             if (normRowName.length > 5 && normDbName.includes(normRowName)) {
               matched = prod;
@@ -275,10 +312,20 @@ export function StockQtyImportModal() {
         }
       }
 
+      const inferredUnit =
+        rawUnitVal ||
+        (matched ? matched.unit : null) ||
+        (rawNameVal.toLowerCase().includes("m2") ||
+        rawNameVal.toLowerCase().includes("klt") ||
+        rawNameVal.toLowerCase().includes("metrekare")
+          ? "Metrekare"
+          : "Adet");
+
       parsed.push({
         index: idx + 1,
         rawCode: rawCodeVal,
         rawName: rawNameVal,
+        unit: inferredUnit,
         rawQty: rawQtyVal > 0 ? rawQtyVal : 0,
         extractedDigits: digits,
         matchedProduct: matched,
@@ -290,12 +337,13 @@ export function StockQtyImportModal() {
   }
 
   // Sütun seçimleri değiştiğinde eşleştirmeyi yeniden çalıştır
-  function handleColumnChange(newCode: string, newName: string, newQty: string) {
+  function handleColumnChange(newCode: string, newName: string, newUnit: string, newQty: string) {
     setCodeCol(newCode);
     setNameCol(newName);
+    setUnitCol(newUnit);
     setQtyCol(newQty);
     if (rawRows.length > 0) {
-      runMatching(rawRows, catalog, newCode, newName, newQty);
+      runMatching(rawRows, catalog, newCode, newName, newUnit, newQty);
     }
   }
 
@@ -303,7 +351,9 @@ export function StockQtyImportModal() {
   const totalRows = parsedRows.length;
   const matchedRows = parsedRows.filter((r) => r.status === "matched" && r.rawQty > 0);
   const notFoundRows = parsedRows.filter((r) => r.status === "not_found" || r.rawQty <= 0);
-  const totalQtyToAdd = matchedRows.reduce((sum, r) => sum + r.rawQty, 0);
+  const validAllRows = parsedRows.filter((r) => r.rawCode && r.rawName && r.rawQty > 0);
+  const targetRows = createMissing ? validAllRows : matchedRows;
+  const totalQtyTarget = targetRows.reduce((sum, r) => sum + r.rawQty, 0);
 
   // Filtrelenmiş liste
   const displayRows = parsedRows.filter((r) => {
@@ -312,30 +362,36 @@ export function StockQtyImportModal() {
     return true;
   });
 
-  // Toplu Stok Arttırma İşlemini Başlat
-  async function handleConfirmIncrease() {
-    if (matchedRows.length === 0) {
-      toast.error("Stoğu arttırılacak eşleşen ürün bulunamadı.");
+  // Toplu Stok Senkronizasyonu (Eşitle veya Arttır)
+  async function handleConfirmSync() {
+    if (targetRows.length === 0) {
+      toast.error("İşlenecek geçerli ürün bulunamadı. Lütfen sütun seçimlerini kontrol edin.");
       return;
     }
 
-    const confirmMsg = `${matchedRows.length} ürünün mevcut stoğuna toplam ${formatQty(
-      totalQtyToAdd
-    )} adet eklenecek. Sistemde bulunamayan ${
-      notFoundRows.length
-    } ürünün stoğu DEĞİŞMEYECEKTİR.\n\nİşlemi onaylıyor musunuz?`;
+    const modeText =
+      syncMode === "set"
+        ? "doğrudan Excel'deki ondalıklı stok miktarına eşitlenecektir (Yeni Stok = Excel)"
+        : "mevcut stoğun üzerine eklenecektir (+)";
+
+    const confirmMsg = `${targetRows.length} ürünün stoğu ${modeText}.${
+      createMissing && notFoundRows.length > 0
+        ? `\n(${notFoundRows.length} ürün yeni olarak sisteme kaydedilecektir.)`
+        : ""
+    }\n\nİşlemi onaylıyor musunuz?`;
 
     if (!window.confirm(confirmMsg)) return;
 
     setIsUpdating(true);
-    setProgress({ current: 0, total: matchedRows.length, percent: 0 });
+    setProgress({ current: 0, total: targetRows.length, percent: 0 });
 
-    const batchSize = 50;
-    const items: BulkIncreaseItem[] = matchedRows.map((r) => ({
-      productId: r.matchedProduct!.id,
-      addQty: r.rawQty,
-      rawCode: r.rawCode || r.extractedDigits,
-      rawName: r.rawName || r.matchedProduct!.product_name,
+    const batchSize = 100;
+    const items: BulkSyncItem[] = targetRows.map((r) => ({
+      productId: r.matchedProduct ? r.matchedProduct.id : null,
+      productCode: r.rawCode,
+      productName: r.rawName,
+      unit: r.unit,
+      stockQty: r.rawQty,
     }));
 
     let processedCount = 0;
@@ -345,7 +401,7 @@ export function StockQtyImportModal() {
     for (let i = 0; i < items.length; i += batchSize) {
       const batch = items.slice(i, i + batchSize);
       try {
-        const res = await bulkIncreaseStock(batch);
+        const res = await bulkSyncStock(batch, syncMode, createMissing);
         totalSuccess += res.updatedCount;
         if (res.errors && res.errors.length > 0) {
           totalErrors.push(...res.errors);
@@ -369,9 +425,7 @@ export function StockQtyImportModal() {
       toast.error(`Stok güncellenemedi: ${totalErrors[0]}`);
     } else {
       toast.success(
-        `İşlem Tamamlandı: ${totalSuccess} ürünün stoğu başarıyla arttırıldı! ${
-          notFoundRows.length > 0 ? `(${notFoundRows.length} ürün bulunamadı, değişmedi.)` : ""
-        }`
+        `İşlem Tamamlandı: ${totalSuccess} ürünün stoğu başarıyla kaydedildi!`
       );
       handleClose();
       router.refresh();
@@ -495,12 +549,12 @@ export function StockQtyImportModal() {
                     </div>
 
                     {/* Sütun Eşleştiriciler */}
-                    <div className="flex flex-wrap items-center gap-3">
+                    <div className="flex flex-wrap items-center gap-2.5">
                       <div>
                         <label className="text-[11px] font-semibold text-text-muted mr-1">Kod:</label>
                         <select
                           value={codeCol}
-                          onChange={(e) => handleColumnChange(e.target.value, nameCol, qtyCol)}
+                          onChange={(e) => handleColumnChange(e.target.value, nameCol, unitCol, qtyCol)}
                           className="border border-border rounded px-2 py-1 text-xs bg-white font-medium"
                         >
                           {headers.map((h) => (
@@ -515,7 +569,7 @@ export function StockQtyImportModal() {
                         <label className="text-[11px] font-semibold text-text-muted mr-1">Ürün Adı:</label>
                         <select
                           value={nameCol}
-                          onChange={(e) => handleColumnChange(codeCol, e.target.value, qtyCol)}
+                          onChange={(e) => handleColumnChange(codeCol, e.target.value, unitCol, qtyCol)}
                           className="border border-border rounded px-2 py-1 text-xs bg-white font-medium"
                         >
                           {headers.map((h) => (
@@ -527,10 +581,26 @@ export function StockQtyImportModal() {
                       </div>
 
                       <div>
-                        <label className="text-[11px] font-semibold text-text-muted mr-1">Adet:</label>
+                        <label className="text-[11px] font-semibold text-text-muted mr-1">Birim:</label>
+                        <select
+                          value={unitCol}
+                          onChange={(e) => handleColumnChange(codeCol, nameCol, e.target.value, qtyCol)}
+                          className="border border-border rounded px-2 py-1 text-xs bg-white font-medium"
+                        >
+                          <option value="">(Otomatik Tahmin)</option>
+                          {headers.map((h) => (
+                            <option key={h} value={h}>
+                              {h}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label className="text-[11px] font-semibold text-text-muted mr-1">Stok:</label>
                         <select
                           value={qtyCol}
-                          onChange={(e) => handleColumnChange(codeCol, nameCol, e.target.value)}
+                          onChange={(e) => handleColumnChange(codeCol, nameCol, unitCol, e.target.value)}
                           className="border border-border rounded px-2 py-1 text-xs bg-white font-medium"
                         >
                           {headers.map((h) => (
@@ -543,6 +613,49 @@ export function StockQtyImportModal() {
                     </div>
                   </div>
 
+                  {/* İŞLEM MODU SEÇİCİ BANNER */}
+                  <div className="bg-emerald-50/70 border border-emerald-200 p-3 rounded-xl flex flex-wrap items-center justify-between gap-3 text-xs">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <span className="font-bold text-emerald-950">İşlem Modu:</span>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="syncMode"
+                          checked={syncMode === "set"}
+                          onChange={() => setSyncMode("set")}
+                          className="text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span className="font-semibold text-emerald-900">
+                          🎯 Stokları Eşitle (Yeni Stok = Excel Miktarı)
+                        </span>
+                      </label>
+                      <label className="flex items-center gap-1.5 cursor-pointer">
+                        <input
+                          type="radio"
+                          name="syncMode"
+                          checked={syncMode === "add"}
+                          onChange={() => setSyncMode("add")}
+                          className="text-emerald-600 focus:ring-emerald-500"
+                        />
+                        <span className="font-semibold text-slate-700">
+                          ➕ Mevcut Stoğun Üstüne Ekle
+                        </span>
+                      </label>
+                    </div>
+
+                    <label className="flex items-center gap-1.5 cursor-pointer bg-white px-2.5 py-1 rounded-lg border border-emerald-200">
+                      <input
+                        type="checkbox"
+                        checked={createMissing}
+                        onChange={(e) => setCreateMissing(e.target.checked)}
+                        className="rounded text-emerald-600 focus:ring-emerald-500"
+                      />
+                      <span className="font-semibold text-emerald-900">
+                        Sistemde olmayan ürünleri yeni olarak ekle
+                      </span>
+                    </label>
+                  </div>
+
                   {/* Özet Kartları */}
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5">
                     <div className="bg-slate-100 p-3 rounded-xl border border-slate-200">
@@ -550,16 +663,18 @@ export function StockQtyImportModal() {
                       <p className="text-lg font-bold text-text">{totalRows}</p>
                     </div>
                     <div className="bg-emerald-50 p-3 rounded-xl border border-emerald-200">
-                      <p className="text-[11px] text-emerald-800 font-semibold">Eşleşen (Arttırılacak)</p>
+                      <p className="text-[11px] text-emerald-800 font-semibold">Sistemde Eşleşen</p>
                       <p className="text-lg font-bold text-emerald-700">{matchedRows.length} Ürün</p>
                     </div>
                     <div className="bg-amber-50 p-3 rounded-xl border border-amber-200">
-                      <p className="text-[11px] text-amber-800 font-semibold">Bulunamayan (Değişmeyecek)</p>
+                      <p className="text-[11px] text-amber-800 font-semibold">
+                        {createMissing ? "Yeni Eklenecek" : "Atlanacak (Kayıtsız)"}
+                      </p>
                       <p className="text-lg font-bold text-amber-700">{notFoundRows.length} Ürün</p>
                     </div>
                     <div className="bg-blue-50 p-3 rounded-xl border border-blue-200">
-                      <p className="text-[11px] text-blue-800 font-semibold">Eklenecek Toplam Stok</p>
-                      <p className="text-lg font-bold text-blue-700">+{formatQty(totalQtyToAdd)}</p>
+                      <p className="text-[11px] text-blue-800 font-semibold">İşlenecek Toplam Stok</p>
+                      <p className="text-lg font-bold text-blue-700">{formatQty(totalQtyTarget)}</p>
                     </div>
                   </div>
 
@@ -592,11 +707,11 @@ export function StockQtyImportModal() {
                           filterMode === "not_found" ? "bg-amber-600 text-white" : "bg-amber-50 text-amber-700 hover:bg-amber-100"
                         }`}
                       >
-                        ⚠️ Değişmeyenler ({notFoundRows.length})
+                        {createMissing ? "✨ Yeni Ürünler" : "⚠️ Değişmeyenler"} ({notFoundRows.length})
                       </button>
                     </div>
                     <span className="text-[11px] text-text-muted">
-                      İlk 50 satır gösteriliyor
+                      İlk 50 satır önizlemesi
                     </span>
                   </div>
 
@@ -606,12 +721,12 @@ export function StockQtyImportModal() {
                       <thead className="bg-slate-100 sticky top-0 border-b border-border text-text-muted font-semibold">
                         <tr>
                           <th className="px-3 py-2">#</th>
-                          <th className="px-3 py-2">Excel Kodu</th>
-                          <th className="px-3 py-2">Rakam</th>
-                          <th className="px-3 py-2">Eşleşen Sistem Ürünü</th>
-                          <th className="px-3 py-2 text-right">Mevcut</th>
-                          <th className="px-3 py-2 text-right">Eklenecek</th>
-                          <th className="px-3 py-2 text-right font-bold text-emerald-700">Yeni Stok</th>
+                          <th className="px-3 py-2">Stok Kodu</th>
+                          <th className="px-3 py-2">Stok Adı</th>
+                          <th className="px-3 py-2">Birim</th>
+                          <th className="px-3 py-2 text-right">Mevcut Stok</th>
+                          <th className="px-3 py-2 text-right">Excel Stoğu</th>
+                          <th className="px-3 py-2 text-right font-bold text-emerald-700">İşlem Sonrası</th>
                           <th className="px-3 py-2 text-center">Durum</th>
                         </tr>
                       </thead>
@@ -619,41 +734,38 @@ export function StockQtyImportModal() {
                         {displayRows.slice(0, 50).map((row) => {
                           const isMatched = row.status === "matched";
                           const currentStock = row.matchedProduct?.stock_qty ?? 0;
-                          const newStock = currentStock + row.rawQty;
+                          const finalStock = syncMode === "set" ? row.rawQty : currentStock + row.rawQty;
                           return (
-                            <tr key={row.index} className={isMatched ? "hover:bg-emerald-50/40" : "bg-amber-50/20"}>
+                            <tr key={row.index} className={isMatched ? "hover:bg-emerald-50/40" : "bg-amber-50/20 hover:bg-amber-50/40"}>
                               <td className="px-3 py-2 text-text-muted">{row.index}</td>
                               <td className="px-3 py-2 font-mono text-[11px] font-semibold">{row.rawCode || "-"}</td>
-                              <td className="px-3 py-2 font-mono text-emerald-700 font-bold">{row.extractedDigits || "-"}</td>
                               <td className="px-3 py-2 max-w-xs truncate">
-                                {row.matchedProduct ? (
-                                  <div>
-                                    <span className="font-semibold text-text">{row.matchedProduct.product_name}</span>
-                                    <span className="text-[10px] text-text-muted block font-mono">
-                                      {row.matchedProduct.product_code}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <span className="text-text-muted italic">{row.rawName || "Sistemde bulunamadı"}</span>
-                                )}
+                                <span className="font-semibold text-text">
+                                  {row.matchedProduct?.product_name || row.rawName || "-"}
+                                </span>
                               </td>
+                              <td className="px-3 py-2 text-text-muted">{row.unit}</td>
                               <td className="px-3 py-2 text-right tabular-nums">
                                 {isMatched ? formatQty(currentStock) : "-"}
                               </td>
-                              <td className="px-3 py-2 text-right font-bold tabular-nums text-emerald-600">
-                                {row.rawQty > 0 ? `+${formatQty(row.rawQty)}` : "0"}
+                              <td className="px-3 py-2 text-right font-bold tabular-nums text-blue-700">
+                                {row.rawQty > 0 ? formatQty(row.rawQty) : "0"}
                               </td>
                               <td className="px-3 py-2 text-right font-bold tabular-nums text-emerald-700">
-                                {isMatched ? formatQty(newStock) : "-"}
+                                {formatQty(finalStock)}
                               </td>
                               <td className="px-3 py-2 text-center">
                                 {isMatched ? (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                                    Arttırılacak
+                                    {syncMode === "set" ? "Eşitlenecek" : "Arttırılacak"}
+                                  </span>
+                                ) : createMissing ? (
+                                  <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800">
+                                    Yeni Eklenecek
                                   </span>
                                 ) : (
                                   <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800">
-                                    Değişmeyecek
+                                    Atlanacak
                                   </span>
                                 )}
                               </td>
@@ -669,7 +781,7 @@ export function StockQtyImportModal() {
                     {displayRows.slice(0, 30).map((row) => {
                       const isMatched = row.status === "matched";
                       const currentStock = row.matchedProduct?.stock_qty ?? 0;
-                      const newStock = currentStock + row.rawQty;
+                      const finalStock = syncMode === "set" ? row.rawQty : currentStock + row.rawQty;
                       return (
                         <div
                           key={row.index}
@@ -679,26 +791,27 @@ export function StockQtyImportModal() {
                         >
                           <div className="flex items-center justify-between">
                             <span className="font-mono text-emerald-800 font-bold">
-                              Rakam: {row.extractedDigits || row.rawCode || `#${row.index}`}
+                              {row.rawCode || `#${row.index}`}
                             </span>
                             <span
                               className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                                isMatched ? "bg-emerald-100 text-emerald-800" : "bg-amber-100 text-amber-800"
+                                isMatched
+                                  ? "bg-emerald-100 text-emerald-800"
+                                  : createMissing
+                                  ? "bg-blue-100 text-blue-800"
+                                  : "bg-amber-100 text-amber-800"
                               }`}
                             >
-                              {isMatched ? "Arttırılacak" : "Değişmeyecek"}
+                              {isMatched ? (syncMode === "set" ? "Eşitlenecek" : "Arttırılacak") : createMissing ? "Yeni Ürün" : "Atlanacak"}
                             </span>
                           </div>
                           <p className="font-semibold text-text">
-                            {row.matchedProduct?.product_name || row.rawName || "Eşleşmeyen Ürün"}
+                            {row.matchedProduct?.product_name || row.rawName || "Ürün"}
                           </p>
-                          {isMatched && (
-                            <div className="flex items-center justify-between text-[11px] pt-1 border-t border-emerald-100">
-                              <span className="text-text-muted">Mevcut: {formatQty(currentStock)}</span>
-                              <span className="text-emerald-700 font-bold">+{formatQty(row.rawQty)} Eklenecek</span>
-                              <span className="text-emerald-900 font-extrabold">Yeni: {formatQty(newStock)}</span>
-                            </div>
-                          )}
+                          <div className="flex items-center justify-between text-[11px] pt-1 border-t border-emerald-100">
+                            <span className="text-text-muted">Excel: {formatQty(row.rawQty)} {row.unit}</span>
+                            <span className="text-emerald-900 font-extrabold">Hedef: {formatQty(finalStock)}</span>
+                          </div>
                         </div>
                       );
                     })}
@@ -710,7 +823,7 @@ export function StockQtyImportModal() {
                       <div className="flex items-center justify-between text-xs font-bold text-emerald-900">
                         <span className="flex items-center gap-1.5">
                           <Loader2 size={14} className="animate-spin text-emerald-600" />
-                          Stoklar Güncelleniyor... ({progress.current} / {progress.total})
+                          Stoklar İşleniyor... ({progress.current} / {progress.total})
                         </span>
                         <span>%{progress.percent}</span>
                       </div>
@@ -740,19 +853,21 @@ export function StockQtyImportModal() {
               {parsedRows.length > 0 && (
                 <button
                   type="button"
-                  onClick={handleConfirmIncrease}
-                  disabled={isUpdating || matchedRows.length === 0}
+                  onClick={handleConfirmSync}
+                  disabled={isUpdating || targetRows.length === 0}
                   className="bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white px-5 py-2.5 rounded-xl text-xs sm:text-sm font-bold flex items-center gap-2 transition shadow-sm"
                 >
                   {isUpdating ? (
                     <>
                       <Loader2 size={16} className="animate-spin" />
-                      <span>İşleniyor...</span>
+                      <span>İşleniyor ({progress.current}/{progress.total})...</span>
                     </>
                   ) : (
                     <>
                       <CheckCircle2 size={16} />
-                      <span>Stoğu Arttır ({matchedRows.length} Ürün)</span>
+                      <span>
+                        {syncMode === "set" ? "Stokları Eşitle / Yükle" : "Stoğu Arttır"} ({targetRows.length} Ürün)
+                      </span>
                     </>
                   )}
                 </button>

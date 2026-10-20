@@ -7,7 +7,7 @@ import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import { saveExcelProducts, savePdfDocument, extractProductsFromPdf } from "../actions";
 import type { ParsedProductRow } from "../types";
-import { parseTurkishNumber, formatCurrency } from "@/lib/formatters";
+import { parseTurkishNumber, formatCurrency, formatQty } from "@/lib/formatters";
 import {
   UploadCloud,
   FileSpreadsheet,
@@ -67,13 +67,13 @@ export default function ImportWizardPage() {
     const worksheet = workbook.Sheets[sheetName];
     if (!worksheet) return;
 
-    const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as unknown[][];
+    const rawData = XLSX.utils.sheet_to_json(worksheet, { header: 1, raw: true }) as unknown[][];
     if (rawData.length < 2) {
       toast.error("Seçilen sayfada yeterli veri bulunamadı.");
       return;
     }
 
-    // Başlık satırını bul (kod/ürün/fiyat içeren satır)
+    // Başlık satırını bul (kod/ürün/fiyat/stok içeren satır)
     let headerIndex = 0;
     for (let i = 0; i < Math.min(rawData.length, 10); i++) {
       const row = rawData[i];
@@ -82,7 +82,8 @@ export default function ImportWizardPage() {
         if (
           rowStr.includes("KOD") ||
           rowStr.includes("ÜRÜN") ||
-          rowStr.includes("FİYAT")
+          rowStr.includes("FİYAT") ||
+          rowStr.includes("STOK")
         ) {
           headerIndex = i;
           break;
@@ -107,27 +108,46 @@ export default function ImportWizardPage() {
 
     headers.forEach((h, idx) => {
       const upper = h.toUpperCase().trim();
-      if ((upper.includes("KOD") || upper === "STOK KODU") && colCode === -1) colCode = idx;
-      else if (
+      if ((upper.includes("KOD") || upper === "STOK KODU" || upper === "MALZEME KODU") && colCode === -1) {
+        colCode = idx;
+      } else if (
         (upper.includes("ÜRÜN AD") || upper.includes("MALZEME") || upper.includes("AÇIKLAMA") || upper === "STOK ADI") &&
         colName === -1
-      )
+      ) {
         colName = idx;
-      else if ((upper.includes("GRUP") || upper === "STOK GRUBU") && colGroup === -1) colGroup = idx;
-      else if (upper.includes("SERİ") && colSeries === -1) colSeries = idx;
-      else if (upper.includes("EBAT") && colSize === -1) colSize = idx;
-      else if ((upper.includes("BİRİM") || upper.includes("BRM")) && colUnit === -1) colUnit = idx;
-      else if ((upper.includes("KALAN") || upper.includes("STOK MİKTAR") || upper.includes("MEVCUT") || upper === "KALAN MİKTAR") && colStockQty === -1)
+      } else if ((upper.includes("GRUP") || upper === "STOK GRUBU") && colGroup === -1) {
+        colGroup = idx;
+      } else if (upper.includes("SERİ") && colSeries === -1) {
+        colSeries = idx;
+      } else if (upper.includes("EBAT") && colSize === -1) {
+        colSize = idx;
+      } else if ((upper.includes("BİRİM") || upper.includes("BRM") || upper === "BİRİMİ") && colUnit === -1) {
+        colUnit = idx;
+      } else if (
+        (upper === "STOK" ||
+          upper.includes("STOK MİKTAR") ||
+          upper.includes("KALAN") ||
+          upper.includes("MEVCUT") ||
+          upper === "KALAN MİKTAR" ||
+          upper.includes("MIKTAR") ||
+          upper.includes("MİKTAR") ||
+          upper.includes("QTY") ||
+          upper.includes("ADET")) &&
+        colStockQty === -1 &&
+        idx !== colCode &&
+        idx !== colName
+      ) {
         colStockQty = idx;
-      else if (
+      } else if (
         (upper === "STANDART" || upper.includes("STANDART FİYAT") || upper.includes("1.LİSTE") || upper.includes("1. LİSTE") || upper.includes("1.KALİTE") || upper.includes("1. KALİTE")) &&
         colQ1 === -1
-      )
+      ) {
         colQ1 = idx;
-      else if ((upper.includes("2.LİSTE") || upper.includes("2. LİSTE") || upper.includes("2.KALİTE") || upper.includes("2. KALİTE")) && colQ2 === -1)
+      } else if ((upper.includes("2.LİSTE") || upper.includes("2. LİSTE") || upper.includes("2.KALİTE") || upper.includes("2. KALİTE")) && colQ2 === -1) {
         colQ2 = idx;
-      else if ((upper.includes("TİCARİ") || upper.includes("TICARI")) && colQCommercial === -1)
+      } else if ((upper.includes("TİCARİ") || upper.includes("TICARI")) && colQCommercial === -1) {
         colQCommercial = idx;
+      }
     });
 
     // Fallback: eğer name bulunamadıysa ve code 0'daysa name 1 olsun
@@ -418,6 +438,7 @@ export default function ImportWizardPage() {
                         <th className="text-left px-3 py-2 font-medium">Ürün Adı</th>
                         <th className="text-left px-3 py-2 font-medium">Ebat</th>
                         <th className="text-left px-3 py-2 font-medium">Birim</th>
+                        <th className="text-right px-3 py-2 font-medium text-emerald-800">Stok Miktarı</th>
                         <th className="text-right px-3 py-2 font-medium">1. Kalite</th>
                         <th className="text-right px-3 py-2 font-medium">2. Kalite</th>
                         <th className="text-right px-3 py-2 font-medium">Ticari</th>
@@ -434,6 +455,9 @@ export default function ImportWizardPage() {
                           </td>
                           <td className="px-3 py-2 text-text-muted">{row.size || "-"}</td>
                           <td className="px-3 py-2 text-text-muted">{row.unit || "M2"}</td>
+                          <td className="px-3 py-2 text-right tabular-nums font-bold text-emerald-700">
+                            {row.stock_qty != null ? `${formatQty(row.stock_qty)} ${row.unit || ""}` : "-"}
+                          </td>
                           <td className="px-3 py-2 text-right tabular-nums text-text font-medium">
                             {formatCurrency(row.price_quality_1)}
                           </td>

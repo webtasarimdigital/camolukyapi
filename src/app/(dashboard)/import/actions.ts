@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
 import type { ParsedProductRow } from "./types";
+import { parseTurkishNumber } from "@/lib/formatters";
 
 export async function saveExcelProducts(payload: {
   fileName: string;
@@ -80,7 +81,7 @@ export async function saveExcelProducts(payload: {
         price_quality_2: p2,
         price_commercial: pC,
         default_sale_price: defPrice,
-        stock_qty: typeof item.stock_qty === "number" ? item.stock_qty : 0,
+        stock_qty: typeof item.stock_qty === "number" ? item.stock_qty : (parseTurkishNumber(item.stock_qty) || 0),
         min_stock_qty: 0,
         allows_decimal_qty: true,
         last_import_id: importId,
