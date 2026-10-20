@@ -1,6 +1,6 @@
 'use server';
 
-import { createClient } from '@/lib/supabase/server';
+import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { parseCurrencyInput } from '@/lib/formatters';
 
@@ -92,4 +92,93 @@ export async function deactivateProduct(id: string) {
   if (error) throw new Error(error.message);
   revalidatePath('/urunler');
   return { success: true };
+}
+
+export async function deleteAllStock(mode: "all_products" | "zero_stock" = "all_products"): Promise<{
+  success: boolean;
+  message?: string;
+  error?: string;
+}> {
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return { success: false, error: "Oturum bulunamadı. Lütfen giriş yapın." };
+    }
+
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("company_id")
+      .eq("id", user.id)
+      .single();
+
+    const companyId = (profile as any)?.company_id;
+    if (!companyId) {
+      return { success: false, error: "Şirket profili bulunamadı." };
+    }
+
+    // Service client used to ensure full administrative execution without RLS issues
+    const serviceClient = await createServiceClient();
+
+    if (mode === "zero_stock") {
+      // 1. Tüm aktif ürünlerin stok miktarını 0 yap
+      const { error: updateErr } = await serviceClient
+        .from("products")
+        .update({ stock_qty: 0, updated_at: new Date().toISOString() } as never)
+        .eq("company_id", companyId)
+        .is("deleted_at", null);
+
+      if (updateErr) {
+        console.error("Stok sıfırlama hatası:", updateErr);
+        return { success: false, error: `Stok sıfırlanamadı: ${updateErr.message}` };
+      }
+    } else {
+      // 2. Tüm ürünleri ve stoğu tamamen sil
+      // Önce doğrudan kalıcı silme dene (hard delete)
+      const { error: hardDeleteErr } = await serviceClient
+        .from("products")
+        .delete()
+        .eq("company_id", companyId);
+
+      if (hardDeleteErr) {
+        console.warn("Hard delete hatası, soft-delete deneniyor:", hardDeleteErr);
+        const { error: softErr } = await serviceClient
+          .from("products")
+          .update({
+            deleted_at: new Date().toISOString(),
+            is_active: false,
+            stock_qty: 0,
+            updated_at: new Date().toISOString(),
+          } as never)
+          .eq("company_id", companyId);
+
+        if (softErr) {
+          return { success: false, error: `Silme işlemi başarısız: ${softErr.message}` };
+        }
+      }
+    }
+
+    revalidatePath("/urunler");
+    revalidatePath("/stok");
+    revalidatePath("/stok/hareketler");
+    revalidatePath("/raporlar/kritik-stok");
+    revalidatePath("/dashboard");
+
+    return {
+      success: true,
+      message:
+        mode === "zero_stock"
+          ? "Tüm stok adetleri başarıyla sıfırlandı."
+          : "Tüm ürün ve stok kayıtları başarıyla silindi.",
+    };
+  } catch (err: any) {
+    console.error("deleteAllStock exception:", err);
+    return {
+      success: false,
+      error: err?.message || "İşlem sırasında beklenmeyen bir hata oluştu.",
+    };
+  }
 }

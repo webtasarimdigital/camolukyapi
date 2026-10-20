@@ -82,6 +82,7 @@ export async function saveExcelProducts(payload: {
         allows_decimal_qty: true,
         last_import_id: importId,
         is_active: true,
+        deleted_at: null,
         updated_at: now,
       };
     });

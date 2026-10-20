@@ -59,6 +59,7 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
   const [modalPhotos, setModalPhotos] = useState<string[]>([]);
   const [selectedVehiclePlate, setSelectedVehiclePlate] = useState<string>("");
   const [driverNameInput, setDriverNameInput] = useState<string>("");
+  const [modalDestination, setModalDestination] = useState<string>("");
   const [photoUploading, setPhotoUploading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -144,6 +145,7 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
     setModalPhotos([]);
     setSelectedVehiclePlate("");
     setDriverNameInput("");
+    setModalDestination("");
     setIsModalOpen(true);
   }
 
@@ -152,6 +154,7 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
     setModalPhotos(Array.isArray(item.photos) ? item.photos : []);
     setSelectedVehiclePlate(item.vehicle_plate || "");
     setDriverNameInput(item.driver_name || "");
+    setModalDestination(item.destination || "");
     setIsModalOpen(true);
   }
 
@@ -630,10 +633,21 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
                             {item.seller || "-"}
                           </td>
                           <td className="py-3 px-4 max-w-[200px]">
-                            <span className="flex items-center gap-1 text-text-muted truncate">
-                              <MapPin size={12} className="text-brand-navy flex-shrink-0" />
-                              <span className="truncate">{item.destination}</span>
-                            </span>
+                            {item.destination ? (
+                              <a
+                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.destination)}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="group flex items-center gap-1.5 text-text-muted hover:text-brand-navy hover:underline transition truncate"
+                                title={`${item.destination} (Google Haritalar'da Aç)`}
+                              >
+                                <MapPin size={13} className="text-brand-navy shrink-0 group-hover:scale-125 transition-transform" />
+                                <span className="truncate group-hover:text-brand-navy font-medium">{item.destination}</span>
+                                <ExternalLink size={10} className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-brand-navy" />
+                              </a>
+                            ) : (
+                              <span className="text-text-muted">-</span>
+                            )}
                           </td>
                           <td className="py-3 px-4">
                             {item.vehicle_plate ? (
@@ -759,10 +773,19 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
 
                       <div>
                         <h4 className="font-bold text-sm text-text">{item.customer_name}</h4>
-                        <p className="text-xs text-text-muted flex items-center gap-1 mt-0.5">
-                          <MapPin size={12} className="text-brand-navy shrink-0" />
-                          <span className="truncate">{item.destination}</span>
-                        </p>
+                        {item.destination ? (
+                          <a
+                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.destination)}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-text-muted hover:text-brand-navy hover:underline flex items-center gap-1 mt-0.5 group"
+                            title={`${item.destination} (Google Haritalar'da Aç)`}
+                          >
+                            <MapPin size={12} className="text-brand-navy shrink-0 group-hover:scale-125 transition-transform" />
+                            <span className="truncate group-hover:text-brand-navy font-medium">{item.destination}</span>
+                            <ExternalLink size={10} className="shrink-0 opacity-60 group-hover:opacity-100 text-brand-navy" />
+                          </a>
+                        ) : null}
                       </div>
 
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 border-t border-border/50">
@@ -976,13 +999,29 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
               </div>
 
               <div>
-                <label className="block font-semibold text-text mb-1">Sevk Yeri / Adres *</label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="block font-semibold text-text">Sevk Yeri / Adres *</label>
+                  {modalDestination.trim() && (
+                    <a
+                      href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(modalDestination.trim())}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-bold text-brand-navy hover:underline inline-flex items-center gap-1 bg-brand-navy/5 px-2 py-0.5 rounded border border-brand-navy/15 transition hover:bg-brand-navy/10"
+                      title="Google Haritalar'da Konumu Gör"
+                    >
+                      <MapPin size={11} className="text-brand-navy" />
+                      <span>Haritada Gör</span>
+                      <ExternalLink size={9} />
+                    </a>
+                  )}
+                </div>
                 <input
                   type="text"
                   required
                   name="destination"
-                  defaultValue={editingShipment?.destination || ""}
-                  placeholder="Şantiye adresi, ilçe veya depo..."
+                  value={modalDestination}
+                  onChange={(e) => setModalDestination(e.target.value)}
+                  placeholder="Şantiye adresi, ilçe veya depo (örn: Çekmeköy Alibey Mahallesi)..."
                   className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy"
                 />
               </div>

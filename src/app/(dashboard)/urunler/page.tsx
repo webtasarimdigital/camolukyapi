@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { formatCurrency, formatQty } from '@/lib/formatters';
 import { Suspense } from 'react';
 import { StockQtyImportModal } from './StockQtyImportModal';
+import { DeleteAllStockModal } from './DeleteAllStockModal';
 
 export default async function UrunlerPage({
   searchParams,
@@ -58,6 +59,7 @@ export default async function UrunlerPage({
         </div>
         <div className="flex flex-wrap items-center gap-2">
           <StockQtyImportModal />
+          <DeleteAllStockModal totalCount={count ?? 0} />
           <Link
             href="/import"
             className="bg-surface border border-border text-text px-3.5 py-2 rounded-lg text-sm font-semibold hover:bg-gray-100 transition flex items-center gap-1.5"
