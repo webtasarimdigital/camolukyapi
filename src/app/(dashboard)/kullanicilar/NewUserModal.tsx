@@ -113,6 +113,9 @@ export default function NewUserModal({ companyId }: { companyId: string }) {
               <option value="muhasebe1">Muhasebe 1 (Genel Muhasebe, Teklif, Satış, Ödemeler)</option>
               <option value="muhasebe2">Muhasebe 2 (Tüm Muhasebe + Finans & Ortak Cari)</option>
               <option value="sevkiyat">Sevkiyat Sorumlusu (Sevkiyat, Otobil GPS & Stok)</option>
+              <option value="depo">Depo Sorumlusu (Yalnızca Sevkiyat & Yükleme)</option>
+              <option value="sofor">Şoför (Yalnızca Sevkiyat & Yükleme)</option>
+              <option value="satis">Satış Temsilcisi (Teklif, Satış, Sevkiyat, Müşteriler)</option>
               <option value="staff">Personel (Standart Personel Erişimi)</option>
               <option value="admin">Yönetici / Admin (Tam Yetkili)</option>
             </select>

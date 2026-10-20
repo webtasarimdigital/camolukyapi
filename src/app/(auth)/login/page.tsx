@@ -4,11 +4,10 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
-import { quickRoleLogin } from "./actions";
 import { setActiveUserRole } from "@/lib/auth/role";
 import { type UserRole } from "@/lib/auth/role-constants";
 import { toast } from "sonner";
-import { Shield, Briefcase, BarChart3, Truck, Loader2 } from "lucide-react";
+import { Lock, User, Loader2 } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -16,18 +15,51 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
-  const [quickLoadingRole, setQuickLoadingRole] = useState<UserRole | null>(null);
 
   async function handleLogin(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
 
-    const inputVal = username.trim().toLowerCase();
+    let inputVal = username.trim().toLowerCase();
+    
+    // Kullanıcı adını normalize et
+    if (inputVal === "şoför" || inputVal === "sofor") {
+      inputVal = "sofor";
+    } else if (inputVal === "satış" || inputVal === "satis") {
+      inputVal = "satis";
+    } else if (inputVal === "depo") {
+      inputVal = "depo";
+    } else if (inputVal === "admin" || inputVal === "camoluk") {
+      inputVal = "camoluk";
+    }
+
     const email = inputVal.includes("@") ? inputVal : `${inputVal}@camolukyapi.com`;
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    // 1. Girilen şifre ile dene
+    let res = await supabase.auth.signInWithPassword({ email, password });
 
-    if (error) {
+    // 2. Başarısız olursa ve Türkçe karakter farkı varsa alternatif şifre ile dene
+    if (res.error) {
+      let altPassword = password;
+      if (altPassword.includes("ş") || altPassword.includes("ö") || altPassword.includes("ı") || altPassword.includes("ç") || altPassword.includes("ğ") || altPassword.includes("ü")) {
+        altPassword = altPassword
+          .replace(/ş/g, "s")
+          .replace(/ö/g, "o")
+          .replace(/ı/g, "i")
+          .replace(/ç/g, "c")
+          .replace(/ğ/g, "g")
+          .replace(/ü/g, "u");
+      } else {
+        if (inputVal === "sofor" && password === "camoluksofor1") altPassword = "camolukşoför1";
+        if (inputVal === "satis" && password === "camoluksatis2") altPassword = "camoluksatış2";
+      }
+
+      if (altPassword !== password) {
+        res = await supabase.auth.signInWithPassword({ email, password: altPassword });
+      }
+    }
+
+    if (res.error || !res.data.user) {
       toast.error("Giriş başarısız", {
         description: "Kullanıcı adı veya şifre hatalı.",
       });
@@ -35,44 +67,37 @@ export default function LoginPage() {
       return;
     }
 
-    // Role tespiti
-    let detectedRole: UserRole = "admin";
-    if (inputVal.includes("muhasebe1")) detectedRole = "muhasebe1";
-    else if (inputVal.includes("muhasebe2")) detectedRole = "muhasebe2";
-    else if (inputVal.includes("sevkiyat")) detectedRole = "sevkiyat";
+    // Gerçek profil rolünü doğrudan veritabanından çek (Güvenlik / RBAC)
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("role, full_name")
+      .eq("id", res.data.user.id)
+      .single();
 
-    await setActiveUserRole(detectedRole);
+    const profile = profileData as { role?: string; full_name?: string } | null;
+    const actualRole = (profile?.role as UserRole) || "admin";
+    const actualName = profile?.full_name || undefined;
 
-    toast.success("Giriş başarılı");
-    if (detectedRole === "sevkiyat") {
+    await setActiveUserRole(actualRole, actualName);
+
+    toast.success("Giriş başarılı", {
+      description: `Hoş geldiniz, ${actualName || actualRole}`,
+    });
+
+    // Role göre yetkili ana sayfaya yönlendir
+    if (actualRole === "depo" || actualRole === "sofor" || actualRole === "sevkiyat") {
       router.push("/sevkiyat");
+    } else if (actualRole === "satis") {
+      router.push("/teklifler");
     } else {
       router.push("/dashboard");
     }
     router.refresh();
   }
 
-  async function handleQuickRole(role: UserRole) {
-    setQuickLoadingRole(role);
-    try {
-      const res = await quickRoleLogin(role);
-      if (res.success) {
-        toast.success(`${role.toUpperCase()} girişi sağlandı`);
-        router.push(res.redirectTo || "/dashboard");
-        router.refresh();
-      } else {
-        toast.error("Giriş yapılırken hata oluştu: " + res.error);
-      }
-    } catch {
-      toast.error("Giriş işlemi başarısız.");
-    } finally {
-      setQuickLoadingRole(null);
-    }
-  }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-brand-navy p-4">
-      <div className="w-full max-w-lg space-y-6">
+      <div className="w-full max-w-md space-y-6">
         {/* LOGO */}
         <div className="flex justify-center">
           <div className="bg-white rounded-2xl px-6 py-3 shadow-lg">
@@ -92,14 +117,15 @@ export default function LoginPage() {
             <h1 className="text-white text-xl font-bold">
               Operasyon & Yönetim Paneli
             </h1>
-            <p className="text-slate-400 text-xs mt-1">
-              Lütfen giriş bilgilerinizi giriniz veya aşağıdan doğrudan rol seçiniz.
+            <p className="text-slate-400 text-xs mt-1.5">
+              Lütfen sisteme erişmek için kullanıcı adı ve şifrenizi giriniz.
             </p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <User size={14} className="text-brand-gold" />
                 Kullanıcı Adı veya E-Posta
               </label>
               <input
@@ -109,12 +135,13 @@ export default function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-brand-navy border border-white/15 text-white rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold transition placeholder:text-slate-500"
-                placeholder="Örn: camoluk, muhasebe1, sevkiyat"
+                placeholder="Örn: depo, şoför, satış, camoluk"
               />
             </div>
 
             <div>
-              <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              <label className="block text-xs font-semibold text-slate-300 mb-1.5 flex items-center gap-1.5">
+                <Lock size={14} className="text-brand-gold" />
                 Şifre
               </label>
               <input
@@ -131,103 +158,18 @@ export default function LoginPage() {
             <button
               type="submit"
               disabled={loading}
-              className="w-full bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold rounded-xl py-3 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md cursor-pointer"
+              className="w-full bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold rounded-xl py-3 text-sm transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md cursor-pointer flex items-center justify-center gap-2 mt-2"
             >
-              {loading ? "Giriş yapılıyor..." : "Sisteme Giriş Yap"}
+              {loading ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Giriş Yapılıyor...</span>
+                </>
+              ) : (
+                <span>Sisteme Giriş Yap</span>
+              )}
             </button>
           </form>
-
-          {/* ROL TABANLI HIZLI GİRİŞ BUTONLARI (RBAC) */}
-          <div className="mt-8 pt-6 border-t border-white/10">
-            <p className="text-[11px] font-bold uppercase tracking-wider text-slate-400 text-center mb-3">
-              ⚡ Hızlı / Rol Tabanlı Giriş Seçenekleri
-            </p>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-              {/* 1. Admin */}
-              <button
-                type="button"
-                onClick={() => handleQuickRole("admin")}
-                disabled={quickLoadingRole !== null}
-                className="flex items-start gap-2.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-brand-gold/60 text-left transition group cursor-pointer"
-              >
-                <div className="p-2 rounded-lg bg-amber-500/20 text-amber-400 mt-0.5">
-                  <Shield size={16} />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white group-hover:text-brand-gold flex items-center gap-1.5">
-                    Admin / Çamoluk
-                    {quickLoadingRole === "admin" && <Loader2 size={12} className="animate-spin" />}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    Tüm yetkiler, finans ve ayarlar açık
-                  </div>
-                </div>
-              </button>
-
-              {/* 2. Muhasebe 1 */}
-              <button
-                type="button"
-                onClick={() => handleQuickRole("muhasebe1")}
-                disabled={quickLoadingRole !== null}
-                className="flex items-start gap-2.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-blue-400/60 text-left transition group cursor-pointer"
-              >
-                <div className="p-2 rounded-lg bg-blue-500/20 text-blue-400 mt-0.5">
-                  <Briefcase size={16} />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white group-hover:text-blue-300 flex items-center gap-1.5">
-                    Muhasebe 1
-                    {quickLoadingRole === "muhasebe1" && <Loader2 size={12} className="animate-spin" />}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    Finans & Ortak Cari hariç tüm operasyonlar
-                  </div>
-                </div>
-              </button>
-
-              {/* 3. Muhasebe 2 */}
-              <button
-                type="button"
-                onClick={() => handleQuickRole("muhasebe2")}
-                disabled={quickLoadingRole !== null}
-                className="flex items-start gap-2.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-purple-400/60 text-left transition group cursor-pointer"
-              >
-                <div className="p-2 rounded-lg bg-purple-500/20 text-purple-400 mt-0.5">
-                  <BarChart3 size={16} />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white group-hover:text-purple-300 flex items-center gap-1.5">
-                    Muhasebe 2
-                    {quickLoadingRole === "muhasebe2" && <Loader2 size={12} className="animate-spin" />}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    Finans & Ortak Cari dahil tüm tablolar
-                  </div>
-                </div>
-              </button>
-
-              {/* 4. Sevkiyat */}
-              <button
-                type="button"
-                onClick={() => handleQuickRole("sevkiyat")}
-                disabled={quickLoadingRole !== null}
-                className="flex items-start gap-2.5 p-3 rounded-xl bg-white/5 hover:bg-white/10 border border-white/10 hover:border-emerald-400/60 text-left transition group cursor-pointer"
-              >
-                <div className="p-2 rounded-lg bg-emerald-500/20 text-emerald-400 mt-0.5">
-                  <Truck size={16} />
-                </div>
-                <div>
-                  <div className="text-xs font-bold text-white group-hover:text-emerald-300 flex items-center gap-1.5">
-                    Sevkiyat Kullanıcısı
-                    {quickLoadingRole === "sevkiyat" && <Loader2 size={12} className="animate-spin" />}
-                  </div>
-                  <div className="text-[10px] text-slate-400 mt-0.5">
-                    Yalnızca Sevkiyat & Stok yetkisi
-                  </div>
-                </div>
-              </button>
-            </div>
-          </div>
         </div>
 
         <p className="text-center text-xs text-slate-500">

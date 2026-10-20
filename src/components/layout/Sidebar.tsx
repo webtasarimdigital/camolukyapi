@@ -30,12 +30,14 @@ import {
   Globe,
 } from "lucide-react";
 
+import { type UserRole } from "@/lib/auth/role-constants";
+
 interface NavItem {
   href: string;
   label: string;
   icon: any;
   badge?: string;
-  allowedRoles: Array<"admin" | "muhasebe1" | "muhasebe2" | "sevkiyat">;
+  allowedRoles: UserRole[];
 }
 
 const navItems: NavItem[] = [
@@ -50,7 +52,7 @@ const navItems: NavItem[] = [
     label: "Sevkiyat & Yükleme",
     icon: Truck,
     badge: "Canlı",
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat"],
+    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat", "depo", "sofor", "satis"],
   },
   {
     href: "/otobil-gps",
@@ -70,7 +72,7 @@ const navItems: NavItem[] = [
     href: "/urunler",
     label: "Ürünler & Stok",
     icon: Package,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat"],
+    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat", "satis"],
   },
   {
     href: "/import",
@@ -82,31 +84,31 @@ const navItems: NavItem[] = [
     href: "/musteriler",
     label: "Müşteriler",
     icon: Users,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2"],
+    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "satis"],
   },
   {
     href: "/teklif/yeni",
     label: "Teklif Oluştur",
     icon: FileText,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2"],
+    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "satis"],
   },
   {
     href: "/teklifler",
     label: "Teklifler",
     icon: ClipboardList,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2"],
+    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "satis"],
   },
   {
     href: "/satis/yeni",
     label: "Satış Oluştur",
     icon: ShoppingCart,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2"],
+    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "satis"],
   },
   {
     href: "/satislar",
     label: "Satışlar",
     icon: ReceiptText,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2"],
+    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "satis"],
   },
   {
     href: "/odemeler",
@@ -175,11 +177,28 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
   const router = useRouter();
   const supabase = createClient();
 
-  const roleKey = (userRole as any) || "admin";
+  const roleKey = (userRole as UserRole) || "admin";
 
   const visibleItems = navItems.filter((item) =>
     item.allowedRoles.includes(roleKey)
   );
+
+  const homeHref =
+    roleKey === "depo" || roleKey === "sofor" || roleKey === "sevkiyat"
+      ? "/sevkiyat"
+      : roleKey === "satis"
+      ? "/teklifler"
+      : "/dashboard";
+
+  const roleBadgeMap: Record<string, string> = {
+    admin: "👑 Yönetici",
+    muhasebe1: "💼 Muhasebe 1",
+    muhasebe2: "📊 Muhasebe 2",
+    sevkiyat: "🚚 Sevkiyat",
+    depo: "📦 Depo Sorumlusu",
+    sofor: "🚚 Şoför",
+    satis: "💼 Satış",
+  };
 
   async function handleLogout() {
     await supabase.auth.signOut();
@@ -197,7 +216,7 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
       {/* Logo Header */}
       <div className="px-4 py-4 border-b border-white/10 flex items-center justify-between">
         <Link
-          href={roleKey === "sevkiyat" ? "/sevkiyat" : "/dashboard"}
+          href={homeHref}
           onClick={onCloseMobile}
           className="flex items-center justify-center flex-1"
         >
@@ -254,14 +273,8 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
       <div className="border-t border-white/10 p-3 space-y-2">
         <div className="px-2 py-1.5 rounded bg-brand-navy-2/60 border border-white/5 text-[11px] text-slate-300 flex items-center justify-between">
           <span>Yetki Seviyesi:</span>
-          <span className="font-bold text-brand-gold capitalize">
-            {roleKey === "admin"
-              ? "👑 Yönetici"
-              : roleKey === "muhasebe1"
-              ? "💼 Muhasebe 1"
-              : roleKey === "muhasebe2"
-              ? "📊 Muhasebe 2"
-              : "🚚 Sevkiyat"}
+          <span className="font-bold text-brand-gold">
+            {roleBadgeMap[roleKey] || "Kullanıcı"}
           </span>
         </div>
 

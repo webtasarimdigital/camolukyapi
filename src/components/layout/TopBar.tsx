@@ -82,88 +82,97 @@ export function TopBar({ userName, userRole = "admin", onToggleMobile }: TopBarP
         <Menu size={18} />
       </button>
 
-      {/* Global Arama */}
-      <form onSubmit={handleSearch} className="flex-1 max-w-md">
-        <div className="relative">
-          <Search
-            size={15}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
-          />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Ürün, müşteri, teklif no, fiş ara..."
-            className="w-full pl-9 pr-4 py-1.5 text-xs md:text-sm bg-surface border border-border rounded-lg outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold transition"
-          />
+      {/* Global Arama - Depo ve Şoför hariç diğer rollere açık */}
+      {currentRole !== "depo" && currentRole !== "sofor" ? (
+        <form onSubmit={handleSearch} className="flex-1 max-w-md">
+          <div className="relative">
+            <Search
+              size={15}
+              className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted"
+            />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Ürün, müşteri, teklif no, fiş ara..."
+              className="w-full pl-9 pr-4 py-1.5 text-xs md:text-sm bg-surface border border-border rounded-lg outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold transition"
+            />
+          </div>
+        </form>
+      ) : (
+        <div className="flex-1 flex items-center">
+          <span className="text-xs font-semibold text-brand-navy bg-amber-50 border border-amber-200 px-3 py-1 rounded-lg">
+            🚚 Sevkiyat & Yükleme Kontrol Paneli
+          </span>
         </div>
-      </form>
+      )}
 
       <div className="flex items-center gap-2 md:gap-3 ml-auto">
-        {/* HIZLI ROL GEÇİŞ BUTONU & DROPDOWN */}
-        <div className="relative" ref={roleRef}>
-          <button
-            onClick={() => setShowRoleMenu(!showRoleMenu)}
-            disabled={switching}
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 transition text-xs font-semibold cursor-pointer"
-            title="Kullanıcı Rolünü Değiştir"
-          >
-            <ShieldCheck size={14} className="text-amber-700" />
+        {/* ROL BİLGİSİ / ADMİN İÇİN HIZLI ROL GEÇİŞİ */}
+        {currentRole === "admin" ? (
+          <div className="relative" ref={roleRef}>
+            <button
+              onClick={() => setShowRoleMenu(!showRoleMenu)}
+              disabled={switching}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 transition text-xs font-semibold cursor-pointer"
+              title="Kullanıcı Rolünü Önizle (Yalnızca Admin)"
+            >
+              <ShieldCheck size={14} className="text-amber-700" />
+              <span className="hidden sm:inline">Admin (Rol Seç)</span>
+              <ChevronDown size={12} className="text-amber-700" />
+            </button>
+
+            {showRoleMenu && (
+              <div className="absolute right-0 top-full mt-1.5 w-72 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 divide-y divide-border">
+                <div className="px-3 py-2">
+                  <p className="text-xs font-bold text-text">Admin Önizleme Modu</p>
+                  <p className="text-[11px] text-text-muted">
+                    Sistemi farklı bir rolün gözünden görüntüleyin.
+                  </p>
+                </div>
+
+                <div className="p-1 space-y-0.5">
+                  {(Object.keys(ROLE_DEFINITIONS) as UserRole[]).map((r) => {
+                    const def = ROLE_DEFINITIONS[r];
+                    const isSelected = currentRole === r;
+                    return (
+                      <button
+                        key={r}
+                        onClick={() => handleSwitchRole(r)}
+                        className={`w-full text-left px-3 py-2 rounded-lg text-xs transition flex items-start justify-between gap-2 ${
+                          isSelected
+                            ? "bg-brand-navy text-white"
+                            : "hover:bg-surface text-text"
+                        }`}
+                      >
+                        <div>
+                          <div className="font-bold flex items-center gap-1.5">
+                            {def.label}
+                          </div>
+                          <div
+                            className={`text-[10px] mt-0.5 ${
+                              isSelected ? "text-slate-300" : "text-text-muted"
+                            }`}
+                          >
+                            {def.description}
+                          </div>
+                        </div>
+                        {isSelected && <Check size={14} className="text-brand-gold flex-shrink-0 mt-0.5" />}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-surface border border-border text-text transition text-xs font-semibold">
+            <ShieldCheck size={14} className="text-brand-gold" />
             <span className="hidden sm:inline">
-              {currentRole === "admin"
-                ? "Admin"
-                : currentRole === "muhasebe1"
-                ? "Muhasebe 1"
-                : currentRole === "muhasebe2"
-                ? "Muhasebe 2"
-                : "Sevkiyat"}
+              {ROLE_DEFINITIONS[currentRole]?.label || currentRole}
             </span>
-            <ChevronDown size={12} className="text-amber-700" />
-          </button>
-
-          {showRoleMenu && (
-            <div className="absolute right-0 top-full mt-1.5 w-72 bg-white border border-border rounded-xl shadow-xl z-50 py-1.5 divide-y divide-border">
-              <div className="px-3 py-2">
-                <p className="text-xs font-bold text-text">Hızlı Rol Seçimi (RBAC)</p>
-                <p className="text-[11px] text-text-muted">
-                  Test etmek veya işlem yapmak istediğiniz kullanıcı rolünü seçin.
-                </p>
-              </div>
-
-              <div className="p-1 space-y-0.5">
-                {(Object.keys(ROLE_DEFINITIONS) as UserRole[]).map((r) => {
-                  const def = ROLE_DEFINITIONS[r];
-                  const isSelected = currentRole === r;
-                  return (
-                    <button
-                      key={r}
-                      onClick={() => handleSwitchRole(r)}
-                      className={`w-full text-left px-3 py-2 rounded-lg text-xs transition flex items-start justify-between gap-2 ${
-                        isSelected
-                          ? "bg-brand-navy text-white"
-                          : "hover:bg-surface text-text"
-                      }`}
-                    >
-                      <div>
-                        <div className="font-bold flex items-center gap-1.5">
-                          {def.label}
-                        </div>
-                        <div
-                          className={`text-[10px] mt-0.5 ${
-                            isSelected ? "text-slate-300" : "text-text-muted"
-                          }`}
-                        >
-                          {def.description}
-                        </div>
-                      </div>
-                      {isSelected && <Check size={14} className="text-brand-gold flex-shrink-0 mt-0.5" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* Kullanıcı Profili */}
         <div className="relative" ref={profileRef}>

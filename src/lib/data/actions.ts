@@ -58,6 +58,9 @@ async function getCurrentUserName(): Promise<string> {
       if (profile.role === "muhasebe1") return "Muhasebe 1";
       if (profile.role === "muhasebe2") return "Muhasebe 2";
       if (profile.role === "sevkiyat") return "Sevkiyat Sorumlusu";
+      if (profile.role === "depo") return "Depo Sorumlusu";
+      if (profile.role === "sofor") return "Şoför";
+      if (profile.role === "satis") return "Satış Temsilcisi";
       return "Admin";
     }
     return user.email || "Kullanıcı";

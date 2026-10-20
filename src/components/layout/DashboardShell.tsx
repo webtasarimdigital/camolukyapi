@@ -2,13 +2,65 @@
 
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
+import Link from "next/link";
 import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
+import { ShieldAlert, ArrowRight } from "lucide-react";
+import { type UserRole } from "@/lib/auth/role-constants";
 
 interface DashboardShellProps {
   userName?: string;
   userRole?: string;
   children: React.ReactNode;
+}
+
+function isRouteAllowed(role: UserRole, pathname: string): boolean {
+  if (role === "admin") return true;
+
+  // Depocu ve Şoför YALNIZCA /sevkiyat sayfasına erişebilir
+  if (role === "depo" || role === "sofor") {
+    return pathname.startsWith("/sevkiyat");
+  }
+
+  // Satış Temsilcisi: Teklif, Satış, Sevkiyat, Müşteriler, Ürünler
+  if (role === "satis") {
+    return (
+      pathname.startsWith("/teklif") ||
+      pathname.startsWith("/teklifler") ||
+      pathname.startsWith("/satis") ||
+      pathname.startsWith("/satislar") ||
+      pathname.startsWith("/sevkiyat") ||
+      pathname.startsWith("/musteriler") ||
+      pathname.startsWith("/urunler") ||
+      pathname.startsWith("/stok") ||
+      pathname.startsWith("/arama")
+    );
+  }
+
+  // Sevkiyat Görevlisi
+  if (role === "sevkiyat") {
+    return (
+      pathname.startsWith("/sevkiyat") ||
+      pathname.startsWith("/otobil-gps") ||
+      pathname.startsWith("/portallar") ||
+      pathname.startsWith("/urunler") ||
+      pathname.startsWith("/stok")
+    );
+  }
+
+  // Muhasebe 1: Finans, Ortak Cari, Kiralar, Raporlar, Kullanıcılar, Ayarlar hariç açık
+  if (role === "muhasebe1") {
+    const forbidden = ["/finans", "/ortak-cari", "/kiralar", "/raporlar", "/kullanicilar", "/ayarlar", "/audit"];
+    return !forbidden.some((prefix) => pathname.startsWith(prefix));
+  }
+
+  // Muhasebe 2: Kullanıcılar, Ayarlar hariç açık
+  if (role === "muhasebe2") {
+    const forbidden = ["/kullanicilar", "/ayarlar", "/audit"];
+    return !forbidden.some((prefix) => pathname.startsWith(prefix));
+  }
+
+  return true;
 }
 
 export function DashboardShell({
@@ -23,6 +75,19 @@ export function DashboardShell({
   useEffect(() => {
     setMobileOpen(false);
   }, [pathname]);
+
+  const roleKey = (userRole as UserRole) || "admin";
+  const hasAccess = isRouteAllowed(roleKey, pathname);
+
+  let defaultRoute = "/dashboard";
+  let defaultRouteLabel = "Dashboard'a Dön";
+  if (roleKey === "depo" || roleKey === "sofor" || roleKey === "sevkiyat") {
+    defaultRoute = "/sevkiyat";
+    defaultRouteLabel = "Sevkiyat ve Yükleme Modülüne Git";
+  } else if (roleKey === "satis") {
+    defaultRoute = "/teklifler";
+    defaultRouteLabel = "Teklifler Sayfasına Git";
+  }
 
   return (
     <div className="flex h-screen overflow-hidden bg-surface">
@@ -58,7 +123,30 @@ export function DashboardShell({
           onToggleMobile={() => setMobileOpen(!mobileOpen)}
         />
         <main className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6 min-w-0">
-          {children}
+          {hasAccess ? (
+            children
+          ) : (
+            <div className="flex flex-col items-center justify-center min-h-[65vh] p-6 text-center animate-in fade-in duration-200">
+              <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mb-4 border border-rose-200 shadow-sm">
+                <ShieldAlert size={36} />
+              </div>
+              <h2 className="text-2xl font-black text-slate-800">
+                Yetkiniz Bulunmuyor
+              </h2>
+              <p className="text-sm text-slate-600 max-w-md mt-2">
+                Giriş yaptığınız hesap ({userName || roleKey}) bu sayfaya ({pathname}) erişim yetkisine sahip değildir.
+              </p>
+              <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
+                <Link
+                  href={defaultRoute}
+                  className="inline-flex items-center gap-2 bg-brand-navy hover:bg-brand-navy-2 text-white font-bold px-5 py-2.5 rounded-xl text-sm transition shadow-sm"
+                >
+                  <span>{defaultRouteLabel}</span>
+                  <ArrowRight size={16} />
+                </Link>
+              </div>
+            </div>
+          )}
         </main>
       </div>
     </div>

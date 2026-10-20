@@ -21,8 +21,23 @@ const ROLE_CONFIG: Record<string, { label: string; desc: string; badge: string }
   },
   sevkiyat: {
     label: "Sevkiyat Sorumlusu",
-    desc: "Yalnızca Sevkiyat, Otobil GPS ve Ürünler/Stok erişimi",
+    desc: "Sevkiyat, Otobil GPS ve Ürünler/Stok erişimi",
     badge: "bg-amber-100 text-amber-800 border-amber-200",
+  },
+  depo: {
+    label: "Depo Sorumlusu",
+    desc: "Yalnızca Sevkiyat ve Yükleme modülü erişimi",
+    badge: "bg-orange-100 text-orange-800 border-orange-200",
+  },
+  sofor: {
+    label: "Şoför",
+    desc: "Yalnızca Sevkiyat ve Yükleme modülü erişimi",
+    badge: "bg-cyan-100 text-cyan-800 border-cyan-200",
+  },
+  satis: {
+    label: "Satış Temsilcisi",
+    desc: "Teklif, Satış, Sevkiyat, Müşteriler ve Ürünler erişimi",
+    badge: "bg-indigo-100 text-indigo-800 border-indigo-200",
   },
   staff: {
     label: "Personel",
@@ -32,10 +47,13 @@ const ROLE_CONFIG: Record<string, { label: string; desc: string; badge: string }
 };
 
 const DEFAULT_ACCOUNTS = [
-  { email: "camoluk@camolukyapi.com", pass: "camoluk2861", role: "admin", note: "Ana Yönetici hesabı" },
-  { email: "muhasebe1@camolukyapi.com", pass: "camoluk123", role: "muhasebe1", note: "Finans & Ortak Cari hariç" },
-  { email: "muhasebe2@camolukyapi.com", pass: "camoluk123", role: "muhasebe2", note: "Finans & Ortak Cari dahil" },
-  { email: "sevkiyat@camolukyapi.com", pass: "camoluk123", role: "sevkiyat", note: "Sevkiyat, GPS & Stok" },
+  { email: "camoluk@camolukyapi.com", pass: "camoluk2861", role: "admin", note: "Ana Yönetici hesabı (Kullanıcı: camoluk veya admin)" },
+  { email: "muhasebe1@camolukyapi.com", pass: "camoluk123", role: "muhasebe1", note: "Finans & Ortak Cari hariç (Kullanıcı: muhasebe1)" },
+  { email: "muhasebe2@camolukyapi.com", pass: "camoluk123", role: "muhasebe2", note: "Finans & Ortak Cari dahil (Kullanıcı: muhasebe2)" },
+  { email: "sevkiyat@camolukyapi.com", pass: "camoluk123", role: "sevkiyat", note: "Sevkiyat, GPS & Stok (Kullanıcı: sevkiyat)" },
+  { email: "depo@camolukyapi.com", pass: "camolukdepo0", role: "depo", note: "Yalnızca Sevkiyat modülü (Kullanıcı: depo)" },
+  { email: "sofor@camolukyapi.com", pass: "camolukşoför1", role: "sofor", note: "Yalnızca Sevkiyat modülü (Kullanıcı: şoför)" },
+  { email: "satis@camolukyapi.com", pass: "camoluksatış2", role: "satis", note: "Teklif, Satış, Sevkiyat (Kullanıcı: satış)" },
 ];
 
 import { cookies } from "next/headers";

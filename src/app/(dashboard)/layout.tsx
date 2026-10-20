@@ -31,8 +31,16 @@ export default async function DashboardLayout({
   const cookieRole = cookieStore.get("app_active_role")?.value as UserRole | undefined;
   const cookieName = cookieStore.get("app_user_name")?.value;
 
-  const activeRole = cookieRole || profile?.role || "admin";
-  const activeName = cookieName || profile?.full_name || user.email?.split("@")[0] || "Çamoluk Yönetici";
+  // GÜVENLİK: Yalnızca gerçek veritabanı rolü 'admin' olanlar simülasyon çerezini kullanabilir.
+  // Diğer tüm kullanıcılar (depo, şoför, satış vb.) veritabanındaki rolleriyle sınırlandırılır.
+  const isActualAdmin = profile?.role === "admin";
+  const activeRole: UserRole = isActualAdmin
+    ? (cookieRole || "admin")
+    : ((profile?.role as UserRole) || "depo");
+
+  const activeName = isActualAdmin
+    ? (cookieName || profile?.full_name || "Çamoluk Yönetici")
+    : (profile?.full_name || user.email?.split("@")[0] || "Kullanıcı");
 
   return (
     <DashboardShell userName={activeName} userRole={activeRole}>

@@ -43,7 +43,12 @@ interface Props {
 
 type ShipmentTab = "all" | "today" | "upcoming" | "delivered" | "otobil";
 
-export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props) {
+export function ShipmentClient({
+  initialShipments,
+  initialVehicles = [],
+  userRole = "staff",
+  userName = "Kullanıcı",
+}: Props) {
   const [shipments, setShipments] = useState<Shipment[]>(initialShipments);
   const [vehicles] = useState<Vehicle[]>(initialVehicles);
   const [search, setSearch] = useState("");
@@ -356,17 +361,19 @@ export function ShipmentClient({ initialShipments, initialVehicles = [] }: Props
           Teslim Edilenler ({countDelivered})
         </button>
 
-        <button
-          onClick={() => setActiveTab("otobil")}
-          className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition ml-auto ${
-            activeTab === "otobil"
-              ? "bg-brand-navy text-white shadow-xs"
-              : "bg-surface hover:bg-surface/80 text-text border border-border"
-          }`}
-        >
-          <Navigation size={14} />
-          Otobil GPS Filo Takip
-        </button>
+        {userRole !== "depo" && userRole !== "sofor" && userRole !== "satis" && (
+          <button
+            onClick={() => setActiveTab("otobil")}
+            className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs font-bold transition ml-auto ${
+              activeTab === "otobil"
+                ? "bg-brand-navy text-white shadow-xs"
+                : "bg-surface hover:bg-surface/80 text-text border border-border"
+            }`}
+          >
+            <Navigation size={14} />
+            Otobil GPS Filo Takip
+          </button>
+        )}
       </div>
 
       {activeTab === "otobil" ? (

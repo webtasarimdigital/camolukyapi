@@ -49,11 +49,48 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url);
   }
 
-  // Login olmuş kullanıcı login'e girerse → dashboard'a yönlendir
+  // Login olmuş kullanıcı login'e girerse → rolüne göre yönlendir
   if (user && pathname === "/login") {
+    const role = request.cookies.get("app_active_role")?.value;
     const url = request.nextUrl.clone();
-    url.pathname = "/dashboard";
+    if (role === "depo" || role === "sofor" || role === "sevkiyat") {
+      url.pathname = "/sevkiyat";
+    } else if (role === "satis") {
+      url.pathname = "/teklifler";
+    } else {
+      url.pathname = "/dashboard";
+    }
     return NextResponse.redirect(url);
+  }
+
+  // Rol bazlı sayfa koruması (Sunucu seviyesinde anında yönlendirme)
+  if (user && !pathname.startsWith("/api") && !pathname.startsWith("/auth")) {
+    const role = request.cookies.get("app_active_role")?.value;
+    if (role === "depo" || role === "sofor") {
+      if (!pathname.startsWith("/sevkiyat") && pathname !== "/login") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/sevkiyat";
+        return NextResponse.redirect(url);
+      }
+    } else if (role === "satis") {
+      const allowedSatis = [
+        "/teklif",
+        "/teklifler",
+        "/satis",
+        "/satislar",
+        "/sevkiyat",
+        "/musteriler",
+        "/urunler",
+        "/stok",
+        "/arama",
+      ];
+      const isAllowed = allowedSatis.some((r) => pathname.startsWith(r));
+      if (!isAllowed && pathname !== "/login") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/teklifler";
+        return NextResponse.redirect(url);
+      }
+    }
   }
 
   return supabaseResponse;
