@@ -20,6 +20,9 @@ function getDefaultName(role: UserRole): string {
       return "Şoför";
     case "satis":
       return "Satış Temsilcisi";
+    case "tali_bayi":
+    case "bayi":
+      return "Tali Bayi";
     default:
       return "Kullanıcı";
   }

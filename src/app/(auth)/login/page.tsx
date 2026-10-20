@@ -29,6 +29,8 @@ export default function LoginPage() {
       inputVal = "satis";
     } else if (inputVal === "depo") {
       inputVal = "depo";
+    } else if (inputVal === "bayi" || inputVal === "tali_bayi" || inputVal === "talibayi") {
+      inputVal = "bayi";
     } else if (inputVal === "admin" || inputVal === "camoluk") {
       inputVal = "camoluk";
     }
@@ -87,6 +89,8 @@ export default function LoginPage() {
     // Role göre yetkili ana sayfaya yönlendir
     if (actualRole === "depo" || actualRole === "sofor" || actualRole === "sevkiyat") {
       router.push("/sevkiyat");
+    } else if (actualRole === "tali_bayi" || (actualRole as string) === "bayi") {
+      router.push("/urunler");
     } else if (actualRole === "satis") {
       router.push("/teklifler");
     } else {
@@ -135,7 +139,7 @@ export default function LoginPage() {
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="w-full bg-brand-navy border border-white/15 text-white rounded-xl px-3.5 py-2.5 text-sm outline-none focus:border-brand-gold focus:ring-1 focus:ring-brand-gold transition placeholder:text-slate-500"
-                placeholder="Örn: depo, şoför, satış, camoluk"
+                placeholder="Örn: depo, şoför, satış, bayi, camoluk"
               />
             </div>
 

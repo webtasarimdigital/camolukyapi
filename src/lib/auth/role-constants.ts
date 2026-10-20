@@ -8,7 +8,9 @@ export type UserRole =
   | "sevkiyat"
   | "depo"
   | "sofor"
-  | "satis";
+  | "satis"
+  | "tali_bayi"
+  | "bayi";
 
 export const ROLE_DEFINITIONS: Record<
   UserRole,
@@ -36,17 +38,27 @@ export const ROLE_DEFINITIONS: Record<
   },
   depo: {
     label: "📦 Depo Sorumlusu",
-    description: "Yalnızca Sevkiyat ve Yükleme modülü açık",
+    description: "Yalnızca Sevkiyat ve Yükleme modülü (Görüntüleme)",
     defaultName: "Depo Sorumlusu",
   },
   sofor: {
     label: "🚚 Şoför",
-    description: "Yalnızca Sevkiyat ve Yükleme modülü açık",
+    description: "Yalnızca Sevkiyat ve Yükleme modülü (Görüntüleme)",
     defaultName: "Şoför",
   },
   satis: {
     label: "💼 Satış Temsilcisi",
     description: "Teklif, Satış, Sevkiyat, Müşteriler ve Ürünler açık",
     defaultName: "Satış Temsilcisi",
+  },
+  tali_bayi: {
+    label: "🏪 Tali Bayi",
+    description: "Yalnızca Ürünler / Stok ve Şirket Portalları (Görüntüleme)",
+    defaultName: "Tali Bayi",
+  },
+  bayi: {
+    label: "🏪 Tali Bayi",
+    description: "Yalnızca Ürünler / Stok ve Şirket Portalları (Görüntüleme)",
+    defaultName: "Tali Bayi",
   },
 };

@@ -16,12 +16,15 @@ export async function saveExcelProducts(payload: {
 
   const { data: profileData } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select("company_id, role")
     .eq("id", user.id)
     .single();
 
-  const profile = profileData as { company_id: string } | null;
+  const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id) throw new Error("Şirket profili bulunamadı.");
+  if (!["admin", "muhasebe1", "muhasebe2"].includes(profile.role || "")) {
+    throw new Error("Yetkiniz bulunmuyor! Yalnızca yetkili kullanıcılar ürün/fiyat listesi yükleyebilir.");
+  }
 
   const companyId = profile.company_id;
   const now = new Date().toISOString();
@@ -126,12 +129,15 @@ export async function savePdfDocument(formData: FormData) {
 
     const { data: profileData } = await supabase
       .from("profiles")
-      .select("company_id")
+      .select("company_id, role")
       .eq("id", user.id)
       .single();
 
-    const profile = profileData as { company_id: string } | null;
+    const profile = profileData as { company_id: string; role: string } | null;
     if (!profile?.company_id) return { success: false, error: "Şirket profili bulunamadı." };
+    if (!["admin", "muhasebe1", "muhasebe2"].includes(profile.role || "")) {
+      return { success: false, error: "Yetkiniz bulunmuyor! Yalnızca yöneticiler PDF katalog yükleyebilir." };
+    }
 
     const title = formData.get("title") as string;
     const category = (formData.get("category") as string) || "Fiyat Listesi";
@@ -245,11 +251,19 @@ export async function extractProductsFromPdf(formData: FormData): Promise<{
     if (user) {
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("company_id")
+        .select("company_id, role")
         .eq("id", user.id)
         .single();
 
-      const profile = profileData as { company_id: string } | null;
+      const profile = profileData as { company_id: string; role: string } | null;
+      if (!profile?.company_id || !["admin", "muhasebe1", "muhasebe2"].includes(profile.role || "")) {
+        return {
+          success: false,
+          fileName: file.name,
+          products: [],
+          error: "Yetkiniz bulunmuyor! Yalnızca yetkili kullanıcılar PDF işleyebilir.",
+        };
+      }
       if (profile?.company_id) {
         const { data: prods } = await supabase
           .from("products")

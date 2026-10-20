@@ -8,6 +8,12 @@ export async function adjustStock(productId: string, companyId: string, movement
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error('Not authenticated');
 
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', userData.user.id).single();
+  const role = (profile as any)?.role;
+  if (['tali_bayi', 'bayi', 'depo', 'sofor'].includes(role)) {
+    throw new Error('Yetkiniz bulunmuyor! Yalnızca görüntüleme yetkiniz bulunmaktadır.');
+  }
+
   const { error } = await supabase.rpc('add_stock_movement', {
     p_company_id: companyId,
     p_product_id: productId,

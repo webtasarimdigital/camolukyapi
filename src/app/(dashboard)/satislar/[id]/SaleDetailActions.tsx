@@ -20,13 +20,16 @@ export function SaleDetailActions({
   saleCode,
   status,
   remainingAmount,
+  userRole = "staff",
 }: {
   saleId: string;
   saleCode: string;
   status: string;
   remainingAmount: number;
+  userRole?: string;
 }) {
   const router = useRouter();
+  const canManageSale = ["admin", "muhasebe1", "muhasebe2"].includes(userRole);
 
   // Payment Modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -70,6 +73,10 @@ export function SaleDetailActions({
   // Handle Cancel Sale
   const handleCancelSale = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canManageSale) {
+      toast.error("Yetkiniz bulunmuyor! Yalnızca muhasebe ve yöneticiler satış iptali yapabilir.");
+      return;
+    }
     setIsCancelling(true);
     try {
       await cancelSale(saleId, cancelReason);
@@ -85,6 +92,10 @@ export function SaleDetailActions({
 
   // Handle Delete Sale
   const handleDeleteSale = async () => {
+    if (!canManageSale) {
+      toast.error("Yetkiniz bulunmuyor! Yalnızca muhasebe ve yöneticiler satış silebilir.");
+      return;
+    }
     if (!confirm(`${saleCode} numaralı satışı tamamen silmek istediğinize emin misiniz?`)) {
       return;
     }
@@ -125,7 +136,7 @@ export function SaleDetailActions({
         </button>
 
         {/* Cancel Sale button */}
-        {status !== "cancelled" && (
+        {canManageSale && status !== "cancelled" && (
           <button
             type="button"
             onClick={() => setShowCancelModal(true)}
@@ -137,15 +148,17 @@ export function SaleDetailActions({
         )}
 
         {/* Delete Sale button */}
-        <button
-          type="button"
-          onClick={handleDeleteSale}
-          disabled={isDeleting}
-          className="inline-flex items-center gap-1.5 text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 text-xs font-semibold px-3 py-2 rounded-xl transition disabled:opacity-50 cursor-pointer"
-        >
-          {isDeleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-          Sil
-        </button>
+        {canManageSale && (
+          <button
+            type="button"
+            onClick={handleDeleteSale}
+            disabled={isDeleting}
+            className="inline-flex items-center gap-1.5 text-red-600 bg-red-50 hover:bg-red-100 border border-red-200 text-xs font-semibold px-3 py-2 rounded-xl transition disabled:opacity-50 cursor-pointer"
+          >
+            {isDeleting ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
+            Sil
+          </button>
+        )}
       </div>
 
       {/* Payment Modal */}

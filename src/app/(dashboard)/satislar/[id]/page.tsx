@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { formatCurrency } from "@/lib/formatters";
 import Link from "next/link";
@@ -26,6 +27,12 @@ export default async function SaleDetailPage({
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) redirect("/login");
+
+  const { data: userProfile } = await supabase.from("profiles").select("role").eq("id", userData.user.id).single();
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get("app_active_role")?.value;
+  const isActualAdmin = (userProfile as any)?.role === "admin";
+  const activeRole = isActualAdmin ? (cookieRole || "admin") : (userProfile as any)?.role;
 
   const { data: saleData } = await supabase
     .from("sales")
@@ -119,6 +126,7 @@ export default async function SaleDetailPage({
           saleCode={sale.sale_code}
           status={sale.status}
           remainingAmount={sale.remaining_amount || 0}
+          userRole={activeRole}
         />
       </div>
 

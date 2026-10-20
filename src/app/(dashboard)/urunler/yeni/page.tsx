@@ -4,12 +4,38 @@ import Link from 'next/link';
 import { createProduct } from '../actions';
 import { toast } from 'sonner';
 import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Loader2, CheckCircle2 } from 'lucide-react';
+import { createClient } from '@/lib/supabase/client';
 
 export default function YeniUrunPage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [checkingRole, setCheckingRole] = useState(true);
+
+  useEffect(() => {
+    async function checkUserRole() {
+      const supabase = createClient();
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push('/login');
+        return;
+      }
+      const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+      const role = (profile as any)?.role;
+      if (['tali_bayi', 'bayi', 'depo', 'sofor'].includes(role)) {
+        toast.error('Yetkiniz bulunmuyor! Yalnızca görüntüleme yetkiniz bulunmaktadır.');
+        router.push('/urunler');
+        return;
+      }
+      setCheckingRole(false);
+    }
+    checkUserRole();
+  }, [router]);
+
+  if (checkingRole) {
+    return <div className="p-8 text-center text-text-muted text-sm">Yetki kontrol ediliyor...</div>;
+  }
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();

@@ -13,14 +13,26 @@ export default function DuzenleUrunPage() {
   const router = useRouter();
   const id = routeParams?.id as string;
   const [product, setProduct] = useState<any>(null);
+  const [userRole, setUserRole] = useState<string>("staff");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const supabase = createClient();
 
+  const isReadOnly = ["tali_bayi", "bayi", "depo", "sofor"].includes(userRole);
+  const canDelete = ["admin", "muhasebe1", "muhasebe2"].includes(userRole);
+
   useEffect(() => {
     async function loadProduct() {
       if (!id) return;
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user) {
+          const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single();
+          if ((profile as any)?.role) setUserRole((profile as any).role);
+        }
+      } catch {}
+
       const { data, error } = await supabase.from('products').select('*').eq('id', id).single();
       if (error) {
         toast.error('Ürün yüklenemedi');
@@ -34,6 +46,10 @@ export default function DuzenleUrunPage() {
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (isReadOnly) {
+      toast.error('Yetkiniz bulunmuyor! Yalnızca görüntüleme yetkiniz bulunmaktadır.');
+      return;
+    }
     setSaving(true);
     const formData = new FormData(e.currentTarget);
     try {
@@ -47,6 +63,10 @@ export default function DuzenleUrunPage() {
   }
 
   async function handleDelete() {
+    if (!canDelete) {
+      toast.error('Yetkiniz bulunmuyor! Ürün silme yetkiniz bulunmamaktadır.');
+      return;
+    }
     if (confirm('Bu ürünü silmek istediğinize emin misiniz?')) {
       setDeleting(true);
       try {
@@ -70,27 +90,32 @@ export default function DuzenleUrunPage() {
           <Link href="/urunler" className="text-text-muted hover:text-text">
             &larr; Geri
           </Link>
-          <h1 className="text-xl font-bold text-text">Ürün Düzenle</h1>
+          <h1 className="text-xl font-bold text-text">
+            {isReadOnly ? "Ürün Bilgileri (Görüntüleme)" : "Ürün Düzenle"}
+          </h1>
         </div>
-        <button
-          type="button"
-          disabled={deleting || saving}
-          onClick={handleDelete}
-          className="bg-brand-red text-white px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition flex items-center gap-1.5 disabled:opacity-50"
-        >
-          {deleting ? (
-            <>
-              <Loader2 size={14} className="animate-spin" /> Siliniyor...
-            </>
-          ) : (
-            <>
-              <Trash2 size={14} /> Ürünü Sil
-            </>
-          )}
-        </button>
+        {canDelete && (
+          <button
+            type="button"
+            disabled={deleting || saving}
+            onClick={handleDelete}
+            className="bg-brand-red text-white px-4 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition flex items-center gap-1.5 disabled:opacity-50"
+          >
+            {deleting ? (
+              <>
+                <Loader2 size={14} className="animate-spin" /> Siliniyor...
+              </>
+            ) : (
+              <>
+                <Trash2 size={14} /> Ürünü Sil
+              </>
+            )}
+          </button>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 bg-white p-6 rounded-xl border border-border">
+        <fieldset disabled={isReadOnly} className="space-y-6">
         {/* Temel Bilgiler */}
         <section>
           <h2 className="text-lg font-semibold mb-4">Temel Bilgiler</h2>
@@ -190,28 +215,31 @@ export default function DuzenleUrunPage() {
           <h2 className="text-lg font-semibold mb-4">Notlar</h2>
           <textarea name="notes" rows={3} defaultValue={product.notes} className="w-full border border-border rounded-lg px-3 py-2 text-sm"></textarea>
         </section>
+        </fieldset>
 
         <div className="flex justify-end gap-3 pt-4 border-t border-border">
           <Link href="/urunler" className="px-4 py-2.5 text-sm font-medium text-text-muted hover:text-text rounded-lg">
-            İptal
+            {isReadOnly ? "Listeye Dön" : "İptal"}
           </Link>
-          <button
-            type="submit"
-            disabled={saving || deleting}
-            className="bg-brand-gold text-brand-navy px-6 py-2.5 rounded-lg text-sm font-bold hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50 shadow-xs"
-          >
-            {saving ? (
-              <>
-                <Loader2 size={16} className="animate-spin" />
-                <span>Güncelleniyor...</span>
-              </>
-            ) : (
-              <>
-                <CheckCircle2 size={16} />
-                <span>Güncelle ve Kaydet</span>
-              </>
-            )}
-          </button>
+          {!isReadOnly && (
+            <button
+              type="submit"
+              disabled={saving || deleting}
+              className="bg-brand-gold text-brand-navy px-6 py-2.5 rounded-lg text-sm font-bold hover:opacity-90 transition flex items-center gap-2 disabled:opacity-50 shadow-xs"
+            >
+              {saving ? (
+                <>
+                  <Loader2 size={16} className="animate-spin" />
+                  <span>Güncelleniyor...</span>
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 size={16} />
+                  <span>Güncelle ve Kaydet</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </form>
     </div>

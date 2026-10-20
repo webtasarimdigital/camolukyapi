@@ -61,6 +61,7 @@ async function getCurrentUserName(): Promise<string> {
       if (profile.role === "depo") return "Depo Sorumlusu";
       if (profile.role === "sofor") return "Şoför";
       if (profile.role === "satis") return "Satış Temsilcisi";
+      if (profile.role === "tali_bayi" || profile.role === "bayi") return "Tali Bayi";
       return "Admin";
     }
     return user.email || "Kullanıcı";
@@ -79,8 +80,31 @@ export async function actionGetShipments() {
   }
 }
 
+async function getCallerRole(): Promise<string> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return "anon";
+    const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+    const realRole = (profile as any)?.role || "staff";
+    if (realRole === "admin") {
+      const cookieStore = await cookies();
+      const cookieRole = cookieStore.get("app_active_role")?.value;
+      if (cookieRole) return cookieRole;
+    }
+    return realRole;
+  } catch {
+    return "anon";
+  }
+}
+
 export async function actionSaveShipment(formData: FormData) {
   try {
+    const role = await getCallerRole();
+    if (role === "depo" || role === "sofor" || role === "tali_bayi" || role === "bayi") {
+      return { success: false, error: "Yetkiniz bulunmuyor! Sevkiyat ekleme veya düzenleme yetkiniz yoktur (Yalnızca Görüntüleme)." };
+    }
+
     const userName = await getCurrentUserName();
     const id = (formData.get("id") as string) || undefined;
     const customer_name = (formData.get("customer_name") as string) || "";
@@ -139,6 +163,11 @@ export async function actionSaveShipment(formData: FormData) {
 
 export async function actionUpdateShipmentStatus(id: string, status: Shipment["status"]) {
   try {
+    const role = await getCallerRole();
+    if (role === "depo" || role === "sofor" || role === "tali_bayi" || role === "bayi") {
+      return { success: false, error: "Yetkiniz bulunmuyor! Durum değiştirme yetkiniz yoktur (Yalnızca Görüntüleme)." };
+    }
+
     const updated = await updateShipmentStatus(id, status);
     try {
       revalidatePath("/sevkiyat");
@@ -152,6 +181,11 @@ export async function actionUpdateShipmentStatus(id: string, status: Shipment["s
 
 export async function actionDeleteShipment(id: string) {
   try {
+    const role = await getCallerRole();
+    if (role !== "admin" && role !== "muhasebe2" && role !== "muhasebe1") {
+      return { success: false, error: "Yetkiniz bulunmuyor! Sevkiyat silme yetkiniz yoktur." };
+    }
+
     await deleteShipment(id);
     try {
       revalidatePath("/sevkiyat");

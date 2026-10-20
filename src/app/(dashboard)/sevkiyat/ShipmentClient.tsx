@@ -68,6 +68,13 @@ export function ShipmentClient({
   const [photoUploading, setPhotoUploading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
+  const isReadOnly =
+    userRole === "depo" ||
+    userRole === "sofor" ||
+    userRole === "tali_bayi" ||
+    userRole === "bayi";
+  const canDelete = !isReadOnly && userRole !== "satis";
+
   // Otobil URL
   const [otobilUrl, setOtobilUrl] = useState("https://web.otobil.com.tr");
 
@@ -146,6 +153,10 @@ export function ShipmentClient({
   const countTeslim = shipments.filter((s) => s.status === "Teslim Edildi").length;
 
   function handleOpenNew() {
+    if (isReadOnly) {
+      toast.error("Yetkiniz bulunmuyor! Yeni sevkiyat kaydı ekleme yetkiniz yoktur (Yalnızca Görüntüleme).");
+      return;
+    }
     setEditingShipment(null);
     setModalPhotos([]);
     setSelectedVehiclePlate("");
@@ -155,6 +166,10 @@ export function ShipmentClient({
   }
 
   function handleOpenEdit(item: Shipment) {
+    if (isReadOnly) {
+      toast.error("Yetkiniz bulunmuyor! Sevkiyat düzenleme yetkiniz yoktur (Yalnızca Görüntüleme).");
+      return;
+    }
     setEditingShipment(item);
     setModalPhotos(Array.isArray(item.photos) ? item.photos : []);
     setSelectedVehiclePlate(item.vehicle_plate || "");
@@ -172,6 +187,10 @@ export function ShipmentClient({
   }
 
   async function handleAddPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
+    if (isReadOnly) {
+      toast.error("Yetkiniz bulunmuyor! Fotoğraf yükleme yetkiniz yoktur.");
+      return;
+    }
     const files = e.target.files;
     if (!files || files.length === 0) return;
 
@@ -206,10 +225,18 @@ export function ShipmentClient({
   }
 
   function handleRemovePhoto(index: number) {
+    if (isReadOnly) {
+      toast.error("Yetkiniz bulunmuyor! Fotoğraf silme yetkiniz yoktur.");
+      return;
+    }
     setModalPhotos((prev) => prev.filter((_, i) => i !== index));
   }
 
   async function handleStatusChange(id: string, newStatus: Shipment["status"]) {
+    if (isReadOnly) {
+      toast.error("Yetkiniz bulunmuyor! Sevkiyat durumu değiştirme yetkiniz yoktur (Yalnızca Görüntüleme).");
+      return;
+    }
     setShipments((prev) =>
       prev.map((item) => (item.id === id ? { ...item, status: newStatus } : item))
     );
@@ -231,6 +258,10 @@ export function ShipmentClient({
   }
 
   async function handleDelete(id: string) {
+    if (!canDelete) {
+      toast.error("Yetkiniz bulunmuyor! Sevkiyat silme yetkiniz yoktur.");
+      return;
+    }
     if (!confirm("Bu sevkiyat kaydını silmek istediğinize emin misiniz?")) return;
     startTransition(async () => {
       try {
@@ -249,6 +280,10 @@ export function ShipmentClient({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
+    if (isReadOnly) {
+      toast.error("Yetkiniz bulunmuyor! Sevkiyat kaydetme veya güncelleme yetkiniz yoktur.");
+      return;
+    }
     const form = e.currentTarget;
     const formData = new FormData(form);
 
@@ -303,12 +338,14 @@ export function ShipmentClient({
         </div>
 
         <div className="flex items-center gap-3">
-          <button
-            onClick={handleOpenNew}
-            className="flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
-          >
-            <Plus size={16} /> + Yeni Sevk Kaydı Gir
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={handleOpenNew}
+              className="flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+            >
+              <Plus size={16} /> + Yeni Sevk Kaydı Gir
+            </button>
+          )}
         </div>
       </div>
 
@@ -706,11 +743,13 @@ export function ShipmentClient({
                           <td className="py-3 px-4 text-right">
                             <select
                               value={item.status}
-                              disabled={isPending}
+                              disabled={isPending || isReadOnly}
                               onChange={(e) =>
                                 handleStatusChange(item.id, e.target.value as Shipment["status"])
                               }
-                              className={`px-2.5 py-1 rounded-lg font-bold text-xs border outline-none cursor-pointer transition ${
+                              className={`px-2.5 py-1 rounded-lg font-bold text-xs border outline-none transition ${
+                                isReadOnly ? "opacity-80 cursor-not-allowed" : "cursor-pointer"
+                              } ${
                                 item.status === "Depoya Gitti"
                                   ? "bg-amber-100 text-amber-900 border-amber-300"
                                   : item.status === "Sevkiyata Çıktı"
@@ -725,20 +764,27 @@ export function ShipmentClient({
                           </td>
                           <td className="py-3 px-4 text-center">
                             <div className="flex items-center justify-center gap-1">
-                              <button
-                                onClick={() => handleOpenEdit(item)}
-                                className="p-1 rounded text-brand-navy hover:bg-surface transition"
-                                title="Sevkiyatı Düzenle / Fotoğraf Ekle"
-                              >
-                                <Edit3 size={15} />
-                              </button>
-                              <button
-                                onClick={() => handleDelete(item.id)}
-                                className="p-1 rounded text-rose-400 hover:text-rose-600 transition"
-                                title="Sil"
-                              >
-                                <Trash2 size={15} />
-                              </button>
+                              {!isReadOnly && (
+                                <button
+                                  onClick={() => handleOpenEdit(item)}
+                                  className="p-1 rounded text-brand-navy hover:bg-surface transition"
+                                  title="Sevkiyatı Düzenle / Fotoğraf Ekle"
+                                >
+                                  <Edit3 size={15} />
+                                </button>
+                              )}
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDelete(item.id)}
+                                  className="p-1 rounded text-rose-400 hover:text-rose-600 transition"
+                                  title="Sil"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              )}
+                              {isReadOnly && (
+                                <span className="text-[11px] font-semibold text-text-muted">Görüntüleme</span>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -824,11 +870,13 @@ export function ShipmentClient({
                       <div className="flex items-center justify-between pt-1">
                         <select
                           value={item.status}
-                          disabled={isPending}
+                          disabled={isPending || isReadOnly}
                           onChange={(e) =>
                             handleStatusChange(item.id, e.target.value as Shipment["status"])
                           }
                           className={`px-2.5 py-1 rounded-lg font-bold text-xs border outline-none ${
+                            isReadOnly ? "opacity-80 cursor-not-allowed" : "cursor-pointer"
+                          } ${
                             item.status === "Depoya Gitti"
                               ? "bg-amber-100 text-amber-900 border-amber-300"
                               : item.status === "Sevkiyata Çıktı"
@@ -842,20 +890,27 @@ export function ShipmentClient({
                         </select>
 
                         <div className="flex items-center gap-2">
-                          <button
-                            onClick={() => handleOpenEdit(item)}
-                            className="p-1.5 rounded-lg bg-surface hover:bg-neutral-200 text-brand-navy transition"
-                            title="Düzenle"
-                          >
-                            <Edit3 size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDelete(item.id)}
-                            className="p-1.5 rounded-lg bg-surface hover:bg-rose-100 text-rose-600 transition"
-                            title="Sil"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                          {!isReadOnly && (
+                            <button
+                              onClick={() => handleOpenEdit(item)}
+                              className="p-1.5 rounded-lg bg-surface hover:bg-neutral-200 text-brand-navy transition"
+                              title="Düzenle"
+                            >
+                              <Edit3 size={16} />
+                            </button>
+                          )}
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDelete(item.id)}
+                              className="p-1.5 rounded-lg bg-surface hover:bg-rose-100 text-rose-600 transition"
+                              title="Sil"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          )}
+                          {isReadOnly && (
+                            <span className="text-[11px] font-semibold text-text-muted">Görüntüleme</span>
+                          )}
                         </div>
                       </div>
                     </div>

@@ -4,19 +4,28 @@ import { createClient, createServiceClient } from '@/lib/supabase/server';
 import { revalidatePath } from 'next/cache';
 import { parseCurrencyInput } from '@/lib/formatters';
 
-export async function createProduct(formData: FormData) {
+async function getRoleAndCompany() {
   const supabase = await createClient();
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error('Not authenticated');
 
   const { data: profileData } = await supabase
     .from('profiles')
-    .select('company_id')
+    .select('company_id, role')
     .eq('id', userData.user.id)
     .single();
 
-  const companyId = (profileData as any)?.company_id;
-  if (!companyId) throw new Error('Company not found');
+  const profile = profileData as { company_id: string; role: string } | null;
+  if (!profile?.company_id) throw new Error('Company not found');
+
+  return { supabase, user: userData.user, companyId: profile.company_id, role: profile.role || 'staff' };
+}
+
+export async function createProduct(formData: FormData) {
+  const { supabase, companyId, role } = await getRoleAndCompany();
+  if (['tali_bayi', 'bayi', 'depo', 'sofor'].includes(role)) {
+    throw new Error('Yetkiniz bulunmuyor! Yalnızca görüntüleme yetkiniz bulunmaktadır.');
+  }
 
   const product_code = formData.get('product_code') as string;
   const product_name = formData.get('product_name') as string;
@@ -55,7 +64,10 @@ export async function createProduct(formData: FormData) {
 }
 
 export async function updateProduct(id: string, formData: FormData) {
-  const supabase = await createClient();
+  const { supabase, role } = await getRoleAndCompany();
+  if (['tali_bayi', 'bayi', 'depo', 'sofor'].includes(role)) {
+    throw new Error('Yetkiniz bulunmuyor! Yalnızca görüntüleme yetkiniz bulunmaktadır.');
+  }
   
   const updatedProduct = {
     product_name: formData.get('product_name') as string,
@@ -87,7 +99,10 @@ export async function updateProduct(id: string, formData: FormData) {
 }
 
 export async function deactivateProduct(id: string) {
-  const supabase = await createClient();
+  const { supabase, role } = await getRoleAndCompany();
+  if (!['admin', 'muhasebe1', 'muhasebe2'].includes(role)) {
+    throw new Error('Yetkiniz bulunmuyor! Yalnızca yöneticiler ürün silebilir.');
+  }
   const { error } = await supabase.from('products').update({ deleted_at: new Date().toISOString() } as never).eq('id', id);
   if (error) throw new Error(error.message);
   revalidatePath('/urunler');
@@ -111,9 +126,13 @@ export async function deleteAllStock(mode: "all_products" | "zero_stock" = "all_
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("company_id")
+      .select("company_id, role")
       .eq("id", user.id)
       .single();
+
+    if ((profile as any)?.role !== "admin") {
+      return { success: false, error: "Yetkiniz bulunmuyor! Yalnızca sistem yöneticisi tüm stoğu silebilir." };
+    }
 
     const companyId = (profile as any)?.company_id;
     if (!companyId) {

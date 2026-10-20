@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/formatters";
 import { redirect } from "next/navigation";
@@ -13,11 +14,17 @@ export default async function SalesPage() {
 
   const { data: profileData } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select("company_id, role")
     .eq("id", userData.user.id)
     .single();
-  const profile = profileData as { company_id: string } | null;
+  const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id) redirect("/login");
+
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get("app_active_role")?.value;
+  const isActualAdmin = profile.role === "admin";
+  const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
+  const canDeleteSale = ["admin", "muhasebe1", "muhasebe2"].includes(activeRole);
 
   const { data: salesData } = await supabase
     .from("sales")
@@ -146,7 +153,7 @@ export default async function SalesPage() {
                         >
                           Detay <ArrowRight size={12} />
                         </Link>
-                        <DeleteSaleButton saleId={sale.id} saleCode={sale.sale_code} />
+                        {canDeleteSale && <DeleteSaleButton saleId={sale.id} saleCode={sale.sale_code} />}
                       </div>
                     </td>
                   </tr>

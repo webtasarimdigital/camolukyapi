@@ -42,7 +42,10 @@ const CATEGORIES = [
   "Diğer",
 ] as const;
 
-export function PortalClient({ initialPortals, userName }: Props) {
+export function PortalClient({ initialPortals, userRole, userName }: Props) {
+  const isReadOnly = ["tali_bayi", "bayi", "depo", "sofor"].includes(userRole);
+  const canDelete = ["admin", "muhasebe1", "muhasebe2"].includes(userRole);
+
   const [portals, setPortals] = useState<CompanyPortal[]>(initialPortals);
   const [search, setSearch] = useState("");
   const [selectedCategory, setSelectedCategory] = useState<string>("Tümü");
@@ -87,16 +90,28 @@ export function PortalClient({ initialPortals, userName }: Props) {
   }
 
   function handleOpenNew() {
+    if (isReadOnly) {
+      toast.error("Yetkiniz bulunmuyor! Yalnızca görüntüleme yetkiniz bulunmaktadır.");
+      return;
+    }
     setEditingPortal(null);
     setIsModalOpen(true);
   }
 
   function handleOpenEdit(portal: CompanyPortal) {
+    if (isReadOnly) {
+      toast.error("Yetkiniz bulunmuyor! Yalnızca görüntüleme yetkiniz bulunmaktadır.");
+      return;
+    }
     setEditingPortal(portal);
     setIsModalOpen(true);
   }
 
   async function handleDelete(id: string) {
+    if (!canDelete) {
+      toast.error("Yetkiniz bulunmuyor! Yalnızca yöneticiler portal silebilir.");
+      return;
+    }
     if (!confirm("Bu şirket portalını silmek istediğinize emin misiniz?")) return;
 
     startTransition(async () => {
@@ -208,12 +223,14 @@ export function PortalClient({ initialPortals, userName }: Props) {
             </button>
           </div>
 
-          <button
-            onClick={handleOpenNew}
-            className="flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
-          >
-            <Plus size={16} /> + Yeni Portal Ekle
-          </button>
+          {!isReadOnly && (
+            <button
+              onClick={handleOpenNew}
+              className="flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
+            >
+              <Plus size={16} /> + Yeni Portal Ekle
+            </button>
+          )}
         </div>
       </div>
 
@@ -283,22 +300,26 @@ export function PortalClient({ initialPortals, userName }: Props) {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => handleOpenEdit(portal)}
-                          className="p-1 rounded text-brand-navy hover:bg-surface transition"
-                          title="Düzenle"
-                        >
-                          <Edit3 size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleDelete(portal.id)}
-                          className="p-1 rounded text-rose-400 hover:text-rose-600 transition"
-                          title="Sil"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
+                      {!isReadOnly && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => handleOpenEdit(portal)}
+                            className="p-1 rounded text-brand-navy hover:bg-surface transition"
+                            title="Düzenle"
+                          >
+                            <Edit3 size={14} />
+                          </button>
+                          {canDelete && (
+                            <button
+                              onClick={() => handleDelete(portal.id)}
+                              className="p-1 rounded text-rose-400 hover:text-rose-600 transition"
+                              title="Sil"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
+                        </div>
+                      )}
                     </div>
 
                     {/* Notlar */}
@@ -392,13 +413,13 @@ export function PortalClient({ initialPortals, userName }: Props) {
                   <th className="py-3 px-4">Şifre</th>
                   <th className="py-3 px-4">Açıklama / Not</th>
                   <th className="py-3 px-4 text-center">Git</th>
-                  <th className="py-3 px-4 text-center w-16">İşlem</th>
+                  {!isReadOnly && <th className="py-3 px-4 text-center w-16">İşlem</th>}
                 </tr>
               </thead>
               <tbody className="divide-y divide-border">
                 {filtered.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="py-12 text-center text-text-muted">
+                    <td colSpan={isReadOnly ? 6 : 7} className="py-12 text-center text-text-muted">
                       Kayıtlı portal bulunamadı.
                     </td>
                   </tr>
@@ -468,24 +489,28 @@ export function PortalClient({ initialPortals, userName }: Props) {
                             <ExternalLink size={12} /> Git ↗
                           </a>
                         </td>
-                        <td className="py-3 px-4 text-center">
-                          <div className="flex items-center justify-center gap-1">
-                            <button
-                              onClick={() => handleOpenEdit(portal)}
-                              className="p-1 rounded text-brand-navy hover:bg-surface transition"
-                              title="Düzenle"
-                            >
-                              <Edit3 size={14} />
-                            </button>
-                            <button
-                              onClick={() => handleDelete(portal.id)}
-                              className="p-1 rounded text-rose-400 hover:text-rose-600 transition"
-                              title="Sil"
-                            >
-                              <Trash2 size={14} />
-                            </button>
-                          </div>
-                        </td>
+                        {!isReadOnly && (
+                          <td className="py-3 px-4 text-center">
+                            <div className="flex items-center justify-center gap-1">
+                              <button
+                                onClick={() => handleOpenEdit(portal)}
+                                className="p-1 rounded text-brand-navy hover:bg-surface transition"
+                                title="Düzenle"
+                              >
+                                <Edit3 size={14} />
+                              </button>
+                              {canDelete && (
+                                <button
+                                  onClick={() => handleDelete(portal.id)}
+                                  className="p-1 rounded text-rose-400 hover:text-rose-600 transition"
+                                  title="Sil"
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              )}
+                            </div>
+                          </td>
+                        )}
                       </tr>
                     );
                   })

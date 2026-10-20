@@ -1,4 +1,5 @@
 import { createClient } from "@/lib/supabase/server";
+import { cookies } from "next/headers";
 import Link from "next/link";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import { redirect } from "next/navigation";
@@ -30,11 +31,17 @@ export default async function TekliflerPage({
 
   const { data: profileData } = await supabase
     .from("profiles")
-    .select("company_id")
+    .select("company_id, role")
     .eq("id", userData.user.id)
     .single();
-  const profile = profileData as { company_id: string } | null;
+  const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id) redirect("/login");
+
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get("app_active_role")?.value;
+  const isActualAdmin = profile.role === "admin";
+  const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
+  const canDeleteQuote = ["admin", "muhasebe1", "muhasebe2"].includes(activeRole);
 
   // Tüm teklif istatistiklerini al (filtre uygulanmadan önceki gerçek oranlar için)
   const { data: allQuotesData } = await supabase
@@ -380,11 +387,13 @@ export default async function TekliflerPage({
                         >
                           Görüntüle
                         </Link>
-                        <DeleteQuoteButton 
-                          quoteId={quote.id} 
-                          quoteCode={quote.quote_code} 
-                          variant="icon" 
-                        />
+                        {canDeleteQuote && (
+                          <DeleteQuoteButton 
+                            quoteId={quote.id} 
+                            quoteCode={quote.quote_code} 
+                            variant="icon" 
+                          />
+                        )}
                       </div>
                     </td>
                   </tr>

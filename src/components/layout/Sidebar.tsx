@@ -66,13 +66,13 @@ const navItems: NavItem[] = [
     label: "Şirket Portalları",
     icon: Globe,
     badge: "B2B",
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat"],
+    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat", "tali_bayi", "bayi"],
   },
   {
     href: "/urunler",
     label: "Ürünler & Stok",
     icon: Package,
-    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat", "satis"],
+    allowedRoles: ["admin", "muhasebe1", "muhasebe2", "sevkiyat", "satis", "tali_bayi", "bayi"],
   },
   {
     href: "/import",
@@ -188,6 +188,8 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
       ? "/sevkiyat"
       : roleKey === "satis"
       ? "/teklifler"
+      : roleKey === "tali_bayi" || (roleKey as string) === "bayi"
+      ? "/urunler"
       : "/dashboard";
 
   const roleBadgeMap: Record<string, string> = {
@@ -198,6 +200,8 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
     depo: "📦 Depo Sorumlusu",
     sofor: "🚚 Şoför",
     satis: "💼 Satış",
+    tali_bayi: "🏪 Tali Bayi",
+    bayi: "🏪 Tali Bayi",
   };
 
   async function handleLogout() {

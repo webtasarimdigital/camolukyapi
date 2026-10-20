@@ -55,6 +55,8 @@ export async function middleware(request: NextRequest) {
     const url = request.nextUrl.clone();
     if (role === "depo" || role === "sofor" || role === "sevkiyat") {
       url.pathname = "/sevkiyat";
+    } else if (role === "tali_bayi" || role === "bayi") {
+      url.pathname = "/urunler";
     } else if (role === "satis") {
       url.pathname = "/teklifler";
     } else {
@@ -70,6 +72,14 @@ export async function middleware(request: NextRequest) {
       if (!pathname.startsWith("/sevkiyat") && pathname !== "/login") {
         const url = request.nextUrl.clone();
         url.pathname = "/sevkiyat";
+        return NextResponse.redirect(url);
+      }
+    } else if (role === "tali_bayi" || role === "bayi") {
+      const allowedBayi = ["/urunler", "/stok", "/portallar"];
+      const isAllowed = allowedBayi.some((r) => pathname.startsWith(r)) && !pathname.startsWith("/urunler/yeni");
+      if (!isAllowed && pathname !== "/login") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/urunler";
         return NextResponse.redirect(url);
       }
     } else if (role === "satis") {

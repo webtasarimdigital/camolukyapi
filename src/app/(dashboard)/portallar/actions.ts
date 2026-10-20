@@ -13,6 +13,7 @@ async function getCompanyAndUser() {
 
   let companyId = "a0000000-0000-0000-0000-000000000001";
   let userName = "Admin";
+  let userRole = "staff";
 
   if (user) {
     const { data: profile } = (await supabase
@@ -23,13 +24,17 @@ async function getCompanyAndUser() {
 
     if (profile?.company_id) companyId = profile.company_id;
     if (profile?.full_name) userName = profile.full_name;
+    if (profile?.role) userRole = profile.role;
   }
 
   const cookieStore = await cookies();
   const cookieName = cookieStore.get("app_user_name")?.value;
   if (cookieName) userName = cookieName;
 
-  return { supabase, user, companyId, userName };
+  const cookieRole = cookieStore.get("app_active_role")?.value;
+  if (userRole === "admin" && cookieRole) userRole = cookieRole;
+
+  return { supabase, user, companyId, userName, userRole };
 }
 
 export async function getPortals(): Promise<CompanyPortal[]> {
@@ -103,7 +108,10 @@ export async function savePortal(input: {
   notes?: string;
 }) {
   try {
-    const { supabase, companyId, userName } = await getCompanyAndUser();
+    const { supabase, companyId, userName, userRole } = await getCompanyAndUser();
+    if (["tali_bayi", "bayi", "depo", "sofor"].includes(userRole)) {
+      return { success: false, error: "Yetkiniz bulunmuyor! Yalnızca görüntüleme yetkiniz bulunmaktadır." };
+    }
     const now = new Date().toISOString();
 
     if (input.id) {
@@ -151,7 +159,10 @@ export async function savePortal(input: {
 
 export async function deletePortal(id: string) {
   try {
-    const { supabase } = await getCompanyAndUser();
+    const { supabase, userRole } = await getCompanyAndUser();
+    if (!["admin", "muhasebe1", "muhasebe2"].includes(userRole)) {
+      return { success: false, error: "Yetkiniz bulunmuyor! Yalnızca yöneticiler portal silebilir." };
+    }
     const { error } = await (supabase.from("portals") as any).delete().eq("id", id);
     if (error) throw new Error(error.message);
     revalidatePath("/portallar");

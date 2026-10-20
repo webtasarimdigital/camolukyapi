@@ -111,9 +111,18 @@ export async function bulkIncreaseStock(
 
     const { data: profile } = await supabase
       .from("profiles")
-      .select("company_id")
+      .select("company_id, role")
       .eq("id", user.id)
       .single();
+
+    const role = (profile as any)?.role;
+    if (role === "tali_bayi" || role === "bayi" || role === "depo" || role === "sofor") {
+      return {
+        ...result,
+        success: false,
+        errors: ["Yetkiniz bulunmuyor! Stok içe aktarma yetkiniz yoktur (Yalnızca Görüntüleme)."],
+      };
+    }
 
     const companyId = (profile as any)?.company_id;
     if (!companyId) {

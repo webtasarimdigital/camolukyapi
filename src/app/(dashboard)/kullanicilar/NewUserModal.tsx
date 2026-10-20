@@ -116,6 +116,7 @@ export default function NewUserModal({ companyId }: { companyId: string }) {
               <option value="depo">Depo Sorumlusu (Yalnızca Sevkiyat & Yükleme)</option>
               <option value="sofor">Şoför (Yalnızca Sevkiyat & Yükleme)</option>
               <option value="satis">Satış Temsilcisi (Teklif, Satış, Sevkiyat, Müşteriler)</option>
+              <option value="tali_bayi">Tali Bayi (Yalnızca Ürünler / Stok & Portallar)</option>
               <option value="staff">Personel (Standart Personel Erişimi)</option>
               <option value="admin">Yönetici / Admin (Tam Yetkili)</option>
             </select>

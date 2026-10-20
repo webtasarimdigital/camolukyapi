@@ -82,8 +82,8 @@ export function TopBar({ userName, userRole = "admin", onToggleMobile }: TopBarP
         <Menu size={18} />
       </button>
 
-      {/* Global Arama - Depo ve Şoför hariç diğer rollere açık */}
-      {currentRole !== "depo" && currentRole !== "sofor" ? (
+      {/* Global Arama - Depo, Şoför ve Tali Bayi hariç diğer rollere açık */}
+      {currentRole !== "depo" && currentRole !== "sofor" && currentRole !== "tali_bayi" && (currentRole as string) !== "bayi" ? (
         <form onSubmit={handleSearch} className="flex-1 max-w-md">
           <div className="relative">
             <Search
@@ -102,7 +102,9 @@ export function TopBar({ userName, userRole = "admin", onToggleMobile }: TopBarP
       ) : (
         <div className="flex-1 flex items-center">
           <span className="text-xs font-semibold text-brand-navy bg-amber-50 border border-amber-200 px-3 py-1 rounded-lg">
-            🚚 Sevkiyat & Yükleme Kontrol Paneli
+            {currentRole === "tali_bayi" || (currentRole as string) === "bayi"
+              ? "🏪 Tali Bayi - Ürün Kataloğu & Portallar"
+              : "🚚 Sevkiyat & Yükleme Kontrol Paneli"}
           </span>
         </div>
       )}

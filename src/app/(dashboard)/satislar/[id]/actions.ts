@@ -24,6 +24,12 @@ export async function cancelSale(saleId: string, reason: string) {
   const { data: userData } = await supabase.auth.getUser();
   if (!userData.user) throw new Error("Oturum açmanız gerekiyor.");
   
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", userData.user.id).single();
+  const role = (profile as any)?.role || "staff";
+  if (!["admin", "muhasebe1", "muhasebe2"].includes(role)) {
+    throw new Error("Yetkiniz bulunmuyor! Yalnızca muhasebe ve yöneticiler satışı iptal edebilir.");
+  }
+
   const { error } = await supabase.rpc("cancel_sale" as never, { 
     p_sale_id: saleId, 
     p_user_id: userData.user.id, 
@@ -107,6 +113,16 @@ export async function addPayment(
 }
 
 export async function deleteSale(saleId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Oturum açmanız gerekiyor.");
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const role = (profile as any)?.role || "staff";
+  if (!["admin", "muhasebe1", "muhasebe2"].includes(role)) {
+    throw new Error("Yetkiniz bulunmuyor! Yalnızca muhasebe ve yöneticiler satış kaydını silebilir.");
+  }
+
   const service = await createServiceClient();
 
   const { data: saleData } = await service

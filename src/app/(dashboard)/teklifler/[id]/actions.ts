@@ -174,6 +174,16 @@ export async function updateQuote(
 }
 
 export async function deleteQuote(quoteId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Oturum bulunamadı. Lütfen giriş yapın.");
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const role = (profile as any)?.role || "staff";
+  if (!["admin", "muhasebe1", "muhasebe2"].includes(role)) {
+    throw new Error("Yetkiniz bulunmuyor! Yalnızca muhasebe ve yöneticiler teklif silebilir.");
+  }
+
   const service = await createServiceClient();
 
   // 1. Unlink any sales referencing this quote

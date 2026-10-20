@@ -22,6 +22,16 @@ function isRouteAllowed(role: UserRole, pathname: string): boolean {
     return pathname.startsWith("/sevkiyat");
   }
 
+  // Tali Bayi: YALNIZCA Ürünler / Stok ve Şirket Portalları
+  if (role === "tali_bayi" || (role as string) === "bayi") {
+    if (pathname.startsWith("/urunler/yeni")) return false;
+    return (
+      pathname.startsWith("/urunler") ||
+      pathname.startsWith("/stok") ||
+      pathname.startsWith("/portallar")
+    );
+  }
+
   // Satış Temsilcisi: Teklif, Satış, Sevkiyat, Müşteriler, Ürünler
   if (role === "satis") {
     return (
@@ -84,6 +94,9 @@ export function DashboardShell({
   if (roleKey === "depo" || roleKey === "sofor" || roleKey === "sevkiyat") {
     defaultRoute = "/sevkiyat";
     defaultRouteLabel = "Sevkiyat ve Yükleme Modülüne Git";
+  } else if (roleKey === "tali_bayi" || (roleKey as string) === "bayi") {
+    defaultRoute = "/urunler";
+    defaultRouteLabel = "Ürünler ve Stok Modülüne Git";
   } else if (roleKey === "satis") {
     defaultRoute = "/teklifler";
     defaultRouteLabel = "Teklifler Sayfasına Git";

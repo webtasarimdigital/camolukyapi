@@ -1,5 +1,6 @@
 import { createClient } from '@/lib/supabase/server';
 import { redirect } from 'next/navigation';
+import { cookies } from 'next/headers';
 import Link from 'next/link';
 import { formatCurrency, formatQty } from '@/lib/formatters';
 import { Suspense } from 'react';
@@ -24,6 +25,16 @@ export default async function UrunlerPage({
 
   const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id) redirect('/login');
+
+  const cookieStore = await cookies();
+  const cookieRole = cookieStore.get("app_active_role")?.value;
+  const isActualAdmin = profile.role === "admin";
+  const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
+
+  const isReadOnly = ["tali_bayi", "bayi", "depo", "sofor"].includes(activeRole);
+  const canImport = !isReadOnly && ["admin", "muhasebe1", "muhasebe2"].includes(activeRole);
+  const canDeleteAllStock = isActualAdmin && activeRole === "admin";
+  const canCreateProduct = !isReadOnly && ["admin", "muhasebe1", "muhasebe2", "staff"].includes(activeRole);
 
   const q = typeof sp.q === 'string' ? sp.q : '';
   const page = typeof sp.page === 'string' ? parseInt(sp.page, 10) : 1;
@@ -58,20 +69,24 @@ export default async function UrunlerPage({
           <p className="text-sm text-text-muted mt-0.5">PDF ve Excel katalog ürünleri ile manuel eklenen tüm ürünler</p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
-          <StockQtyImportModal />
-          <DeleteAllStockModal totalCount={count ?? 0} />
-          <Link
-            href="/import"
-            className="bg-surface border border-border text-text px-3.5 py-2 rounded-lg text-sm font-semibold hover:bg-gray-100 transition flex items-center gap-1.5"
-          >
-            📄 PDF / Excel Yükle
-          </Link>
-          <Link
-            href="/urunler/yeni"
-            className="bg-brand-gold text-brand-navy px-3.5 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition flex items-center gap-1.5"
-          >
-            + Yeni Ürün Ekle
-          </Link>
+          {canImport && <StockQtyImportModal />}
+          {canDeleteAllStock && <DeleteAllStockModal totalCount={count ?? 0} />}
+          {canImport && (
+            <Link
+              href="/import"
+              className="bg-surface border border-border text-text px-3.5 py-2 rounded-lg text-sm font-semibold hover:bg-gray-100 transition flex items-center gap-1.5"
+            >
+              📄 PDF / Excel Yükle
+            </Link>
+          )}
+          {canCreateProduct && (
+            <Link
+              href="/urunler/yeni"
+              className="bg-brand-gold text-brand-navy px-3.5 py-2 rounded-lg text-sm font-semibold hover:opacity-90 transition flex items-center gap-1.5"
+            >
+              + Yeni Ürün Ekle
+            </Link>
+          )}
         </div>
       </div>
 
@@ -141,7 +156,9 @@ export default async function UrunlerPage({
                       </span>
                     </td>
                     <td className="px-4 py-3 text-brand-navy hover:underline">
-                      <Link href={`/urunler/${product.id}`}>Düzenle</Link>
+                      <Link href={`/urunler/${product.id}`}>
+                        {isReadOnly ? "İncele" : "Düzenle"}
+                      </Link>
                     </td>
                   </tr>
                 );

@@ -39,6 +39,11 @@ const ROLE_CONFIG: Record<string, { label: string; desc: string; badge: string }
     desc: "Teklif, Satış, Sevkiyat, Müşteriler ve Ürünler erişimi",
     badge: "bg-indigo-100 text-indigo-800 border-indigo-200",
   },
+  tali_bayi: {
+    label: "Tali Bayi",
+    desc: "Yalnızca Stok / Ürün Kataloğu ve Şirket Portalları (Görüntüleme)",
+    badge: "bg-emerald-100 text-emerald-800 border-emerald-200",
+  },
   staff: {
     label: "Personel",
     desc: "Standart personel yetkisi",
@@ -54,6 +59,7 @@ const DEFAULT_ACCOUNTS = [
   { email: "depo@camolukyapi.com", pass: "camolukdepo0", role: "depo", note: "Yalnızca Sevkiyat modülü (Kullanıcı: depo)" },
   { email: "sofor@camolukyapi.com", pass: "camolukşoför1", role: "sofor", note: "Yalnızca Sevkiyat modülü (Kullanıcı: şoför)" },
   { email: "satis@camolukyapi.com", pass: "camoluksatış2", role: "satis", note: "Teklif, Satış, Sevkiyat (Kullanıcı: satış)" },
+  { email: "bayi@camolukyapi.com", pass: "camolukbayi0", role: "tali_bayi", note: "Stok ve Şirket Portalları (Kullanıcı: bayi)" },
 ];
 
 import { cookies } from "next/headers";
