@@ -272,15 +272,22 @@ export async function extractProductsFromPdf(formData: FormData): Promise<{
         };
       }
       if (profile?.company_id) {
-        const { data: prods } = await supabase
-          .from("products")
-          .select("id, product_code, product_name, size, unit, price_quality_1, price_quality_2, price_commercial")
-          .eq("company_id", profile.company_id)
-          .eq("is_active", true);
+        let allProds: typeof existingProducts = [];
+        let from = 0;
+        while (true) {
+          const { data: prods } = await supabase
+            .from("products")
+            .select("id, product_code, product_name, size, unit, price_quality_1, price_quality_2, price_commercial")
+            .eq("company_id", profile.company_id)
+            .eq("is_active", true)
+            .range(from, from + 999);
 
-        if (prods) {
-          existingProducts = prods as typeof existingProducts;
+          if (!prods || prods.length === 0) break;
+          allProds.push(...(prods as typeof existingProducts));
+          if (prods.length < 1000) break;
+          from += 1000;
         }
+        existingProducts = allProds;
       }
     }
 
@@ -353,53 +360,43 @@ export async function extractProductsFromPdf(formData: FormData): Promise<{
     const productsMap = new Map<string, ParsedProductRow>();
     let matchedWithExisting = 0;
 
-    // 3.1 Yapılandırılmış Ebat + Kod + Fiyat Satırlarını Ayrıştır (Seramik, Karo, Mermer vb. Liste Formatları)
-    // Örnek: 120*280 NG SERAMİK AMAZONIT 55018167RP 120*280 AMAZONIT PARLAK 6MM REKTIFIYE 3.870,00 2.130,00 M2
+    // 3.1 Yapılandırılmış Satırları Ayrıştır (Kod, Ebat, Fiyat ve Birim İçeren Satırlar)
     for (const line of lines) {
-      const sizeMatch = line.match(/^(\d{2,4}[\*xX]\d{2,4})\s+/);
       const priceMatches = line.match(/\b\d{1,3}(?:\.\d{3})*(?:,\d{2})\b/g);
-      const unitMatch = line.match(/\b(M2|M²|ADET|ADT|PK|SET|METRE|MT)\b/i);
+      if (!priceMatches || priceMatches.length === 0) continue;
 
-      if (sizeMatch && priceMatches && priceMatches.length >= 1) {
-        const size = sizeMatch[1];
+      const sizeMatch = line.match(/\b(\d{2,4}[\*xX]\d{2,4})\b/);
+      const unitMatch = line.match(/\b(M2|M²|ADET|ADT|PK|SET|METRE|MT)\b/i);
+      const codeMatch = line.match(/\b(\d{6,10}[A-Z0-9]*|[A-Z]{2,4}\d{4,10}[A-Z0-9]*)\b/);
+
+      if (codeMatch) {
+        const code = codeMatch[1];
+        const size = sizeMatch ? sizeMatch[1] : undefined;
         const unit = unitMatch ? unitMatch[1].toUpperCase().replace("M²", "M2") : "M2";
         const prices = priceMatches.map((p) => parseFloat(p.replace(/\./g, "").replace(",", ".")));
         const p1 = prices[0] || null;
         const p2 = prices[1] || null;
         const pC = prices[2] || null;
 
-        let middle = line.substring(sizeMatch[0].length);
+        let middle = line;
         for (const pm of priceMatches) middle = middle.replace(pm, "");
         if (unitMatch) middle = middle.replace(unitMatch[0], "");
-        middle = middle.trim();
+        if (sizeMatch) middle = middle.replace(sizeMatch[0], "");
+        middle = middle.replace(code, "").replace(/\s+/g, " ").trim();
 
-        const codeMatch = middle.match(/\b(\d{6,10}[A-Z0-9]*|[A-Z]{2,4}\d{4,10}[A-Z0-9]*)\b/);
-        if (codeMatch) {
-          const code = codeMatch[1];
-          const codePos = middle.indexOf(code);
-          const beforeCode = middle.substring(0, codePos).trim();
-          const afterCode = middle.substring(codePos + code.length).trim();
-          const name = afterCode || beforeCode || `${size} ${code}`;
-          let group = "NG SERAMİK";
-          let series = beforeCode;
-          if (beforeCode.startsWith("NG SERAMİK")) {
-            series = beforeCode.replace("NG SERAMİK", "").trim();
-          }
+        const name = middle || (size ? `${size} ${code}` : code);
 
-          if (!productsMap.has(code.toUpperCase())) {
-            productsMap.set(code.toUpperCase(), {
-              product_code: code,
-              product_name: name,
-              product_group: group || undefined,
-              series_name: series || undefined,
-              size,
-              unit,
-              price_quality_1: p1,
-              price_quality_2: p2,
-              price_commercial: pC,
-              default_sale_price: p1,
-            });
-          }
+        if (!productsMap.has(code.toUpperCase())) {
+          productsMap.set(code.toUpperCase(), {
+            product_code: code,
+            product_name: name,
+            size,
+            unit,
+            price_quality_1: p1,
+            price_quality_2: p2,
+            price_commercial: pC,
+            default_sale_price: p1,
+          });
         }
       }
     }
@@ -410,11 +407,17 @@ export async function extractProductsFromPdf(formData: FormData): Promise<{
       for (const ep of existingProducts) {
         const cleanCode = ep.product_code.trim();
         if (!cleanCode) continue;
+        const codeWithoutPrefix = cleanCode.replace(/^NG\./i, "");
 
-        // PDF içinde bu ürün kodu geçiyor mu?
-        const foundLineIdx = lines.findIndex((l) =>
-          new RegExp(`\\b${cleanCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "i").test(l)
-        );
+        // PDF içinde bu ürün kodu veya NG. olmadan hali geçiyor mu?
+        const codePatterns = [
+          cleanCode.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+          codeWithoutPrefix.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"),
+        ];
+        const regexStr = `\\b(?:${codePatterns.join("|")})\\b`;
+        const codeRegex = new RegExp(regexStr, "i");
+
+        const foundLineIdx = lines.findIndex((l) => codeRegex.test(l));
 
         if (foundLineIdx !== -1) {
           // İlgili satır ve sonraki 2 satırdaki fiyatları tara
