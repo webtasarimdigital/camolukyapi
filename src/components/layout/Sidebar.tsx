@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -11,8 +12,10 @@ import {
   FileSpreadsheet,
   Users,
   FileText,
+  FilePlus,
   ClipboardList,
   ShoppingCart,
+  PlusCircle,
   ReceiptText,
   CalendarClock,
   Navigation,
@@ -26,18 +29,26 @@ import {
   LogOut,
   ChevronRight,
   X,
-  MapPin,
   Globe,
 } from "lucide-react";
 
 import { type UserRole } from "@/lib/auth/role-constants";
 
-interface NavItem {
+interface NavSubItem {
   href: string;
   label: string;
   icon: any;
   badge?: string;
+}
+
+interface NavItem {
+  id?: string;
+  href?: string;
+  label: string;
+  icon: any;
+  badge?: string;
   allowedRoles: UserRole[];
+  subItems?: NavSubItem[];
 }
 
 const navItems: NavItem[] = [
@@ -87,28 +98,40 @@ const navItems: NavItem[] = [
     allowedRoles: ["admin", "muhasebe1", "satis"],
   },
   {
-    href: "/teklif/yeni",
-    label: "Teklif Oluştur",
+    id: "teklif",
+    label: "Teklif",
     icon: FileText,
     allowedRoles: ["admin", "muhasebe1", "satis"],
+    subItems: [
+      {
+        href: "/teklif/yeni",
+        label: "Teklif Oluştur",
+        icon: FilePlus,
+      },
+      {
+        href: "/teklifler",
+        label: "Teklifler",
+        icon: ClipboardList,
+      },
+    ],
   },
   {
-    href: "/teklifler",
-    label: "Teklifler",
-    icon: ClipboardList,
-    allowedRoles: ["admin", "muhasebe1", "satis"],
-  },
-  {
-    href: "/satis/yeni",
-    label: "Satış Oluştur",
+    id: "satis",
+    label: "Satış",
     icon: ShoppingCart,
     allowedRoles: ["admin", "muhasebe1", "satis"],
-  },
-  {
-    href: "/satislar",
-    label: "Satışlar",
-    icon: ReceiptText,
-    allowedRoles: ["admin", "muhasebe1", "satis"],
+    subItems: [
+      {
+        href: "/satis/yeni",
+        label: "Satış Oluştur",
+        icon: PlusCircle,
+      },
+      {
+        href: "/satislar",
+        label: "Satışlar",
+        icon: ReceiptText,
+      },
+    ],
   },
   {
     href: "/odemeler",
@@ -179,6 +202,30 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
 
   const roleKey = (userRole as UserRole) || "admin";
 
+  const isTeklifPath = pathname.startsWith("/teklif");
+  const isSatisPath = pathname.startsWith("/satis");
+
+  const [openDropdowns, setOpenDropdowns] = useState<Record<string, boolean>>({
+    teklif: isTeklifPath,
+    satis: isSatisPath,
+  });
+
+  useEffect(() => {
+    if (isTeklifPath) {
+      setOpenDropdowns((prev) => ({ ...prev, teklif: true }));
+    }
+    if (isSatisPath) {
+      setOpenDropdowns((prev) => ({ ...prev, satis: true }));
+    }
+  }, [pathname, isTeklifPath, isSatisPath]);
+
+  function toggleDropdown(key: string) {
+    setOpenDropdowns((prev) => ({
+      ...prev,
+      [key]: !prev[key],
+    }));
+  }
+
   const visibleItems = navItems.filter((item) =>
     item.allowedRoles.includes(roleKey)
   );
@@ -208,8 +255,27 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
     router.refresh();
   }
 
-  function isActive(href: string) {
+  function isActive(href?: string) {
+    if (!href) return false;
     if (href === "/dashboard") return pathname === "/dashboard";
+    return pathname.startsWith(href);
+  }
+
+  function isSubItemActive(href: string) {
+    if (href === "/teklif/yeni") return pathname === "/teklif/yeni";
+    if (href === "/teklifler") {
+      return (
+        pathname.startsWith("/teklifler") ||
+        (pathname.startsWith("/teklif/") && pathname !== "/teklif/yeni")
+      );
+    }
+    if (href === "/satis/yeni") return pathname === "/satis/yeni";
+    if (href === "/satislar") {
+      return (
+        pathname.startsWith("/satislar") ||
+        (pathname.startsWith("/satis/") && pathname !== "/satis/yeni")
+      );
+    }
     return pathname.startsWith(href);
   }
 
@@ -246,11 +312,94 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
       <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-0.5 scrollbar-thin scrollbar-thumb-white/10">
         {visibleItems.map((item) => {
           const Icon = item.icon;
+
+          // Dropdown Group (Teklif or Satış)
+          if (item.subItems && item.subItems.length > 0) {
+            const dropdownKey = item.id || item.label.toLowerCase();
+            const isOpen = !!openDropdowns[dropdownKey];
+            const isParentActive = item.subItems.some((sub) =>
+              isSubItemActive(sub.href)
+            );
+
+            return (
+              <div key={dropdownKey} className="space-y-0.5">
+                <button
+                  type="button"
+                  onClick={() => toggleDropdown(dropdownKey)}
+                  className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors group cursor-pointer ${
+                    isParentActive
+                      ? "text-white bg-white/10 font-semibold"
+                      : "text-slate-300 hover:bg-brand-navy-2 hover:text-white"
+                  }`}
+                >
+                  <Icon
+                    size={16}
+                    className={`flex-shrink-0 ${
+                      isParentActive
+                        ? "text-brand-gold"
+                        : "text-slate-400 group-hover:text-white"
+                    }`}
+                  />
+                  <span className="flex-1 text-left truncate">{item.label}</span>
+                  {item.badge && (
+                    <span className="text-[10px] bg-brand-gold/20 text-brand-gold px-1.5 py-0.5 rounded font-semibold">
+                      {item.badge}
+                    </span>
+                  )}
+                  <ChevronRight
+                    size={14}
+                    className={`flex-shrink-0 text-slate-400 transition-transform duration-200 ${
+                      isOpen ? "rotate-90 text-brand-gold" : ""
+                    }`}
+                  />
+                </button>
+
+                {isOpen && (
+                  <div className="pl-3 py-1 space-y-0.5 border-l-2 border-brand-gold/30 ml-4 my-0.5">
+                    {item.subItems.map((sub) => {
+                      const SubIcon = sub.icon;
+                      const subActive = isSubItemActive(sub.href);
+                      return (
+                        <Link
+                          key={sub.href}
+                          href={sub.href}
+                          onClick={onCloseMobile}
+                          className={`flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-medium transition-colors ${
+                            subActive
+                              ? "bg-brand-gold text-brand-navy font-bold shadow-xs"
+                              : "text-slate-300 hover:bg-brand-navy-2 hover:text-white"
+                          }`}
+                        >
+                          <SubIcon
+                            size={14}
+                            className={`flex-shrink-0 ${
+                              subActive ? "text-brand-navy" : "text-slate-400"
+                            }`}
+                          />
+                          <span className="flex-1 truncate">{sub.label}</span>
+                          {sub.badge && !subActive && (
+                            <span className="text-[9px] bg-brand-gold/20 text-brand-gold px-1 py-0.5 rounded font-semibold">
+                              {sub.badge}
+                            </span>
+                          )}
+                          {subActive && (
+                            <ChevronRight size={12} className="flex-shrink-0" />
+                          )}
+                        </Link>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          }
+
+          // Single Link Item
           const active = isActive(item.href);
           return (
             <Link
-              key={item.href}
-              href={item.href}
+              key={item.href || item.label}
+              href={item.href || "#"}
               onClick={onCloseMobile}
               className={`flex items-center gap-2.5 px-3 py-2 rounded-lg text-xs font-medium transition-colors group ${
                 active
