@@ -41,12 +41,12 @@ export const ROLE_DEFINITIONS: Record<
   },
   tali_bayi: {
     label: "🏪 Tali Bayi",
-    description: "Yalnızca Ürünler / Stok ve Şirket Portalları (Görüntüleme)",
+    description: "Sipariş Oluşturma, Sipariş Takibi, Ürünler / Stok ve Portallar",
     defaultName: "Tali Bayi",
   },
   bayi: {
     label: "🏪 Tali Bayi",
-    description: "Yalnızca Ürünler / Stok ve Şirket Portalları (Görüntüleme)",
+    description: "Sipariş Oluşturma, Sipariş Takibi, Ürünler / Stok ve Portallar",
     defaultName: "Tali Bayi",
   },
 };

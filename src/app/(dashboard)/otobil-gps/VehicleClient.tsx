@@ -1,19 +1,53 @@
 "use client";
 
 import { useState, useTransition, useMemo } from "react";
-import type { Vehicle, ExpiryAlertInfo } from "./types";
+import type { Vehicle, VehicleExpense, VehicleDocuments, ExpiryAlertInfo } from "./types";
 import { getExpiryAlert } from "./types";
-import { saveVehicle, updateVehicleStatus, deleteVehicle, getVehicles } from "./actions";
+import {
+  saveVehicle,
+  deleteVehicle,
+  getVehicles,
+  addVehicleExpense,
+  deleteVehicleExpense,
+  updateVehicleDocuments,
+  uploadVehicleFile,
+} from "./actions";
 import { formatCurrency, formatDate } from "@/lib/formatters";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
 import {
-  Truck, Plus, MapPin, Phone, User, Edit3, Trash2,
-  CheckCircle2, Clock, Warehouse, Loader2,
-  Navigation, X, Package, AlertCircle, Fuel,
-  Calendar, ShieldCheck, Wrench, Download, AlertTriangle,
-  Bell, FileText, Search,
+  Truck,
+  Plus,
+  MapPin,
+  Phone,
+  User,
+  Edit3,
+  Trash2,
+  CheckCircle2,
+  Clock,
+  Loader2,
+  Navigation,
+  X,
+  Package,
+  AlertCircle,
+  Fuel,
+  Calendar,
+  ShieldCheck,
+  Wrench,
+  Download,
+  AlertTriangle,
+  Bell,
+  FileText,
+  Search,
+  Upload,
+  Camera,
+  FileCheck,
+  Image as ImageIcon,
+  ExternalLink,
+  Receipt,
+  FileSpreadsheet,
 } from "lucide-react";
+import { InteractiveTable } from "@/components/ui/InteractiveTable";
 
 interface Props {
   initialVehicles: Vehicle[];
@@ -21,22 +55,21 @@ interface Props {
   userRole: string;
 }
 
-const STATUS_CONFIG: Record<Vehicle["status"], { label: string; color: string; bg: string; icon: React.ElementType }> = {
-  "Depoda":      { label: "Depoda",      color: "text-blue-700",   bg: "bg-blue-100",   icon: Warehouse },
-  "Yolda":       { label: "Yolda",       color: "text-amber-700",  bg: "bg-amber-100",  icon: Navigation },
-  "Teslim Etti": { label: "Teslim Etti", color: "text-green-700",  bg: "bg-green-100",  icon: CheckCircle2 },
-  "Bakımda":     { label: "Bakımda",     color: "text-red-700",    bg: "bg-red-100",    icon: AlertCircle },
-};
-
-const VEHICLE_TYPES = ["Kamyon", "TIR", "Kamyonet", "Pickup", "Hafif Ticari", "Binek", "Diğer"];
-const STATUSES: Vehicle["status"][] = ["Depoda", "Yolda", "Teslim Etti", "Bakımda"];
+const VEHICLE_TYPES = [
+  "Kamyon",
+  "TIR",
+  "Kamyonet",
+  "Pickup",
+  "Hafif Ticari",
+  "Binek",
+  "Diğer",
+];
 
 const EMPTY_FORM = {
   plate: "",
   driver_name: "",
   driver_phone: "",
   vehicle_type: "Kamyon",
-  status: "Depoda" as Vehicle["status"],
   current_location: "",
   destination: "",
   cargo_notes: "",
@@ -44,8 +77,6 @@ const EMPTY_FORM = {
   insurance_date: "",
   license_date: "",
   maintenance_date: "",
-  maintenance_cost: 0,
-  fuel_cost: 0,
   notes: "",
 };
 
@@ -54,20 +85,38 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
   const [form, setForm] = useState({ ...EMPTY_FORM });
-  const [statusModal, setStatusModal] = useState<{ vehicle: Vehicle } | null>(null);
-  const [newStatus, setNewStatus] = useState<Vehicle["status"]>("Yolda");
-  const [newLocation, setNewLocation] = useState("");
+
+  // Detail Modal State
+  const [detailVehicle, setDetailVehicle] = useState<Vehicle | null>(null);
+  const [selectedMonth, setSelectedMonth] = useState<string>("all");
+  const [expenseTab, setExpenseTab] = useState<"all" | "fuel" | "repair">("all");
+
+  // New Expense Form inside Detail Modal
+  const [expenseType, setExpenseType] = useState<"fuel" | "repair">("fuel");
+  const [expenseDate, setExpenseDate] = useState<string>(
+    new Date().toISOString().split("T")[0]
+  );
+  const [expenseAmount, setExpenseAmount] = useState<string>("");
+  const [expenseKm, setExpenseKm] = useState<string>("");
+  const [expenseNotes, setExpenseNotes] = useState<string>("");
+  const [expenseFile, setExpenseFile] = useState<File | null>(null);
+  const [isSavingExpense, setIsSavingExpense] = useState(false);
+
+  // Document Uploads inside Detail Modal
+  const [isUploadingDoc, setIsUploadingDoc] = useState<string | null>(null);
+
+  // Search & Filter
   const [searchQuery, setSearchQuery] = useState("");
   const [filterAlertOnly, setFilterAlertOnly] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const isAdmin = userRole === "admin" || userRole === "muhasebe1";
 
-  // ── 1 AY KALA VE 1 HAFTA KALA HATIRLATICI HESABI ──
+  // ── SÜRE BİTİMİ HATIRLATICILARI ──
   const allAlerts = useMemo(() => {
     const list: {
       vehicle: Vehicle;
-      itemType: "Muayene" | "Sigorta" | "Ruhsat / Kasko";
+      itemType: "Muayene" | "Sigorta" | "Kasko";
       alert: ExpiryAlertInfo;
       date: string;
     }[] = [];
@@ -75,20 +124,20 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
     for (const v of vehicles) {
       if (v.inspection_date) {
         const alert = getExpiryAlert(v.inspection_date);
-        if (alert.status === "expired" || alert.status === "critical" || alert.status === "warning") {
+        if (["expired", "critical", "warning"].includes(alert.status)) {
           list.push({ vehicle: v, itemType: "Muayene", alert, date: v.inspection_date });
         }
       }
       if (v.insurance_date) {
         const alert = getExpiryAlert(v.insurance_date);
-        if (alert.status === "expired" || alert.status === "critical" || alert.status === "warning") {
+        if (["expired", "critical", "warning"].includes(alert.status)) {
           list.push({ vehicle: v, itemType: "Sigorta", alert, date: v.insurance_date });
         }
       }
       if (v.license_date) {
         const alert = getExpiryAlert(v.license_date);
-        if (alert.status === "expired" || alert.status === "critical" || alert.status === "warning") {
-          list.push({ vehicle: v, itemType: "Ruhsat / Kasko", alert, date: v.license_date });
+        if (["expired", "critical", "warning"].includes(alert.status)) {
+          list.push({ vehicle: v, itemType: "Kasko", alert, date: v.license_date });
         }
       }
     }
@@ -96,43 +145,81 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
     return list.sort((a, b) => a.alert.daysLeft - b.alert.daysLeft);
   }, [vehicles]);
 
-  const urgentAlerts = allAlerts.filter(a => a.alert.status === "expired" || a.alert.status === "critical");
-  const warningAlerts = allAlerts.filter(a => a.alert.status === "warning");
+  const urgentAlerts = allAlerts.filter(
+    (a) => a.alert.status === "expired" || a.alert.status === "critical"
+  );
+  const warningAlerts = allAlerts.filter((a) => a.alert.status === "warning");
 
-  // Filtrelenmiş araçlar
+  // ── FİLTRELENMİŞ ARAÇ LİSTESİ ──
   const filteredVehicles = useMemo(() => {
-    return vehicles.filter(v => {
+    return vehicles.filter((v) => {
       if (filterAlertOnly) {
-        const hasAlert = allAlerts.some(a => a.vehicle.id === v.id);
+        const hasAlert = allAlerts.some((a) => a.vehicle.id === v.id);
         if (!hasAlert) return false;
       }
-      if (!searchQuery.trim()) return true;
-      const q = searchQuery.toLowerCase();
-      return (
-        v.plate.toLowerCase().includes(q) ||
-        v.driver_name.toLowerCase().includes(q) ||
-        (v.driver_phone && v.driver_phone.includes(q)) ||
-        (v.current_location && v.current_location.toLowerCase().includes(q)) ||
-        (v.destination && v.destination.toLowerCase().includes(q)) ||
-        (v.cargo_notes && v.cargo_notes.toLowerCase().includes(q))
-      );
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const matchesPlate = v.plate.toLowerCase().includes(q);
+        const matchesDriver = v.driver_name.toLowerCase().includes(q);
+        const matchesLoc = (v.current_location || "").toLowerCase().includes(q);
+        if (!matchesPlate && !matchesDriver && !matchesLoc) return false;
+      }
+      return true;
     });
   }, [vehicles, searchQuery, filterAlertOnly, allAlerts]);
 
-  function openNew() {
+  // ── SEÇİLİ ARACIN AYLARI VE MASRAF ÖZETLERİ ──
+  const detailExpenses = detailVehicle?.expenses || [];
+
+  const availableMonths = useMemo(() => {
+    const monthsSet = new Set<string>();
+    for (const exp of detailExpenses) {
+      if (exp.date) {
+        const ym = exp.date.substring(0, 7); // YYYY-MM
+        monthsSet.add(ym);
+      }
+    }
+    return Array.from(monthsSet).sort().reverse();
+  }, [detailExpenses]);
+
+  const filteredExpenses = useMemo(() => {
+    return detailExpenses.filter((e) => {
+      if (selectedMonth !== "all" && !e.date.startsWith(selectedMonth)) {
+        return false;
+      }
+      if (expenseTab !== "all" && e.type !== expenseTab) {
+        return false;
+      }
+      return true;
+    });
+  }, [detailExpenses, selectedMonth, expenseTab]);
+
+  const monthFuelTotal = useMemo(() => {
+    return detailExpenses
+      .filter((e) => (selectedMonth === "all" || e.date.startsWith(selectedMonth)) && e.type === "fuel")
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  }, [detailExpenses, selectedMonth]);
+
+  const monthRepairTotal = useMemo(() => {
+    return detailExpenses
+      .filter((e) => (selectedMonth === "all" || e.date.startsWith(selectedMonth)) && e.type === "repair")
+      .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+  }, [detailExpenses, selectedMonth]);
+
+  // ── ARAÇ FORM KAYIT ──
+  function handleOpenAdd() {
     setEditingVehicle(null);
     setForm({ ...EMPTY_FORM });
     setIsModalOpen(true);
   }
 
-  function openEdit(v: Vehicle) {
+  function handleOpenEdit(v: Vehicle) {
     setEditingVehicle(v);
     setForm({
       plate: v.plate,
       driver_name: v.driver_name,
       driver_phone: v.driver_phone || "",
-      vehicle_type: v.vehicle_type,
-      status: v.status,
+      vehicle_type: v.vehicle_type || "Kamyon",
       current_location: v.current_location || "",
       destination: v.destination || "",
       cargo_notes: v.cargo_notes || "",
@@ -140,862 +227,1166 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
       insurance_date: v.insurance_date || "",
       license_date: v.license_date || "",
       maintenance_date: v.maintenance_date || "",
-      maintenance_cost: v.maintenance_cost || 0,
-      fuel_cost: v.fuel_cost || 0,
       notes: v.notes || "",
     });
     setIsModalOpen(true);
   }
 
-  function openStatusModal(v: Vehicle) {
-    setStatusModal({ vehicle: v });
-    setNewStatus(v.status);
-    setNewLocation(v.current_location || "");
-  }
-
-  function handleSave() {
+  function handleSaveVehicle(e: React.FormEvent) {
+    e.preventDefault();
     if (!form.plate.trim() || !form.driver_name.trim()) {
-      toast.error("Plaka ve Şoför Adı zorunludur.");
+      toast.error("Lütfen plaka ve şoför adını doldurunuz.");
       return;
     }
+
     startTransition(async () => {
       try {
         await saveVehicle({
           id: editingVehicle?.id,
-          ...form,
-          maintenance_cost: Number(form.maintenance_cost) || 0,
-          fuel_cost: Number(form.fuel_cost) || 0,
+          plate: form.plate,
+          driver_name: form.driver_name,
+          driver_phone: form.driver_phone,
+          vehicle_type: form.vehicle_type,
+          current_location: form.current_location,
+          destination: form.destination,
+          cargo_notes: form.cargo_notes,
+          inspection_date: form.inspection_date || undefined,
+          insurance_date: form.insurance_date || undefined,
+          license_date: form.license_date || undefined,
+          maintenance_date: form.maintenance_date || undefined,
+          notes: form.notes,
         });
-        toast.success(editingVehicle ? "Araç bilgileri güncellendi." : "Yeni araç eklendi.");
-        const updated = await getVehicles();
-        setVehicles(updated);
+
+        const refreshed = await getVehicles();
+        setVehicles(refreshed);
         setIsModalOpen(false);
-      } catch (err) {
-        toast.error("Hata: " + String(err));
+        toast.success(
+          editingVehicle
+            ? `${form.plate} başarıyla güncellendi!`
+            : `${form.plate} filoya eklendi!`
+        );
+      } catch (err: any) {
+        toast.error("Hata: " + err.message);
       }
     });
   }
 
-  function handleStatusUpdate() {
-    if (!statusModal) return;
-    startTransition(async () => {
-      try {
-        await updateVehicleStatus(statusModal.vehicle.id, newStatus, newLocation);
-        toast.success("Araç durumu güncellendi.");
-        const updated = await getVehicles();
-        setVehicles(updated);
-        setStatusModal(null);
-      } catch (err) {
-        toast.error("Hata: " + String(err));
-      }
-    });
-  }
+  function handleDeleteVehicle(id: string, plate: string) {
+    if (!confirm(`${plate} plakalı aracı filodan silmek istediğinize emin misiniz?`)) {
+      return;
+    }
 
-  function handleDelete(id: string, plate: string) {
-    if (!confirm(`"${plate}" plakalı aracı silmek istediğinizden emin misiniz?`)) return;
     startTransition(async () => {
       try {
         await deleteVehicle(id);
-        toast.success("Araç silindi.");
-        setVehicles(prev => prev.filter(v => v.id !== id));
-      } catch (err) {
-        toast.error("Hata: " + String(err));
+        const refreshed = await getVehicles();
+        setVehicles(refreshed);
+        if (detailVehicle?.id === id) setDetailVehicle(null);
+        toast.success(`${plate} filodan silindi.`);
+      } catch (err: any) {
+        toast.error("Silme hatası: " + err.message);
       }
     });
   }
 
-  function exportVehiclesToExcel() {
-    if (vehicles.length === 0) {
-      toast.error("İndirilecek araç bulunamadı.");
+  // ── YENİ MASRAF EKLEME (Fiş Fotoğrafı ve KM ile) ──
+  async function handleAddExpense(e: React.FormEvent) {
+    e.preventDefault();
+    if (!detailVehicle) return;
+
+    const amountNum = parseFloat(expenseAmount);
+    if (isNaN(amountNum) || amountNum <= 0) {
+      toast.error("Lütfen geçerli bir masraf tutarı giriniz.");
       return;
     }
-    const rows = vehicles.map((v, idx) => {
-      const muayene = getExpiryAlert(v.inspection_date);
-      const sigorta = getExpiryAlert(v.insurance_date);
-      const ruhsat = getExpiryAlert(v.license_date);
-      const totalCost = (Number(v.maintenance_cost) || 0) + (Number(v.fuel_cost) || 0);
+
+    setIsSavingExpense(true);
+    try {
+      let receiptUrl: string | null = null;
+
+      // Fotoğraf / dosya varsa storage'a yükle
+      if (expenseFile) {
+        const formData = new FormData();
+        formData.append("file", expenseFile);
+        const uploadRes = await uploadVehicleFile(formData);
+        receiptUrl = uploadRes.url;
+      }
+
+      const kmNum = expenseKm ? parseFloat(expenseKm) : null;
+
+      const res = await addVehicleExpense(detailVehicle.id, {
+        type: expenseType,
+        date: expenseDate,
+        amount: amountNum,
+        km: kmNum,
+        receipt_url: receiptUrl,
+        notes: expenseNotes.trim() || null,
+      });
+
+      if (res.success) {
+        toast.success(
+          expenseType === "fuel"
+            ? "Yakıt fişi ve masrafı başarıyla kaydedildi!"
+            : "Tamir/bakım masrafı başarıyla kaydedildi!"
+        );
+
+        // Formu temizle
+        setExpenseAmount("");
+        setExpenseKm("");
+        setExpenseNotes("");
+        setExpenseFile(null);
+
+        // Listeyi yenile
+        const refreshed = await getVehicles();
+        setVehicles(refreshed);
+        const updatedDetail = refreshed.find((v) => v.id === detailVehicle.id);
+        if (updatedDetail) setDetailVehicle(updatedDetail);
+      }
+    } catch (err: any) {
+      toast.error("Masraf eklenirken hata: " + err.message);
+    } finally {
+      setIsSavingExpense(false);
+    }
+  }
+
+  // ── MASRAF SİLME ──
+  async function handleDeleteExpense(expenseId: string) {
+    if (!detailVehicle) return;
+    if (!confirm("Bu masraf kaydını silmek istediğinize emin misiniz?")) return;
+
+    try {
+      await deleteVehicleExpense(detailVehicle.id, expenseId);
+      toast.success("Masraf kaydı silindi.");
+      const refreshed = await getVehicles();
+      setVehicles(refreshed);
+      const updatedDetail = refreshed.find((v) => v.id === detailVehicle.id);
+      if (updatedDetail) setDetailVehicle(updatedDetail);
+    } catch (err: any) {
+      toast.error("Silinemedi: " + err.message);
+    }
+  }
+
+  // ── RUHSAT, SİGORTA VE POLİÇE DOSYASI YÜKLEME ──
+  async function handleUploadDoc(
+    docType: "license" | "insurance" | "policy",
+    file: File
+  ) {
+    if (!detailVehicle) return;
+    setIsUploadingDoc(docType);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      const res = await uploadVehicleFile(formData);
+
+      const docUpdates: VehicleDocuments = {};
+      if (docType === "license") docUpdates.license_photo_url = res.url;
+      if (docType === "insurance") docUpdates.insurance_photo_url = res.url;
+      if (docType === "policy") docUpdates.policy_pdf_url = res.url;
+
+      await updateVehicleDocuments(detailVehicle.id, docUpdates);
+      toast.success("Belge başarıyla yüklendi!");
+
+      const refreshed = await getVehicles();
+      setVehicles(refreshed);
+      const updatedDetail = refreshed.find((v) => v.id === detailVehicle.id);
+      if (updatedDetail) setDetailVehicle(updatedDetail);
+    } catch (err: any) {
+      toast.error("Belge yükleme hatası: " + err.message);
+    } finally {
+      setIsUploadingDoc(null);
+    }
+  }
+
+  // ── EXCEL ÇIKTISI ──
+  function exportToExcel() {
+    const data = vehicles.map((v) => {
+      const expenses = v.expenses || [];
+      const totalFuel = expenses
+        .filter((e) => e.type === "fuel")
+        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+      const totalRepair = expenses
+        .filter((e) => e.type === "repair")
+        .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
 
       return {
-        "Sıra": idx + 1,
         "Plaka": v.plate,
         "Araç Tipi": v.vehicle_type,
         "Şoför Adı": v.driver_name,
-        "Şoför Telefon": v.driver_phone || "-",
-        "Durum": v.status,
-        "Şu Anki Konum": v.current_location || "-",
-        "Gidilen Yer": v.destination || "-",
-        "TÜVTÜRK Muayene Tarihi": v.inspection_date ? formatDate(v.inspection_date) : "-",
-        "Muayene Hatırlatma Durumu": muayene.status !== "none" ? muayene.label : "-",
-        "Trafik Sigortası Bitiş Tarihi": v.insurance_date ? formatDate(v.insurance_date) : "-",
-        "Sigorta Hatırlatma Durumu": sigorta.status !== "none" ? sigorta.label : "-",
-        "Ruhsat / Kasko Tarihi": v.license_date ? formatDate(v.license_date) : "-",
-        "Ruhsat Hatırlatma Durumu": ruhsat.status !== "none" ? ruhsat.label : "-",
-        "Son Bakım Tarihi": v.maintenance_date ? formatDate(v.maintenance_date) : "-",
-        "Bakım Masrafı (₺)": v.maintenance_cost || 0,
-        "Yakıt Masrafı (₺)": v.fuel_cost || 0,
-        "Toplam Araç Masrafı (₺)": totalCost,
-        "Yük / Sevkiyat Notu": v.cargo_notes || "-",
-        "Araç / Bakım Ek Notları": v.notes || "-",
-        "Son Güncelleyen": v.last_updated_by || "-",
+        "Şoför Telefonu": v.driver_phone || "-",
+        "Güncel Konum": v.current_location || "-",
+        "Muayene Bitiş Tarihi": v.inspection_date || "-",
+        "Trafik Sigortası Bitiş": v.insurance_date || "-",
+        "Kasko Bitiş": v.license_date || "-",
+        "Toplam Yakıt Masrafı (TL)": totalFuel,
+        "Toplam Tamir/Bakım (TL)": totalRepair,
+        "Toplam Masraf (TL)": totalFuel + totalRepair,
+        "Kayıtlı Masraf Adedi": expenses.length,
       };
     });
 
-    const ws = XLSX.utils.json_to_sheet(rows);
+    const ws = XLSX.utils.json_to_sheet(data);
     const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, "Arac_Filosu");
-    const todayStr = new Date().toISOString().split("T")[0];
-    XLSX.writeFile(wb, `Camoluk_Arac_Filosu_${todayStr}.xlsx`);
-    toast.success("Araç filosu Excel dosyası başarıyla indirildi.");
+    XLSX.utils.book_append_sheet(wb, ws, "Araç Filosu ve Masraflar");
+    XLSX.writeFile(wb, `Camoluk_Arac_Filosu_${new Date().toISOString().split("T")[0]}.xlsx`);
+    toast.success("Araç ve masraf listesi Excel olarak indirildi.");
   }
-
-  function getMapsUrl(location: string) {
-    return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location)}`;
-  }
-
-  const yoldaCount = vehicles.filter(v => v.status === "Yolda").length;
-  const depodaCount = vehicles.filter(v => v.status === "Depoda").length;
-  const teslimCount = vehicles.filter(v => v.status === "Teslim Etti").length;
-  const bakimCount = vehicles.filter(v => v.status === "Bakımda").length;
-
-  const totalMaintenanceCost = vehicles.reduce((sum, v) => sum + (Number(v.maintenance_cost) || 0), 0);
-  const totalFuelCost = vehicles.reduce((sum, v) => sum + (Number(v.fuel_cost) || 0), 0);
 
   return (
-    <div className="space-y-6">
-      {/* Üst Başlık & Butonlar */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <div className="space-y-6 max-w-7xl mx-auto pb-16">
+      {/* ── ÜST BAŞLIK VE AKSİYONLAR ── */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-xl font-bold text-text">Araç Takip & Filo Yönetimi</h1>
-          <p className="text-sm text-text-muted">
-            Muayene, sigorta ve ruhsat hatırlatıcıları (1 ay / 1 hafta kala), periyodik bakım ve yakıt masrafları
+          <h1 className="text-2xl font-black text-slate-900 tracking-tight flex items-center gap-2.5">
+            <Truck className="text-brand-gold" />
+            Araç & Filo Takip
+          </h1>
+          <p className="text-xs text-slate-500 mt-1">
+            Şirket araçlarının detaylı yakıt, tamir/bakım masrafları, kilometre takibi ve resmi evrak (ruhsat/poliçe) yönetimi.
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-wrap">
+
+        <div className="flex flex-wrap items-center gap-2.5">
           <button
-            onClick={exportVehiclesToExcel}
-            className="flex items-center gap-2 bg-white border border-border text-text px-3.5 py-2 rounded-xl text-sm font-semibold hover:bg-surface transition shadow-xs cursor-pointer"
-            title="Araç filosu ve muayene/sigorta/masraf dökümünü Excel olarak indir"
+            type="button"
+            onClick={exportToExcel}
+            className="inline-flex items-center gap-1.5 bg-white hover:bg-slate-50 text-slate-700 border border-border px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs"
           >
-            <Download size={15} className="text-emerald-600" />
-            <span>Excel İndir</span>
+            <FileSpreadsheet size={15} className="text-emerald-600" />
+            <span>Excele İndir</span>
           </button>
+
           {isAdmin && (
             <button
-              onClick={openNew}
-              className="flex items-center gap-2 bg-brand-gold text-brand-navy px-4 py-2 rounded-xl text-sm font-semibold hover:bg-brand-gold-light transition shadow-xs cursor-pointer"
+              type="button"
+              onClick={handleOpenAdd}
+              className="inline-flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-4 py-2 rounded-xl text-xs transition shadow-sm"
             >
-              <Plus size={16} /> Araç Ekle
+              <Plus size={16} />
+              <span>Yeni Araç Ekle</span>
             </button>
           )}
         </div>
       </div>
 
-      {/* ── 1 AY KALA VE 1 HAFTA KALA OTOMATİK HATIRLATICI BİLDİRİM PANELİ ── */}
-      {allAlerts.length > 0 && (
-        <div className="rounded-2xl border border-red-200 bg-linear-to-r from-red-50/90 via-amber-50/70 to-orange-50/80 p-4 sm:p-5 shadow-sm space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2 border-b border-red-200/60 pb-3">
-            <div className="flex items-center gap-2.5">
-              <div className="p-2 rounded-xl bg-red-600 text-white animate-pulse">
-                <Bell size={18} />
-              </div>
-              <div>
-                <h3 className="text-sm font-black text-red-950 flex items-center gap-2">
-                  <span>🚨 Yaklaşan Muayene & Sigorta Hatırlatmaları</span>
-                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-red-600 text-white">
-                    {allAlerts.length} İşlem
-                  </span>
-                </h3>
-                <p className="text-xs text-red-800/80 mt-0.5">
-                  Süre bitimine 1 ay (30 gün) ve 1 hafta (7 gün) kala otomatik alarm sistemi devrededir.
-                </p>
-              </div>
-            </div>
-
-            <button
-              onClick={() => setFilterAlertOnly(prev => !prev)}
-              className={`text-xs font-bold px-3 py-1.5 rounded-xl border transition cursor-pointer ${
-                filterAlertOnly
-                  ? "bg-red-700 text-white border-red-700 shadow-xs"
-                  : "bg-white/80 text-red-900 border-red-300 hover:bg-white"
-              }`}
-            >
-              {filterAlertOnly ? "✓ Sadece Uyarılı Araçlar Gösteriliyor" : "Sadece Uyarılı Araçları Filtrele"}
-            </button>
+      {/* ── SÜRE HATIRLATICI UYARI BANTLARI (1 Hafta ve 1 Ay Kalanlar) ── */}
+      {urgentAlerts.length > 0 && (
+        <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 shadow-xs animate-in fade-in">
+          <div className="flex items-center gap-2 text-rose-800 font-black text-sm mb-2">
+            <AlertTriangle size={18} className="text-rose-600 animate-bounce" />
+            <span>ACİL: Süresi Dolan veya 1 Hafta Kalan Belgeler ({urgentAlerts.length})</span>
           </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 pt-1">
-            {allAlerts.map((item, idx) => (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 text-xs">
+            {urgentAlerts.map((item, idx) => (
               <div
                 key={idx}
-                className={`flex items-center justify-between p-3 rounded-xl border bg-white shadow-xs ${
-                  item.alert.status === "expired" || item.alert.status === "critical"
-                    ? "border-red-300 ring-1 ring-red-200"
-                    : "border-amber-200"
-                }`}
+                onClick={() => setDetailVehicle(item.vehicle)}
+                className="bg-white p-2.5 rounded-xl border border-rose-200 flex items-center justify-between gap-2 shadow-2xs hover:bg-rose-50/50 cursor-pointer transition"
               >
-                <div className="space-y-0.5 min-w-0 pr-2">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono font-black text-xs text-text">{item.vehicle.plate}</span>
-                    <span className="text-[11px] font-bold text-neutral-600 truncate">({item.vehicle.driver_name})</span>
-                  </div>
-                  <div className="flex items-center gap-1 text-xs text-neutral-500">
-                    <span className="font-semibold text-text">{item.itemType}:</span>
-                    <span>{formatDate(item.date)}</span>
-                  </div>
-                </div>
-
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full border ${item.alert.badgeClass}`}>
-                    {item.alert.label}
+                <div>
+                  <span className="font-bold text-slate-900 font-mono block">
+                    {item.vehicle.plate}
                   </span>
-                  {isAdmin && (
-                    <button
-                      onClick={() => openEdit(item.vehicle)}
-                      className="text-[10px] font-bold text-brand-navy hover:underline flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <Edit3 size={10} /> Tarihi Güncelle
-                    </button>
-                  )}
+                  <span className="text-[11px] text-slate-500">
+                    {item.itemType}: {formatDate(item.date)}
+                  </span>
                 </div>
+                <span className={`px-2 py-0.5 rounded text-[11px] ${item.alert.badgeClass}`}>
+                  {item.alert.label}
+                </span>
               </div>
             ))}
           </div>
         </div>
       )}
 
-      {/* KPI Kartlar: Durumlar + Masraf Toplamları */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-        {[
-          { label: "Yolda", count: yoldaCount, color: "bg-amber-50 border-amber-200", text: "text-amber-700", icon: Navigation },
-          { label: "Depoda", count: depodaCount, color: "bg-blue-50 border-blue-200", text: "text-blue-700", icon: Warehouse },
-          { label: "Teslim Etti", count: teslimCount, color: "bg-green-50 border-green-200", text: "text-green-700", icon: CheckCircle2 },
-          { label: "Bakımda", count: bakimCount, color: "bg-red-50 border-red-200", text: "text-red-700", icon: AlertCircle },
-          {
-            label: "Toplam Bakım",
-            countText: formatCurrency(totalMaintenanceCost),
-            color: "bg-violet-50 border-violet-200",
-            text: "text-violet-700",
-            icon: Wrench,
-          },
-          {
-            label: "Toplam Yakıt",
-            countText: formatCurrency(totalFuelCost),
-            color: "bg-emerald-50 border-emerald-200",
-            text: "text-emerald-700",
-            icon: Fuel,
-          },
-        ].map(s => {
-          const Icon = s.icon;
-          return (
-            <div key={s.label} className={`border rounded-xl p-3 sm:p-4 ${s.color}`}>
-              <div className="flex items-center justify-between">
-                <span className={`text-xs font-semibold ${s.text}`}>{s.label}</span>
-                <Icon size={16} className={s.text} />
-              </div>
-              <p className={`text-xl sm:text-2xl font-bold mt-1 ${s.text}`}>
-                {s.countText !== undefined ? s.countText : s.count}
-              </p>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Arama & Filtreleme Çubuğu */}
-      <div className="flex items-center gap-3">
-        <div className="relative flex-1">
-          <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" />
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Plaka, şoför, telefon, konum veya yük notu ile ara..."
-            className="w-full pl-9 pr-4 py-2 border border-border rounded-xl text-sm bg-white focus:outline-hidden focus:border-brand-navy"
-          />
-        </div>
-        {filterAlertOnly && (
-          <button
-            onClick={() => setFilterAlertOnly(false)}
-            className="flex items-center gap-1.5 px-3 py-2 bg-neutral-100 text-neutral-700 hover:bg-neutral-200 rounded-xl text-xs font-semibold transition"
-          >
-            <X size={14} /> Filtreyi Kaldır
-          </button>
-        )}
-      </div>
-
-      {/* Araç Listesi */}
-      {filteredVehicles.length === 0 ? (
-        <div className="bg-white border border-border rounded-2xl p-12 text-center">
-          <Truck size={40} className="text-text-muted mx-auto mb-3" />
-          <p className="text-text-muted font-medium">
-            {filterAlertOnly
-              ? "Yaklaşan uyarısı olan araç bulunamadı."
-              : searchQuery
-              ? "Arama kriterlerine uygun araç bulunamadı."
-              : "Henüz araç eklenmedi."}
-          </p>
-          {isAdmin && !filterAlertOnly && (
-            <button onClick={openNew} className="mt-3 text-brand-navy font-semibold text-sm hover:underline">
-              + İlk aracı ekle
-            </button>
-          )}
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-          {filteredVehicles.map(v => {
-            const cfg = STATUS_CONFIG[v.status];
-            const Icon = cfg.icon;
-
-            const inspectionAlert = getExpiryAlert(v.inspection_date);
-            const insuranceAlert = getExpiryAlert(v.insurance_date);
-            const licenseAlert = getExpiryAlert(v.license_date);
-
-            const hasUrgent = inspectionAlert.isUrgent || insuranceAlert.isUrgent || licenseAlert.isUrgent;
-
-            return (
-              <div
-                key={v.id}
-                className={`bg-white border rounded-2xl p-4.5 shadow-xs space-y-3.5 transition hover:shadow-md ${
-                  hasUrgent ? "border-red-300 ring-2 ring-red-100" : "border-border"
-                }`}
+      {warningAlerts.length > 0 && (
+        <div className="bg-amber-50/80 border border-amber-300 rounded-2xl p-3.5 shadow-2xs">
+          <div className="flex items-center gap-2 text-amber-900 font-bold text-xs mb-2">
+            <Bell size={15} className="text-amber-600" />
+            <span>Yaklaşan Muayene & Sigortalar (1 Ay Kalanlar - {warningAlerts.length})</span>
+          </div>
+          <div className="flex flex-wrap gap-2 text-xs">
+            {warningAlerts.map((item, idx) => (
+              <button
+                key={idx}
+                type="button"
+                onClick={() => setDetailVehicle(item.vehicle)}
+                className="bg-white px-3 py-1.5 rounded-lg border border-amber-200 text-slate-700 hover:bg-amber-100/50 flex items-center gap-2 transition"
               >
-                {/* Üst satır: Plaka + Durum */}
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <Truck size={17} className="text-brand-navy" />
-                      <span className="font-mono font-bold text-text text-base tracking-wider">{v.plate}</span>
-                      <span className="text-xs px-2 py-0.5 rounded-md bg-neutral-100 text-text-muted font-medium">
-                        {v.vehicle_type}
-                      </span>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => openStatusModal(v)}
-                    className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold border transition hover:opacity-80 ${cfg.bg} ${cfg.color} border-current cursor-pointer`}
-                  >
-                    <Icon size={12} />
-                    {cfg.label}
-                  </button>
-                </div>
-
-                {/* Şoför */}
-                <div className="flex items-center gap-2 text-sm text-text-muted">
-                  <User size={13} className="shrink-0" />
-                  <span className="font-medium text-text">{v.driver_name}</span>
-                  {v.driver_phone && (
-                    <a href={`tel:${v.driver_phone}`} className="ml-auto flex items-center gap-1 text-xs text-brand-navy hover:underline">
-                      <Phone size={11} /> {v.driver_phone}
-                    </a>
-                  )}
-                </div>
-
-                {/* Konum */}
-                {(v.current_location || v.destination) && (
-                  <div className="bg-surface rounded-xl px-3 py-2 space-y-1">
-                    {v.current_location && (
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-text-muted flex items-center gap-1">
-                          <MapPin size={11} /> Şu an:
-                        </span>
-                        <a
-                          href={getMapsUrl(v.current_location)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-brand-navy hover:underline"
-                        >
-                          {v.current_location} ↗
-                        </a>
-                      </div>
-                    )}
-                    {v.destination && (
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-text-muted flex items-center gap-1">
-                          <Navigation size={11} /> Gidiyor:
-                        </span>
-                        <a
-                          href={getMapsUrl(v.destination)}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="font-semibold text-green-700 hover:underline"
-                        >
-                          {v.destination} ↗
-                        </a>
-                      </div>
-                    )}
-                  </div>
-                )}
-
-                {/* ── MUAYENE & SİGORTA HATIRLATICI BLOĞU (1 Ay / 1 Hafta Kala) ── */}
-                <div className="rounded-xl border border-border/80 bg-neutral-50/70 p-3 space-y-2">
-                  <div className="flex items-center justify-between text-[11px] font-bold text-neutral-600 border-b border-border/60 pb-1.5">
-                    <span className="flex items-center gap-1">
-                      <Calendar size={12} className="text-brand-navy" />
-                      Tarih ve Hatırlatmalar
-                    </span>
-                    <span className="text-[10px] text-text-muted font-normal">1 Ay & 1 Hafta Kala Uyarı</span>
-                  </div>
-
-                  {/* Muayene */}
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-neutral-600 flex items-center gap-1.5 font-medium">
-                      <ShieldCheck size={13} className="text-neutral-400" />
-                      TÜVTÜRK Muayene:
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-text">
-                        {v.inspection_date ? formatDate(v.inspection_date) : "Girilmedi"}
-                      </span>
-                      {v.inspection_date ? (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md border ${inspectionAlert.badgeClass}`}>
-                          {inspectionAlert.label}
-                        </span>
-                      ) : isAdmin ? (
-                        <button
-                          onClick={() => openEdit(v)}
-                          className="text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold transition cursor-pointer"
-                        >
-                          + Tarih Ekle
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {/* Sigorta */}
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-neutral-600 flex items-center gap-1.5 font-medium">
-                      <ShieldCheck size={13} className="text-amber-500" />
-                      Trafik Sigortası:
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-text">
-                        {v.insurance_date ? formatDate(v.insurance_date) : "Girilmedi"}
-                      </span>
-                      {v.insurance_date ? (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md border ${insuranceAlert.badgeClass}`}>
-                          {insuranceAlert.label}
-                        </span>
-                      ) : isAdmin ? (
-                        <button
-                          onClick={() => openEdit(v)}
-                          className="text-[10px] text-amber-700 bg-amber-50 hover:bg-amber-100 border border-amber-200 px-1.5 py-0.5 rounded-md font-bold transition cursor-pointer"
-                        >
-                          + Tarih Ekle
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-
-                  {/* Ruhsat / Kasko Sigorta */}
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-neutral-600 flex items-center gap-1.5 font-medium">
-                      <FileText size={13} className="text-blue-500" />
-                      Ruhsat / Kasko:
-                    </span>
-                    <div className="flex items-center gap-1.5">
-                      <span className="font-semibold text-text">
-                        {v.license_date ? formatDate(v.license_date) : "—"}
-                      </span>
-                      {v.license_date && (
-                        <span className={`text-[10px] px-1.5 py-0.5 rounded-md border ${licenseAlert.badgeClass}`}>
-                          {licenseAlert.label}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                {/* ── BAKIM VE MASRAF ÖZETİ ── */}
-                <div className="grid grid-cols-2 gap-2 text-xs pt-0.5">
-                  <div className="rounded-xl bg-surface p-2.5 border border-border/70 space-y-0.5">
-                    <span className="text-[10px] text-text-muted flex items-center gap-1 font-medium">
-                      <Wrench size={11} className="text-violet-600" />
-                      Periyodik Bakım
-                    </span>
-                    <p className="font-bold text-text text-xs">
-                      {v.maintenance_cost && v.maintenance_cost > 0 ? formatCurrency(v.maintenance_cost) : "Masraf: ₺0,00"}
-                    </p>
-                    <span className="text-[10px] text-text-muted block">
-                      {v.maintenance_date ? `Tarih: ${formatDate(v.maintenance_date)}` : "Tarih girilmedi"}
-                    </span>
-                  </div>
-
-                  <div className="rounded-xl bg-surface p-2.5 border border-border/70 space-y-0.5">
-                    <span className="text-[10px] text-text-muted flex items-center gap-1 font-medium">
-                      <Fuel size={11} className="text-emerald-600" />
-                      Yakıt & Masraf Toplamı
-                    </span>
-                    <p className="font-bold text-text text-xs">
-                      {v.fuel_cost && v.fuel_cost > 0 ? formatCurrency(v.fuel_cost) : "Yakıt: ₺0,00"}
-                    </p>
-                    <span className="text-[10px] font-semibold text-brand-navy block">
-                      Toplam: {formatCurrency((Number(v.maintenance_cost) || 0) + (Number(v.fuel_cost) || 0))}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Yük Notu & Ek Notlar */}
-                {v.cargo_notes && (
-                  <div className="flex items-start gap-1.5 text-xs text-text-muted">
-                    <Package size={12} className="mt-0.5 shrink-0 text-neutral-400" />
-                    <span>{v.cargo_notes}</span>
-                  </div>
-                )}
-                {v.notes && (
-                  <div className="text-xs text-neutral-500 bg-amber-50/50 p-2 rounded-lg border border-amber-100">
-                    <span className="font-semibold text-neutral-700">Not: </span>
-                    {v.notes}
-                  </div>
-                )}
-
-                {/* Alt: Son güncelleme + işlemler */}
-                <div className="flex items-center justify-between pt-1 border-t border-border">
-                  <span className="text-[11px] text-text-muted flex items-center gap-1">
-                    <Clock size={10} />
-                    {v.last_updated_by && <span>{v.last_updated_by} · </span>}
-                    {new Date(v.last_updated_at).toLocaleDateString("tr-TR", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" })}
-                  </span>
-                  {isAdmin && (
-                    <div className="flex items-center gap-1">
-                      <button onClick={() => openEdit(v)} className="p-1.5 rounded-lg hover:bg-surface text-text-muted hover:text-brand-navy transition cursor-pointer">
-                        <Edit3 size={13} />
-                      </button>
-                      <button onClick={() => handleDelete(v.id, v.plate)} className="p-1.5 rounded-lg hover:bg-red-50 text-text-muted hover:text-red-600 transition cursor-pointer">
-                        <Trash2 size={13} />
-                      </button>
-                    </div>
-                  )}
-                </div>
-              </div>
-            );
-          })}
+                <span className="font-bold font-mono text-slate-900">{item.vehicle.plate}</span>
+                <span className="text-[11px] text-slate-500">({item.itemType})</span>
+                <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">
+                  {item.alert.label}
+                </span>
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
-      {/* ── ARAÇ EKLE/DÜZENLE MODAL ── */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-xl border border-border">
-            <div className="flex items-center justify-between p-5 border-b border-border">
-              <div>
-                <h2 className="font-bold text-text text-base">
-                  {editingVehicle ? `${editingVehicle.plate} — Araç Düzenle` : "Yeni Araç Ekle"}
-                </h2>
-                <p className="text-xs text-text-muted mt-0.5">
-                  Muayene, sigorta hatırlatmaları ve araç masraflarını kaydedin
-                </p>
+      {/* ── ARAMA & FİLTRELER ── */}
+      <div className="bg-white p-3 rounded-2xl border border-border shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+        <div className="relative max-w-sm w-full">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Plaka, şoför veya konum ile ara..."
+            className="w-full bg-surface border border-border rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
+          />
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+        </div>
+
+        <div className="flex items-center gap-2">
+          {allAlerts.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setFilterAlertOnly(!filterAlertOnly)}
+              className={`px-3 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 ${
+                filterAlertOnly
+                  ? "bg-rose-600 text-white shadow-xs"
+                  : "bg-surface border border-border text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              <AlertCircle size={14} />
+              <span>Süresi Yaklaşanlar ({allAlerts.length})</span>
+            </button>
+          )}
+
+          <span className="text-xs font-bold text-slate-500 ml-2">
+            Toplam: {filteredVehicles.length} Araç
+          </span>
+        </div>
+      </div>
+
+      {/* ── ARAÇLAR LİSTESİ TABLOSU ── */}
+      <div className="bg-white rounded-2xl border border-border shadow-xs overflow-hidden">
+        {filteredVehicles.length === 0 ? (
+          <div className="p-12 text-center text-slate-400">
+            <Truck size={44} className="mx-auto mb-2 text-slate-300" />
+            <p className="font-semibold text-slate-600">Araç bulunamadı</p>
+            <p className="text-xs text-slate-400 mt-1">
+              Filtre kriterlerinize uyan araç kaydı bulunmuyor.
+            </p>
+          </div>
+        ) : (
+          <InteractiveTable tableId="vehicles-table">
+            <table className="w-full text-left text-xs">
+              <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-[11px] border-b border-border">
+                <tr>
+                  <th className="py-3 px-4">Plaka & Tip</th>
+                  <th className="py-3 px-4">Şoför & İletişim</th>
+                  <th className="py-3 px-4">Konum</th>
+                  <th className="py-3 px-4">Muayene / Sigorta</th>
+                  <th className="py-3 px-4 text-right">Toplam Yakıt</th>
+                  <th className="py-3 px-4 text-right">Toplam Tamir</th>
+                  <th className="py-3 px-4 text-center">İşlem</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {filteredVehicles.map((v) => {
+                  const expenses = v.expenses || [];
+                  const fuelTotal = expenses
+                    .filter((e) => e.type === "fuel")
+                    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                  const repairTotal = expenses
+                    .filter((e) => e.type === "repair")
+                    .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+                  const inspAlert = v.inspection_date ? getExpiryAlert(v.inspection_date) : null;
+                  const insAlert = v.insurance_date ? getExpiryAlert(v.insurance_date) : null;
+
+                  return (
+                    <tr key={v.id} className="hover:bg-slate-50/80 transition">
+                      {/* Plaka & Tip */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-black font-mono text-slate-900 text-sm bg-slate-100 border border-slate-300 px-2 py-0.5 rounded shadow-2xs">
+                            {v.plate}
+                          </span>
+                          <span className="text-[11px] text-slate-500 font-medium">
+                            {v.vehicle_type}
+                          </span>
+                        </div>
+                      </td>
+
+                      {/* Şoför & Telefon */}
+                      <td className="py-3 px-4">
+                        <span className="font-bold text-slate-900 block text-xs">
+                          {v.driver_name}
+                        </span>
+                        {v.driver_phone && (
+                          <span className="text-[11px] text-slate-500">
+                            {v.driver_phone}
+                          </span>
+                        )}
+                      </td>
+
+                      {/* Konum */}
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-1.5 text-slate-700">
+                          <MapPin size={13} className="text-brand-gold flex-shrink-0" />
+                          <span>{v.current_location || "Belirtilmedi"}</span>
+                        </div>
+                      </td>
+
+                      {/* Muayene / Sigorta Uyarısı */}
+                      <td className="py-3 px-4">
+                        <div className="space-y-1">
+                          {inspAlert && inspAlert.status !== "none" && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-slate-400 font-semibold w-14">
+                                Muayene:
+                              </span>
+                              <span className={`px-1.5 py-0.2 rounded text-[10px] ${inspAlert.badgeClass}`}>
+                                {inspAlert.label}
+                              </span>
+                            </div>
+                          )}
+                          {insAlert && insAlert.status !== "none" && (
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[10px] text-slate-400 font-semibold w-14">
+                                Sigorta:
+                              </span>
+                              <span className={`px-1.5 py-0.2 rounded text-[10px] ${insAlert.badgeClass}`}>
+                                {insAlert.label}
+                              </span>
+                            </div>
+                          )}
+                          {(!inspAlert || inspAlert.status === "none") && (!insAlert || insAlert.status === "none") && (
+                            <span className="text-slate-400 text-[11px]">-</span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* Toplam Yakıt */}
+                      <td className="py-3 px-4 text-right font-bold text-slate-900">
+                        {formatCurrency(fuelTotal)}
+                      </td>
+
+                      {/* Toplam Tamir */}
+                      <td className="py-3 px-4 text-right font-bold text-slate-900">
+                        {formatCurrency(repairTotal)}
+                      </td>
+
+                      {/* Aksiyonlar */}
+                      <td className="py-3 px-4 text-center">
+                        <div className="flex items-center justify-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => setDetailVehicle(v)}
+                            className="bg-brand-navy hover:bg-brand-navy-2 text-white px-2.5 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1 shadow-2xs"
+                            title="Araç Detayı, Masraflar ve Belgeler"
+                          >
+                            <Fuel size={13} className="text-brand-gold" />
+                            <span>Masraf & Detay</span>
+                          </button>
+
+                          {isAdmin && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(v)}
+                                className="p-1.5 text-slate-400 hover:text-slate-800 transition rounded hover:bg-slate-100"
+                                title="Düzenle"
+                              >
+                                <Edit3 size={14} />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteVehicle(v.id, v.plate)}
+                                className="p-1.5 text-slate-400 hover:text-rose-600 transition rounded hover:bg-rose-50"
+                                title="Sil"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </InteractiveTable>
+        )}
+      </div>
+
+      {/* ── ARAÇ DETAY & MASRAFLAR & BELGELER MODALI (Büyük Drawer/Modal) ── */}
+      {detailVehicle && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-5 bg-black/60 backdrop-blur-xs overflow-y-auto animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl shadow-2xl max-w-5xl w-full max-h-[92vh] flex flex-col overflow-hidden border border-border">
+            {/* Modal Header */}
+            <div className="p-5 border-b border-border bg-slate-900 text-white flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="bg-brand-gold text-brand-navy font-black font-mono text-base px-3 py-1 rounded-lg shadow-sm">
+                  {detailVehicle.plate}
+                </div>
+                <div>
+                  <h2 className="text-base font-bold text-white flex items-center gap-2">
+                    {detailVehicle.driver_name} • {detailVehicle.vehicle_type}
+                  </h2>
+                  <p className="text-xs text-slate-300">
+                    Konum: {detailVehicle.current_location || "Belirtilmedi"} • Tel: {detailVehicle.driver_phone || "-"}
+                  </p>
+                </div>
               </div>
-              <button onClick={() => setIsModalOpen(false)} className="text-text-muted hover:text-text cursor-pointer">
+
+              <button
+                type="button"
+                onClick={() => setDetailVehicle(null)}
+                className="p-2 text-slate-400 hover:text-white rounded-xl hover:bg-white/10 transition"
+              >
                 <X size={20} />
               </button>
             </div>
 
-            <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
-              {/* Bölüm 1: Temel Bilgiler */}
-              <div className="space-y-3">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-brand-navy border-b pb-1">
-                  Temel Bilgiler
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted block mb-1">Plaka *</label>
-                    <input
-                      value={form.plate}
-                      onChange={e => setForm(f => ({ ...f, plate: e.target.value }))}
-                      placeholder="34 ABC 123"
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm font-mono uppercase"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted block mb-1">Araç Tipi</label>
-                    <select
-                      value={form.vehicle_type}
-                      onChange={e => setForm(f => ({ ...f, vehicle_type: e.target.value }))}
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm"
-                    >
-                      {VEHICLE_TYPES.map(t => <option key={t}>{t}</option>)}
-                    </select>
-                  </div>
-                </div>
-
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted block mb-1">Şoför Adı *</label>
-                    <input
-                      value={form.driver_name}
-                      onChange={e => setForm(f => ({ ...f, driver_name: e.target.value }))}
-                      placeholder="Ahmet Yılmaz"
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted block mb-1">Şoför Telefonu</label>
-                    <input
-                      value={form.driver_phone}
-                      onChange={e => setForm(f => ({ ...f, driver_phone: e.target.value }))}
-                      placeholder="0532 000 00 00"
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-text-muted block mb-1">Durum</label>
-                  <div className="flex gap-2 flex-wrap">
-                    {STATUSES.map(s => {
-                      const cfg = STATUS_CONFIG[s];
-                      return (
-                        <button
-                          key={s}
-                          type="button"
-                          onClick={() => setForm(f => ({ ...f, status: s }))}
-                          className={`px-3 py-1.5 rounded-full text-xs font-bold border transition cursor-pointer ${
-                            form.status === s ? `${cfg.bg} ${cfg.color} border-current` : "bg-white text-text-muted border-border hover:bg-surface"
-                          }`}
-                        >
-                          {s}
-                        </button>
-                      );
-                    })}
-                  </div>
-                </div>
-              </div>
-
-              {/* Bölüm 2: Konum & Rota */}
-              <div className="space-y-3 pt-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-brand-navy border-b pb-1">
-                  Konum & Rota Bilgisi
-                </h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted block mb-1">Şu Anki Konum</label>
-                    <input
-                      value={form.current_location}
-                      onChange={e => setForm(f => ({ ...f, current_location: e.target.value }))}
-                      placeholder="İstanbul, Pendik Depo"
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted block mb-1">Gidilen Yer</label>
-                    <input
-                      value={form.destination}
-                      onChange={e => setForm(f => ({ ...f, destination: e.target.value }))}
-                      placeholder="İzmir, Bornova Şantiye"
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-text-muted block mb-1">Yük / Sevkiyat Notu</label>
-                  <input
-                    value={form.cargo_notes}
-                    onChange={e => setForm(f => ({ ...f, cargo_notes: e.target.value }))}
-                    placeholder="Kütahya Seramik 60x120, 8 palet — SEV-2026-045"
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm"
-                  />
-                </div>
-              </div>
-
-              {/* Bölüm 3: 📅 MUAYENE, SİGORTA VE HATIRLATMA TARİHLERİ */}
-              <div className="space-y-3 pt-2">
-                <div className="border-b pb-1 flex items-center justify-between">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-brand-navy flex items-center gap-1.5">
-                    <Calendar size={13} />
-                    Muayene, Sigorta ve Hatırlatma Tarihleri
-                  </h3>
-                  <span className="text-[10px] text-amber-700 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full font-bold">
-                    🔔 1 Ay ve 1 Hafta Kala Otomatik Uyarı
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted block mb-1">
-                      TÜVTÜRK Muayene Bitiş Tarihi
-                    </label>
-                    <input
-                      type="date"
-                      value={form.inspection_date}
-                      onChange={e => setForm(f => ({ ...f, inspection_date: e.target.value }))}
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white"
-                    />
-                  </div>
-                  <div>
-                    <label className="text-xs font-semibold text-text-muted block mb-1">
-                      Trafik Sigortası Bitiş Tarihi
-                    </label>
-                    <input
-                      type="date"
-                      value={form.insurance_date}
-                      onChange={e => setForm(f => ({ ...f, insurance_date: e.target.value }))}
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white"
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <label className="text-xs font-semibold text-text-muted block mb-1">
-                    Kasko / Ruhsat Yenileme Tarihi (Opsiyonel)
-                  </label>
-                  <input
-                    type="date"
-                    value={form.license_date}
-                    onChange={e => setForm(f => ({ ...f, license_date: e.target.value }))}
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white"
-                  />
-                </div>
-              </div>
-
-              {/* Bölüm 4: 💰 BAKIM VE MASRAF TAKİBİ */}
-              <div className="space-y-3 pt-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-brand-navy border-b pb-1 flex items-center gap-1.5">
-                  <Wrench size={13} />
-                  Bakım ve Masraf Bilgileri
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-5 space-y-6">
+              {/* 1. BELGELER VE EVRAKLAR (Ruhsat, Sigorta, Poliçe PDF) */}
+              <div className="bg-slate-50 p-4 rounded-2xl border border-border space-y-3">
+                <h3 className="text-xs font-bold text-slate-700 uppercase tracking-wider flex items-center gap-2">
+                  <FileCheck size={16} className="text-brand-gold" />
+                  Araç Resmi Evrakları & Belgeleri (Ruhsat, Sigorta, Poliçe PDF)
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                  {/* Ruhsat Fotoğrafı */}
+                  <div className="bg-white p-3 rounded-xl border border-border space-y-2">
+                    <span className="text-xs font-bold text-slate-700 block">
+                      📄 Araç Ruhsatı
+                    </span>
+                    {detailVehicle.documents?.license_photo_url ? (
+                      <div className="space-y-1.5">
+                        <a
+                          href={detailVehicle.documents.license_photo_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block group relative rounded-lg overflow-hidden border border-border h-24 bg-slate-100 flex items-center justify-center"
+                        >
+                          <img
+                            src={detailVehicle.documents.license_photo_url}
+                            alt="Ruhsat Fotoğrafı"
+                            className="w-full h-full object-cover group-hover:scale-105 transition"
+                          />
+                          <span className="absolute inset-0 bg-black/40 text-white text-[11px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                            <ExternalLink size={14} className="mr-1" /> Büyüt / Gör
+                          </span>
+                        </a>
+                        <label className="text-[11px] text-brand-navy hover:underline font-semibold cursor-pointer block text-center">
+                          Fotoğrafı Değiştir
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files?.[0]) handleUploadDoc("license", e.target.files[0]);
+                            }}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="border-2 border-dashed border-slate-300 hover:border-brand-gold p-4 rounded-lg flex flex-col items-center justify-center text-center cursor-pointer transition bg-slate-50 hover:bg-white h-24">
+                        <Camera size={20} className="text-slate-400 mb-1" />
+                        <span className="text-[11px] font-bold text-slate-600">
+                          {isUploadingDoc === "license" ? "Yükleniyor..." : "Ruhsat Fotoğrafı Ekle"}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files?.[0]) handleUploadDoc("license", e.target.files[0]);
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Sigorta Fotoğrafı */}
+                  <div className="bg-white p-3 rounded-xl border border-border space-y-2">
+                    <span className="text-xs font-bold text-slate-700 block">
+                      🛡️ Trafik Sigortası Fotoğrafı
+                    </span>
+                    {detailVehicle.documents?.insurance_photo_url ? (
+                      <div className="space-y-1.5">
+                        <a
+                          href={detailVehicle.documents.insurance_photo_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block group relative rounded-lg overflow-hidden border border-border h-24 bg-slate-100 flex items-center justify-center"
+                        >
+                          <img
+                            src={detailVehicle.documents.insurance_photo_url}
+                            alt="Sigorta Fotoğrafı"
+                            className="w-full h-full object-cover group-hover:scale-105 transition"
+                          />
+                          <span className="absolute inset-0 bg-black/40 text-white text-[11px] font-bold flex items-center justify-center opacity-0 group-hover:opacity-100 transition">
+                            <ExternalLink size={14} className="mr-1" /> Büyüt / Gör
+                          </span>
+                        </a>
+                        <label className="text-[11px] text-brand-navy hover:underline font-semibold cursor-pointer block text-center">
+                          Fotoğrafı Değiştir
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files?.[0]) handleUploadDoc("insurance", e.target.files[0]);
+                            }}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="border-2 border-dashed border-slate-300 hover:border-brand-gold p-4 rounded-lg flex flex-col items-center justify-center text-center cursor-pointer transition bg-slate-50 hover:bg-white h-24">
+                        <Camera size={20} className="text-slate-400 mb-1" />
+                        <span className="text-[11px] font-bold text-slate-600">
+                          {isUploadingDoc === "insurance" ? "Yükleniyor..." : "Sigorta Fotoğrafı Ekle"}
+                        </span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files?.[0]) handleUploadDoc("insurance", e.target.files[0]);
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+
+                  {/* Poliçe PDF'i */}
+                  <div className="bg-white p-3 rounded-xl border border-border space-y-2">
+                    <span className="text-xs font-bold text-slate-700 block">
+                      📑 Sigorta Poliçesi (PDF)
+                    </span>
+                    {detailVehicle.documents?.policy_pdf_url ? (
+                      <div className="space-y-1.5 h-24 flex flex-col justify-center items-center bg-slate-50 border border-slate-200 rounded-lg p-2">
+                        <FileText size={24} className="text-rose-600 mb-1" />
+                        <a
+                          href={detailVehicle.documents.policy_pdf_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-xs font-bold text-brand-navy hover:underline flex items-center gap-1"
+                        >
+                          Poliçe PDF'ini Aç <ExternalLink size={12} />
+                        </a>
+                        <label className="text-[10px] text-slate-400 hover:underline cursor-pointer">
+                          Yenisini Yükle
+                          <input
+                            type="file"
+                            accept="application/pdf"
+                            className="hidden"
+                            onChange={(e) => {
+                              if (e.target.files?.[0]) handleUploadDoc("policy", e.target.files[0]);
+                            }}
+                          />
+                        </label>
+                      </div>
+                    ) : (
+                      <label className="border-2 border-dashed border-slate-300 hover:border-brand-gold p-4 rounded-lg flex flex-col items-center justify-center text-center cursor-pointer transition bg-slate-50 hover:bg-white h-24">
+                        <Upload size={20} className="text-slate-400 mb-1" />
+                        <span className="text-[11px] font-bold text-slate-600">
+                          {isUploadingDoc === "policy" ? "Yükleniyor..." : "Poliçe PDF'i Yükle"}
+                        </span>
+                        <input
+                          type="file"
+                          accept="application/pdf"
+                          className="hidden"
+                          onChange={(e) => {
+                            if (e.target.files?.[0]) handleUploadDoc("policy", e.target.files[0]);
+                          }}
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* 2. YENİ MASRAF EKLEME FORMU (Fotoğraf, KM, Tutar ve Tarih) */}
+              <form onSubmit={handleAddExpense} className="bg-amber-50/50 p-4 rounded-2xl border border-amber-200/80 space-y-3">
+                <h3 className="text-xs font-bold text-amber-900 uppercase tracking-wider flex items-center gap-2">
+                  <Plus size={15} className="text-amber-600" />
+                  Yeni Masraf Ekle (Yakıt Fişi / Tamir Faturası)
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                  {/* Masraf Tipi */}
                   <div>
-                    <label className="text-xs font-semibold text-text-muted block mb-1">
-                      Son Bakım Tarihi
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Masraf Türü
+                    </label>
+                    <div className="grid grid-cols-2 gap-1 bg-white p-1 rounded-xl border border-border">
+                      <button
+                        type="button"
+                        onClick={() => setExpenseType("fuel")}
+                        className={`py-1.5 text-xs font-bold rounded-lg transition ${
+                          expenseType === "fuel"
+                            ? "bg-brand-navy text-white shadow-2xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        ⛽ Yakıt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExpenseType("repair")}
+                        className={`py-1.5 text-xs font-bold rounded-lg transition ${
+                          expenseType === "repair"
+                            ? "bg-brand-navy text-white shadow-2xs"
+                            : "text-slate-600 hover:text-slate-900"
+                        }`}
+                      >
+                        🔧 Tamir / Bakım
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Tarih */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      İşlem Tarihi
                     </label>
                     <input
                       type="date"
-                      value={form.maintenance_date}
-                      onChange={e => setForm(f => ({ ...f, maintenance_date: e.target.value }))}
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-white"
+                      required
+                      value={expenseDate}
+                      onChange={(e) => setExpenseDate(e.target.value)}
+                      className="w-full bg-white border border-border rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
                     />
                   </div>
+
+                  {/* Tutar */}
                   <div>
-                    <label className="text-xs font-semibold text-text-muted block mb-1">
-                      Bakım Masrafı (₺)
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Masraf Tutarı (₺)
                     </label>
                     <input
                       type="number"
-                      step="any"
-                      min="0"
-                      value={form.maintenance_cost || ""}
-                      onChange={e => setForm(f => ({ ...f, maintenance_cost: parseFloat(e.target.value) || 0 }))}
-                      placeholder="0.00"
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm"
+                      step="0.01"
+                      min="1"
+                      required
+                      placeholder="Örn: 4000"
+                      value={expenseAmount}
+                      onChange={(e) => setExpenseAmount(e.target.value)}
+                      className="w-full bg-white border border-border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
                     />
                   </div>
+
+                  {/* O Anki KM */}
                   <div>
-                    <label className="text-xs font-semibold text-text-muted block mb-1">
-                      Yakıt Masrafı (₺)
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Aracın O Anki KM'si
                     </label>
                     <input
                       type="number"
-                      step="any"
-                      min="0"
-                      value={form.fuel_cost || ""}
-                      onChange={e => setForm(f => ({ ...f, fuel_cost: parseFloat(e.target.value) || 0 }))}
-                      placeholder="0.00"
-                      className="w-full border border-border rounded-lg px-3 py-2 text-sm"
+                      placeholder="Örn: 145200"
+                      value={expenseKm}
+                      onChange={(e) => setExpenseKm(e.target.value)}
+                      className="w-full bg-white border border-border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
                     />
                   </div>
                 </div>
 
-                <div>
-                  <label className="text-xs font-semibold text-text-muted block mb-1">
-                    Araç / Bakım Ek Notları
-                  </label>
-                  <textarea
-                    value={form.notes}
-                    onChange={e => setForm(f => ({ ...f, notes: e.target.value }))}
-                    placeholder="Yağ ve filtre değişimi yapıldı, balatalar kontrol edildi..."
-                    rows={2}
-                    className="w-full border border-border rounded-lg px-3 py-2 text-sm resize-none"
-                  />
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+                  {/* Fiş Fotoğrafı Yükle */}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-700 mb-1">
+                      Fiş / Fatura Fotoğrafı (Opsiyonel)
+                    </label>
+                    <label className="w-full bg-white border border-dashed border-slate-300 hover:border-brand-gold rounded-xl px-3 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 cursor-pointer text-slate-600 hover:text-slate-900 transition">
+                      <Camera size={14} className="text-slate-400" />
+                      <span className="truncate">
+                        {expenseFile ? expenseFile.name : "Fotoğraf Seç / Çek"}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => {
+                          if (e.target.files?.[0]) setExpenseFile(e.target.files[0]);
+                        }}
+                      />
+                    </label>
+                  </div>
+
+                  {/* Not / Açıklama */}
+                  <div className="sm:col-span-2 flex gap-2 items-end">
+                    <div className="flex-1">
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Açıklama / İstasyon Adı
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Örn: Shell Dudullu Mazot, Balata ve yağ değişimi..."
+                        value={expenseNotes}
+                        onChange={(e) => setExpenseNotes(e.target.value)}
+                        className="w-full bg-white border border-border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
+                      />
+                    </div>
+
+                    <button
+                      type="submit"
+                      disabled={isSavingExpense}
+                      className="bg-brand-navy hover:bg-brand-navy-2 text-white font-bold px-4 py-2 rounded-xl text-xs transition shadow-sm flex items-center gap-1.5 flex-shrink-0 disabled:opacity-50"
+                    >
+                      {isSavingExpense ? (
+                        <>
+                          <Loader2 size={14} className="animate-spin" /> Kaydediliyor...
+                        </>
+                      ) : (
+                        <>
+                          <Plus size={14} /> Masrafı Kaydet
+                        </>
+                      )}
+                    </button>
+                  </div>
+                </div>
+              </form>
+
+              {/* 3. AY AY MASRAF ÖZETLERİ VE LİSTESİ */}
+              <div className="space-y-4">
+                {/* Ay Filtre Sekmeleri ve KPI Kartları */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-border pb-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-700">Dönem Seçimi:</span>
+                    <select
+                      value={selectedMonth}
+                      onChange={(e) => setSelectedMonth(e.target.value)}
+                      className="bg-surface border border-border rounded-xl px-3 py-1.5 text-xs font-bold text-slate-900 focus:outline-none"
+                    >
+                      <option value="all">Tüm Dönemler (Toplam)</option>
+                      {availableMonths.map((ym) => {
+                        const [year, month] = ym.split("-");
+                        const dateObj = new Date(parseInt(year), parseInt(month) - 1, 1);
+                        const label = dateObj.toLocaleDateString("tr-TR", {
+                          month: "long",
+                          year: "numeric",
+                        });
+                        return (
+                          <option key={ym} value={ym}>
+                            {label}
+                          </option>
+                        );
+                      })}
+                    </select>
+
+                    {/* Masraf Türü Filtresi */}
+                    <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg text-xs ml-2">
+                      <button
+                        type="button"
+                        onClick={() => setExpenseTab("all")}
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold transition ${
+                          expenseTab === "all" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600"
+                        }`}
+                      >
+                        Tümü
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExpenseTab("fuel")}
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold transition ${
+                          expenseTab === "fuel" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600"
+                        }`}
+                      >
+                        ⛽ Yakıt
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExpenseTab("repair")}
+                        className={`px-2.5 py-1 rounded text-[11px] font-bold transition ${
+                          expenseTab === "repair" ? "bg-white text-slate-900 shadow-2xs" : "text-slate-600"
+                        }`}
+                      >
+                        🔧 Tamir
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Seçili Dönem Toplamları */}
+                  <div className="flex items-center gap-4 text-xs">
+                    <div className="text-right">
+                      <span className="text-slate-400 block text-[10px]">Dönem Yakıt:</span>
+                      <span className="font-black text-slate-900 text-sm">
+                        {formatCurrency(monthFuelTotal)}
+                      </span>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-400 block text-[10px]">Dönem Tamir:</span>
+                      <span className="font-black text-slate-900 text-sm">
+                        {formatCurrency(monthRepairTotal)}
+                      </span>
+                    </div>
+                    <div className="text-right border-l border-slate-200 pl-3">
+                      <span className="text-slate-400 block text-[10px]">Dönem Toplamı:</span>
+                      <span className="font-black text-brand-navy text-sm">
+                        {formatCurrency(monthFuelTotal + monthRepairTotal)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Masraf Geçmişi Tablosu */}
+                <div className="border border-border rounded-xl overflow-hidden bg-white">
+                  {filteredExpenses.length === 0 ? (
+                    <div className="p-8 text-center text-slate-400 text-xs">
+                      Bu dönem veya kriterde henüz masraf kaydı bulunmuyor.
+                    </div>
+                  ) : (
+                    <table className="w-full text-left text-xs">
+                      <thead className="bg-slate-100 text-slate-700 font-bold uppercase text-[11px] border-b border-border">
+                        <tr>
+                          <th className="py-2.5 px-3">Tarih</th>
+                          <th className="py-2.5 px-3">Tür</th>
+                          <th className="py-2.5 px-3 text-right">Tutar</th>
+                          <th className="py-2.5 px-3 text-center">Araç KM</th>
+                          <th className="py-2.5 px-3">Fiş / Fatura Fotoğrafı</th>
+                          <th className="py-2.5 px-3">Açıklama</th>
+                          <th className="py-2.5 px-3 text-center">Sil</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-border">
+                        {filteredExpenses.map((exp) => (
+                          <tr key={exp.id} className="hover:bg-slate-50 transition">
+                            <td className="py-2.5 px-3 font-semibold text-slate-800">
+                              {formatDate(exp.date)}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {exp.type === "fuel" ? (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                  ⛽ Yakıt
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                  🔧 Tamir & Bakım
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-right font-black text-slate-900">
+                              {formatCurrency(exp.amount)}
+                            </td>
+                            <td className="py-2.5 px-3 text-center font-bold text-slate-700">
+                              {exp.km ? `${exp.km.toLocaleString("tr-TR")} KM` : "-"}
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {exp.receipt_url ? (
+                                <a
+                                  href={exp.receipt_url}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 text-brand-navy hover:bg-brand-navy hover:text-white font-bold text-[11px] transition"
+                                >
+                                  <ImageIcon size={12} />
+                                  <span>Fişi Gör</span>
+                                </a>
+                              ) : (
+                                <span className="text-slate-400 text-[11px]">Fiş Yok</span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-600 max-w-xs truncate">
+                              {exp.notes || "-"}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              <button
+                                type="button"
+                                onClick={() => handleDeleteExpense(exp.id)}
+                                className="p-1 text-slate-400 hover:text-rose-600 transition"
+                                title="Masrafı Sil"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="border-t border-border p-4 flex justify-end gap-3">
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-border bg-slate-50 flex items-center justify-between">
+              <span className="text-xs text-slate-500 font-medium">
+                {detailVehicle.plate} için kayıtlı {detailExpenses.length} adet masraf ve evrak kaydı.
+              </span>
               <button
                 type="button"
-                onClick={() => setIsModalOpen(false)}
-                className="px-4 py-2 text-sm text-text-muted hover:text-text cursor-pointer"
+                onClick={() => setDetailVehicle(null)}
+                className="bg-brand-navy hover:bg-brand-navy-2 text-white font-bold px-4 py-2 rounded-xl text-xs transition"
               >
-                İptal
-              </button>
-              <button
-                type="button"
-                onClick={handleSave}
-                disabled={isPending}
-                className="flex items-center gap-2 bg-brand-navy text-white px-5 py-2 rounded-xl text-sm font-semibold hover:opacity-90 disabled:opacity-50 cursor-pointer shadow-xs"
-              >
-                {isPending ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />}
-                {editingVehicle ? "Güncelle" : "Kaydet"}
+                Kapat
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── DURUM GÜNCELLE MODAL (Hızlı) ── */}
-      {statusModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm border border-border animate-in fade-in zoom-in-95 duration-150">
-            <div className="flex items-center justify-between p-5 border-b border-border">
-              <div>
-                <h2 className="font-bold text-text">{statusModal.vehicle.plate}</h2>
-                <p className="text-xs text-text-muted">{statusModal.vehicle.driver_name}</p>
-              </div>
-              <button onClick={() => setStatusModal(null)} className="text-text-muted hover:text-text cursor-pointer">
+      {/* ── YENİ ARAÇ EKLE / DÜZENLE MODALI ── */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl shadow-xl max-w-lg w-full overflow-hidden border border-border animate-in fade-in duration-200">
+            <div className="p-4 border-b border-border bg-slate-50 flex items-center justify-between">
+              <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wide flex items-center gap-2">
+                <Truck size={16} className="text-brand-gold" />
+                {editingVehicle ? "Aracı Düzenle" : "Yeni Araç Tanımla"}
+              </h2>
+              <button
+                type="button"
+                onClick={() => setIsModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-700 rounded transition"
+              >
                 <X size={18} />
               </button>
             </div>
-            <div className="p-5 space-y-4">
-              <div>
-                <label className="text-xs font-semibold text-text-muted block mb-2">Yeni Durum</label>
-                <div className="grid grid-cols-2 gap-2">
-                  {STATUSES.map(s => {
-                    const cfg = STATUS_CONFIG[s];
-                    const Icon = cfg.icon;
-                    return (
-                      <button
-                        key={s}
-                        type="button"
-                        onClick={() => setNewStatus(s)}
-                        className={`flex items-center gap-2 px-3 py-2 rounded-xl text-sm font-semibold border transition cursor-pointer ${
-                          newStatus === s ? `${cfg.bg} ${cfg.color} border-current` : "bg-white text-text-muted border-border hover:bg-surface"
-                        }`}
-                      >
-                        <Icon size={14} /> {s}
-                      </button>
-                    );
-                  })}
+
+            <form onSubmit={handleSaveVehicle} className="p-5 space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Plaka *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="34 ABC 123"
+                    value={form.plate}
+                    onChange={(e) => setForm({ ...form, plate: e.target.value })}
+                    className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-xs font-mono font-bold focus:outline-none focus:ring-2 focus:ring-brand-gold/50 uppercase"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Araç Tipi
+                  </label>
+                  <select
+                    value={form.vehicle_type}
+                    onChange={(e) => setForm({ ...form, vehicle_type: e.target.value })}
+                    className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
+                  >
+                    {VEHICLE_TYPES.map((t) => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Şoför Adı *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Ad Soyad"
+                    value={form.driver_name}
+                    onChange={(e) => setForm({ ...form, driver_name: e.target.value })}
+                    className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-700 mb-1">
+                    Şoför Telefonu
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="0532 XXX XX XX"
+                    value={form.driver_phone}
+                    onChange={(e) => setForm({ ...form, driver_phone: e.target.value })}
+                    className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
+                  />
+                </div>
+              </div>
+
               <div>
-                <label className="text-xs font-semibold text-text-muted block mb-1">Güncel Konum (opsiyonel)</label>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Güncel Konum
+                </label>
                 <input
-                  value={newLocation}
-                  onChange={e => setNewLocation(e.target.value)}
-                  placeholder="İstanbul, Kadıköy"
-                  className="w-full border border-border rounded-lg px-3 py-2 text-sm"
+                  type="text"
+                  placeholder="Örn: İstanbul, Ataşehir Depo"
+                  value={form.current_location}
+                  onChange={(e) => setForm({ ...form, current_location: e.target.value })}
+                  className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
                 />
               </div>
-            </div>
-            <div className="border-t border-border p-4 flex justify-end gap-3">
-              <button
-                type="button"
-                onClick={() => setStatusModal(null)}
-                className="px-4 py-2 text-sm text-text-muted hover:text-text cursor-pointer"
-              >
-                İptal
-              </button>
-              <button
-                type="button"
-                onClick={handleStatusUpdate}
-                disabled={isPending}
-                className="flex items-center gap-2 bg-brand-navy text-white px-5 py-2 rounded-xl text-sm font-semibold hover:opacity-90 disabled:opacity-50 cursor-pointer"
-              >
-                {isPending ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />}
-                Güncelle
-              </button>
-            </div>
+
+              {/* Hatırlatıcı Tarihleri */}
+              <div className="grid grid-cols-3 gap-2.5 pt-2 border-t border-slate-100">
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Muayene Bitiş
+                  </label>
+                  <input
+                    type="date"
+                    value={form.inspection_date}
+                    onChange={(e) => setForm({ ...form, inspection_date: e.target.value })}
+                    className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Sigorta Bitiş
+                  </label>
+                  <input
+                    type="date"
+                    value={form.insurance_date}
+                    onChange={(e) => setForm({ ...form, insurance_date: e.target.value })}
+                    className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11px] font-semibold text-slate-600 mb-1">
+                    Kasko Bitiş
+                  </label>
+                  <input
+                    type="date"
+                    value={form.license_date}
+                    onChange={(e) => setForm({ ...form, license_date: e.target.value })}
+                    className="w-full bg-surface border border-border rounded-lg px-2 py-1.5 text-xs focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1">
+                  Araç Notları
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="Araç veya ekipman hakkında özel notlar..."
+                  value={form.notes}
+                  onChange={(e) => setForm({ ...form, notes: e.target.value })}
+                  className="w-full bg-surface border border-border rounded-xl px-3 py-2 text-xs focus:outline-none"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition"
+                >
+                  İptal
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="bg-brand-navy hover:bg-brand-navy-2 text-white font-bold px-5 py-2 rounded-xl text-xs transition shadow-sm disabled:opacity-50"
+                >
+                  {isPending ? "Kaydediliyor..." : "Kaydet"}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

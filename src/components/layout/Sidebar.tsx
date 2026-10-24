@@ -30,6 +30,8 @@ import {
   ChevronRight,
   X,
   Globe,
+  ShoppingBag,
+  Store,
 } from "lucide-react";
 
 import { type UserRole } from "@/lib/auth/role-constants";
@@ -52,6 +54,20 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
+  // Tali Bayi Özel Sipariş Menüsü (En Üstte)
+  {
+    href: "/bayi-siparis/yeni",
+    label: "Sipariş Oluştur",
+    icon: ShoppingBag,
+    badge: "Sipariş",
+    allowedRoles: ["tali_bayi", "bayi"],
+  },
+  {
+    href: "/bayi-siparis",
+    label: "Siparişlerim",
+    icon: ClipboardList,
+    allowedRoles: ["tali_bayi", "bayi"],
+  },
   {
     href: "/dashboard",
     label: "Dashboard",
@@ -95,6 +111,13 @@ const navItems: NavItem[] = [
     href: "/musteriler",
     label: "Müşteriler",
     icon: Users,
+    allowedRoles: ["admin", "muhasebe1", "satis"],
+  },
+  {
+    href: "/bayi-siparisleri",
+    label: "Bayi Siparişleri",
+    icon: Store,
+    badge: "Bayi",
     allowedRoles: ["admin", "muhasebe1", "satis"],
   },
   {
@@ -236,7 +259,7 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
       : roleKey === "satis"
       ? "/teklifler"
       : roleKey === "tali_bayi" || (roleKey as string) === "bayi"
-      ? "/urunler"
+      ? "/bayi-siparis/yeni"
       : "/dashboard";
 
   const roleBadgeMap: Record<string, string> = {

@@ -1,3 +1,20 @@
+export interface VehicleExpense {
+  id: string;
+  type: "fuel" | "repair"; // "fuel" = Yakıt, "repair" = Tamir & Bakım
+  date: string;            // YYYY-MM-DD
+  amount: number;          // ₺
+  km?: number | null;      // O anki km
+  receipt_url?: string | null; // Fiş / fatura fotoğrafı
+  notes?: string | null;   // Açıklama / İstasyon / Yapılan İşlem
+  created_at?: string;
+}
+
+export interface VehicleDocuments {
+  license_photo_url?: string | null;   // Ruhsat fotoğrafı
+  insurance_photo_url?: string | null; // Sigorta fotoğrafı
+  policy_pdf_url?: string | null;      // Poliçe PDF'i
+}
+
 export interface Vehicle {
   id: string;
   company_id: string;
@@ -5,17 +22,19 @@ export interface Vehicle {
   driver_name: string;
   driver_phone?: string | null;
   vehicle_type: string;
-  status: "Depoda" | "Yolda" | "Teslim Etti" | "Bakımda";
+  status?: string;                     // Legacy column (UI'da gösterilmez)
   current_location?: string | null;
   destination?: string | null;
   cargo_notes?: string | null;
   inspection_date?: string | null;     // Muayene Tarihi
   insurance_date?: string | null;      // Trafik Sigortası Tarihi
-  license_date?: string | null;        // Ruhsat / Kasko Sigorta Tarihi
+  license_date?: string | null;        // Kasko / Diğer Bitiş Tarihi
   maintenance_date?: string | null;    // Son Bakım Tarihi
-  maintenance_cost?: number;           // Bakım Masrafı (₺)
-  fuel_cost?: number;                  // Yakıt Masrafı (₺)
-  notes?: string | null;               // Araç / Bakım Notları
+  maintenance_cost?: number;           // Toplam Bakım Masrafı (₺)
+  fuel_cost?: number;                  // Toplam Yakıt Masrafı (₺)
+  notes?: string | null;               // Araç Notları
+  expenses?: VehicleExpense[];         // Ayrıntılı tarih bazlı masraflar
+  documents?: VehicleDocuments;        // Ruhsat, sigorta & poliçe belgeleri
   last_updated_by?: string | null;
   last_updated_at: string;
   created_at: string;

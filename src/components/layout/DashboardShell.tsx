@@ -23,23 +23,25 @@ function isRouteAllowed(role: UserRole, pathname: string): boolean {
     return pathname.startsWith("/sevkiyat");
   }
 
-  // Tali Bayi: YALNIZCA Ürünler / Stok ve Şirket Portalları
+  // Tali Bayi: Ürünler / Stok, Şirket Portalları ve Bayi Sipariş
   if (role === "tali_bayi" || (role as string) === "bayi") {
     if (pathname.startsWith("/urunler/yeni")) return false;
     return (
       pathname.startsWith("/urunler") ||
       pathname.startsWith("/stok") ||
-      pathname.startsWith("/portallar")
+      pathname.startsWith("/portallar") ||
+      pathname.startsWith("/bayi-siparis")
     );
   }
 
-  // Satış Temsilcisi: Teklif, Satış, Sevkiyat, Müşteriler, Ürünler
+  // Satış Temsilcisi: Teklif, Satış, Sevkiyat, Müşteriler, Ürünler, Bayi Siparişleri
   if (role === "satis") {
     return (
       pathname.startsWith("/teklif") ||
       pathname.startsWith("/teklifler") ||
       pathname.startsWith("/satis") ||
       pathname.startsWith("/satislar") ||
+      pathname.startsWith("/bayi-siparisleri") ||
       pathname.startsWith("/sevkiyat") ||
       pathname.startsWith("/musteriler") ||
       pathname.startsWith("/urunler") ||

@@ -44,11 +44,12 @@ export default async function TekliflerPage({
   const activeRole = isActualAdmin ? (cookieRole || "admin") : profile.role;
   const canDeleteQuote = ["admin", "muhasebe1"].includes(activeRole);
 
-  // Tüm teklif istatistiklerini al (filtre uygulanmadan önceki gerçek oranlar için)
+  // Tüm teklif istatistiklerini al (filtre uygulanmadan önceki gerçek oranlar için - bayi siparişleri hariç)
   const { data: allQuotesData } = await supabase
     .from("quotes")
-    .select("id, status, grand_total, total_amount")
+    .select("id, status, grand_total, total_amount, delivery_terms")
     .eq("company_id", profile.company_id)
+    .or("delivery_terms.is.null,delivery_terms.neq.BAYI_SIPARISI")
     .is("deleted_at", null);
 
   const allQuotes = (allQuotesData ?? []) as any[];
@@ -66,11 +67,12 @@ export default async function TekliflerPage({
     .filter((q) => q.status === "converted_to_sale")
     .reduce((acc, q) => acc + (Number(q.grand_total || q.total_amount) || 0), 0);
 
-  // Tablo sorgusu
+  // Tablo sorgusu (Bayi siparişleri hariç normal teklifler)
   let query = supabase
     .from("quotes")
     .select("*, customer:customers(company_name, contact_name)")
     .eq("company_id", profile.company_id)
+    .or("delivery_terms.is.null,delivery_terms.neq.BAYI_SIPARISI")
     .is("deleted_at", null)
     .order("created_at", { ascending: false })
     .limit(50);
