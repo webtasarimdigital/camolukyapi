@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import * as XLSX from "xlsx";
 import { toast } from "sonner";
-import { saveExcelProducts, savePdfDocument, extractProductsFromPdf } from "../actions";
+import { saveExcelProducts, savePdfDocument, extractProductsFromPdf, updateProductPricesFromPdf } from "../actions";
 import type { ParsedProductRow } from "../types";
 import { parseTurkishNumber, formatCurrency, formatQty } from "@/lib/formatters";
 import {
@@ -420,6 +420,37 @@ export default function ImportWizardPage() {
       }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "PDF ayrıştırma hatası";
+      toast.error("Hata: " + msg);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  // PDF Fiyat Listesinden 1. Kalite Fiyatlarını Güncelle (Kod ve İsim Eşlemeli)
+  async function handleUpdatePricesFromPdf() {
+    if (!pdfFile) {
+      toast.error("Lütfen önce bir PDF dosyası seçin.");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const formData = new FormData();
+      formData.set("file", pdfFile);
+
+      const res = await updateProductPricesFromPdf(formData);
+      if (!res.success) {
+        toast.error("Fiyat güncelleme başarısız: " + (res.error || "Bilinmeyen hata"));
+        return;
+      }
+
+      toast.success(
+        `PDF'den ${res.updatedCount} ürünün 1. Kalite fiyatı güncellendi! (${res.matchedWithStock} adedi stokta mevcut)`
+      );
+      router.push("/urunler");
+      router.refresh();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Fiyat güncelleme hatası";
       toast.error("Hata: " + msg);
     } finally {
       setLoading(false);
@@ -872,6 +903,13 @@ export default function ImportWizardPage() {
             </div>
           </div>
 
+          <div className="bg-amber-50 border border-amber-200 rounded-xl p-3.5 text-xs text-amber-900 flex items-start gap-2.5">
+            <span className="text-base leading-none">💡</span>
+            <div>
+              <strong className="font-bold">PDF Fiyat Güncelleme Özelliği:</strong> PDF içindeki ürünler, sistemimizdeki ürün kodları (NG. önekli dahil) veya ürün isimleri ile otomatik eşleştirilerek <strong>1. Kalite fiyatları</strong> doğrudan güncellenir. Mevcut stok adetleriniz kesinlikle sıfırlanmaz veya bozulmaz.
+            </div>
+          </div>
+
           <div className="flex flex-wrap items-center justify-end gap-3 pt-3 border-t border-border">
             <button
               type="submit"
@@ -884,16 +922,16 @@ export default function ImportWizardPage() {
             <button
               type="button"
               disabled={loading || !pdfFile}
-              onClick={handleExtractFromPdf}
-              className="flex items-center gap-2 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-6 py-2.5 rounded-lg text-sm transition disabled:opacity-50 shadow-sm"
+              onClick={handleUpdatePricesFromPdf}
+              className="flex items-center gap-2 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-6 py-2.5 rounded-lg text-sm transition disabled:opacity-50 shadow-sm cursor-pointer"
             >
               {loading ? (
                 <>
-                  <Loader2 size={16} className="animate-spin" /> PDF Ayrıştırılıyor...
+                  <Loader2 size={16} className="animate-spin" /> Fiyatlar Eşleştirilip Güncelleniyor...
                 </>
               ) : (
                 <>
-                  <CheckCircle2 size={16} /> PDF Fiyat & Ürünleri Ayrıştırıp Sisteme Aktar
+                  <CheckCircle2 size={16} /> 1. Kalite Fiyatlarını Güncelle (Kod & İsim Eşlemeli)
                 </>
               )}
             </button>

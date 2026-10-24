@@ -565,3 +565,314 @@ export async function extractProductsFromPdf(formData: FormData): Promise<{
     };
   }
 }
+
+/**
+ * PDF Fiyat Listesinden Ürünleri İsim ve Koda Göre Eşleştirip 1. Kalite Fiyatlarını Güncelleme
+ * Mevcut stok adetlerini ve ürün kartlarını bozmaz.
+ */
+export async function updateProductPricesFromPdf(formData: FormData): Promise<{
+  success: boolean;
+  fileName: string;
+  updatedCount: number;
+  matchedWithStock: number;
+  error?: string;
+}> {
+  const file = formData.get("file") as File | null;
+  if (!file) {
+    return {
+      success: false,
+      fileName: "",
+      updatedCount: 0,
+      matchedWithStock: 0,
+      error: "Lütfen bir PDF dosyası seçin.",
+    };
+  }
+
+  try {
+    const buffer = Buffer.from(await file.arrayBuffer());
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+
+    if (!user) {
+      return {
+        success: false,
+        fileName: file.name,
+        updatedCount: 0,
+        matchedWithStock: 0,
+        error: "Oturum açılmamış.",
+      };
+    }
+
+    const { data: profileData } = await supabase
+      .from("profiles")
+      .select("company_id, role")
+      .eq("id", user.id)
+      .single();
+
+    const profile = profileData as { company_id: string; role: string } | null;
+    if (!profile?.company_id || !["admin", "muhasebe1"].includes(profile.role || "")) {
+      return {
+        success: false,
+        fileName: file.name,
+        updatedCount: 0,
+        matchedWithStock: 0,
+        error: "Yetkiniz bulunmuyor! Yalnızca yetkili kullanıcılar fiyat güncelleyebilir.",
+      };
+    }
+
+    const companyId = profile.company_id;
+
+    // Polyfill DOMMatrix, Path2D, ImageData if missing
+    if (typeof globalThis !== "undefined") {
+      if (!(globalThis as any).DOMMatrix) {
+        class FakeDOMMatrix {
+          a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
+          m11 = 1; m12 = 0; m21 = 0; m22 = 1; m41 = 0; m42 = 0;
+          constructor(_init?: any) {}
+          multiplySelf() { return this; }
+          preMultiplySelf() { return this; }
+          invertSelf() { return this; }
+          translate() { return this; }
+          scale() { return this; }
+        }
+        (globalThis as any).DOMMatrix = FakeDOMMatrix;
+      }
+      if (!(globalThis as any).Path2D) {
+        (globalThis as any).Path2D = class Path2D { addPath() {} };
+      }
+      if (!(globalThis as any).ImageData) {
+        (globalThis as any).ImageData = class ImageData {};
+      }
+    }
+
+    // 1. PDF metnini çıkar
+    let text = "";
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const pdfModule = require("pdf-parse");
+      const PDFParseClass = pdfModule.PDFParse || pdfModule;
+      if (typeof PDFParseClass === "function") {
+        const parser = new PDFParseClass({ data: new Uint8Array(buffer), verbosity: 0 });
+        const res = await parser.getText();
+        text = (res?.text || "") as string;
+        try {
+          await parser.destroy();
+        } catch {
+          // ignore
+        }
+      } else if (typeof pdfModule === "function") {
+        const res = await pdfModule(buffer);
+        text = (res?.text || "") as string;
+      }
+    } catch (e: unknown) {
+      console.warn("pdf-parse error:", (e as Error)?.message);
+    }
+
+    if (!text || text.trim().length === 0) {
+      text = extractRawPdfFallback(buffer);
+    }
+
+    if (!text || text.trim().length === 0) {
+      return {
+        success: false,
+        fileName: file.name,
+        updatedCount: 0,
+        matchedWithStock: 0,
+        error:
+          "PDF metni okunamadı. Dosya sadece taranmış resim/fotoğraf içeriyor olabilir.",
+      };
+    }
+
+    // 2. Şirketin tüm mevcut ürünlerini çek
+    const serviceClient = await createServiceClient();
+    const allProds: Array<{
+      id: string;
+      product_code: string;
+      product_name: string;
+      price_quality_1: number | null;
+      default_sale_price: number | null;
+      stock_qty: number;
+    }> = [];
+    let from = 0;
+    while (true) {
+      const { data: prods } = await serviceClient
+        .from("products")
+        .select("id, product_code, product_name, price_quality_1, default_sale_price, stock_qty")
+        .eq("company_id", companyId)
+        .is("deleted_at", null)
+        .range(from, from + 999);
+
+      if (!prods || prods.length === 0) break;
+      allProds.push(...(prods as typeof allProds));
+      if (prods.length < 1000) break;
+      from += 1000;
+    }
+
+    // 3. İndeksleme ve eşleme yardımcıları
+    function cleanCode(str: string): string {
+      if (!str) return "";
+      return str
+        .toUpperCase()
+        .replace(/^NG\./, "")
+        .replace(/^NG/, "")
+        .replace(/[^A-Z0-9]/g, "")
+        .trim();
+    }
+
+    function getKeywords(name: string): string[] {
+      if (!name) return [];
+      return name
+        .toLowerCase()
+        .replace(/rekt\.?/g, "rekt")
+        .replace(/1\.klt\.?/g, "")
+        .replace(/1\.kalite/g, "")
+        .replace(/6mm/g, "6mm")
+        .replace(/df/g, "")
+        .replace(/soft/g, "")
+        .replace(/\*/g, "x")
+        .replace(/[^a-z0-9ğüşıöç]/g, " ")
+        .split(/\s+/)
+        .filter((w) => w.length >= 3);
+    }
+
+    const dbByCode = new Map<string, (typeof allProds)[0]>();
+    const dbByNameWords: Array<{ prod: (typeof allProds)[0]; keywords: string[] }> = [];
+
+    for (const p of allProds) {
+      const raw = (p.product_code || "").trim();
+      const c = cleanCode(raw);
+      if (c) {
+        dbByCode.set(c, p);
+      }
+      const kw = getKeywords(p.product_name);
+      if (kw.length >= 2) {
+        dbByNameWords.push({ prod: p, keywords: kw });
+      }
+    }
+
+    // 4. PDF satırlarını tara ve eşle
+    const lines = text
+      .split(/\r?\n/)
+      .map((l) => l.trim())
+      .filter((l) => l.length > 2);
+
+    const updates = new Map<
+      string,
+      { id: string; code: string; name: string; price: number; stock: number }
+    >();
+
+    for (const line of lines) {
+      const priceMatches = line.match(/\b\d{1,3}(?:\.\d{3})*(?:,\d{2})\b/g);
+      if (!priceMatches) continue;
+      const price = parseFloat(priceMatches[0].replace(/\./g, "").replace(",", "."));
+      if (!price || price <= 0) continue;
+
+      const codeMatches = line.match(
+        /\b(\d{6,10}[A-Z0-9]*|[A-Z]{2,4}\d{4,10}[A-Z0-9]*)\b/g
+      );
+      let matchedProd: (typeof allProds)[0] | null = null;
+
+      if (codeMatches) {
+        for (const cm of codeMatches) {
+          const c = cleanCode(cm);
+          if (dbByCode.has(c)) {
+            matchedProd = dbByCode.get(c)!;
+            break;
+          }
+        }
+      }
+
+      if (!matchedProd) {
+        const lineKw = new Set(getKeywords(line));
+        for (const item of dbByNameWords) {
+          const allPresent = item.keywords.every((k) => lineKw.has(k));
+          if (allPresent) {
+            matchedProd = item.prod;
+            break;
+          }
+        }
+      }
+
+      if (matchedProd) {
+        updates.set(matchedProd.id, {
+          id: matchedProd.id,
+          code: matchedProd.product_code,
+          name: matchedProd.product_name,
+          price,
+          stock: matchedProd.stock_qty || 0,
+        });
+      }
+    }
+
+    const list = Array.from(updates.values());
+    if (list.length === 0) {
+      return {
+        success: false,
+        fileName: file.name,
+        updatedCount: 0,
+        matchedWithStock: 0,
+        error:
+          "PDF içinde sistemimizdeki ürün kodları veya isimleriyle eşleşen ürün bulunamadı.",
+      };
+    }
+
+    // 5. Güncellemeleri veritabanına uygula (stok miktarlarına dokunmadan)
+    const now = new Date().toISOString();
+    let updatedCount = 0;
+    for (const item of list) {
+      const { error: updErr } = await (serviceClient.from("products") as any)
+        .update({
+          price_quality_1: item.price,
+          default_sale_price: item.price,
+          updated_at: now,
+        })
+        .eq("id", item.id);
+
+      if (!updErr) {
+        updatedCount++;
+      }
+    }
+
+    // 6. product_imports tablosuna kayıt ekle
+    const withStockCount = list.filter((u) => u.stock > 0).length;
+    await (serviceClient.from("product_imports") as any).insert({
+      company_id: companyId,
+      file_name: `[PDF Fiyat Listesi] ${file.name}`,
+      storage_path: `pdf/${Date.now()}_${file.name}`,
+      sheet_name: "PDF_FIYAT_GUNCELLEME",
+      status: "completed",
+      total_rows: list.length,
+      inserted_rows: 0,
+      updated_rows: updatedCount,
+      summary: `PDF Fiyat Listesi: ${updatedCount} ürünün 1. Kalite fiyatı güncellendi (${withStockCount} adedi stokta mevcut).`,
+      created_by: user.id,
+      completed_at: now,
+    });
+
+    revalidatePath("/urunler");
+    revalidatePath("/import");
+    revalidatePath("/satis/yeni");
+    revalidatePath("/teklif/yeni");
+
+    return {
+      success: true,
+      fileName: file.name,
+      updatedCount,
+      matchedWithStock: withStockCount,
+    };
+  } catch (err: unknown) {
+    const msg =
+      err instanceof Error
+        ? err.message
+        : "PDF fiyat güncelleme sırasında beklenmeyen bir hata oluştu";
+    return {
+      success: false,
+      fileName: file?.name || "",
+      updatedCount: 0,
+      matchedWithStock: 0,
+      error: msg,
+    };
+  }
+}
