@@ -23,22 +23,24 @@ export default async function NewQuotePage() {
     .single();
   const settings = (settingsData as any) || {};
 
+  // İlk açılışta hızlı render için ilk müşteriler (canlı arama ile tüm 7,903 müşteri aranabilir)
   const { data: customersData } = await supabase
     .from("customers")
     .select("id, company_name, contact_name, phone, type, tax_office, tax_number, address, email")
     .eq("company_id", profile.company_id)
     .eq("is_active", true)
     .order("company_name", { ascending: true })
-    .limit(500);
+    .limit(200);
 
+  // İlk açılışta hızlı render için ilk ürünler (stok miktarı ve tüm detaylar dahil, canlı arama ile 4,371 ürün aranabilir)
   const { data: productsData } = await supabase
     .from("products")
-    .select("id, product_code, product_name, unit, default_sale_price, price_quality_1, price_quality_2, price_commercial, series_name, size, product_group")
+    .select("id, product_code, product_name, unit, stock_qty, min_stock_qty, default_sale_price, cost_price, price_quality_1, price_quality_2, price_commercial, series_name, size, product_group, brand")
     .eq("company_id", profile.company_id)
     .eq("is_active", true)
     .is("deleted_at", null)
     .order("product_name", { ascending: true })
-    .limit(1000);
+    .limit(200);
 
   const cookieStore = await cookies();
   const activeName = cookieStore.get("app_user_name")?.value || profile.full_name || "Yetkili";

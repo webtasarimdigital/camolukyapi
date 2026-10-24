@@ -1,4 +1,4 @@
-'use server'
+'use server';
 
 import { createClient } from "@/lib/supabase/server";
 import { calculateLine, calculateTotals } from "@/lib/calculations";
@@ -145,4 +145,88 @@ export async function quickCreateCustomer(data: {
   }
 
   return { success: true, customer: customer as any };
+}
+
+/**
+ * 7,903 müşteri arasından canlı arama (Firma, yetkili, telefon, vergi no veya adres)
+ */
+export async function searchCustomersLive(query: string) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return [];
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", userData.user.id)
+    .single();
+
+  const companyId = (profile as any)?.company_id;
+  if (!companyId) return [];
+
+  const cleanQ = query.trim();
+  if (!cleanQ) {
+    const { data } = await supabase
+      .from("customers")
+      .select("id, company_name, contact_name, phone, email, address, tax_office, tax_number, type")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .order("company_name", { ascending: true })
+      .limit(30);
+    return data || [];
+  }
+
+  const { data } = await supabase
+    .from("customers")
+    .select("id, company_name, contact_name, phone, email, address, tax_office, tax_number, type")
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .or(`company_name.ilike.%${cleanQ}%,contact_name.ilike.%${cleanQ}%,phone.ilike.%${cleanQ}%,tax_number.ilike.%${cleanQ}%,address.ilike.%${cleanQ}%`)
+    .order("company_name", { ascending: true })
+    .limit(50);
+
+  return data || [];
+}
+
+/**
+ * 4,371 ürün arasından canlı arama (Stok miktarı ve tüm detaylar dahil)
+ */
+export async function searchProductsLive(query: string) {
+  const supabase = await createClient();
+  const { data: userData } = await supabase.auth.getUser();
+  if (!userData.user) return [];
+
+  const { data: profile } = await supabase
+    .from("profiles")
+    .select("company_id")
+    .eq("id", userData.user.id)
+    .single();
+
+  const companyId = (profile as any)?.company_id;
+  if (!companyId) return [];
+
+  const cleanQ = query.trim();
+  if (!cleanQ) {
+    const { data } = await supabase
+      .from("products")
+      .select("id, product_code, product_name, unit, stock_qty, min_stock_qty, default_sale_price, cost_price, price_quality_1, price_quality_2, price_commercial, product_group, series_name, size, brand")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("product_name", { ascending: true })
+      .limit(30);
+    return data || [];
+  }
+
+  const { data } = await supabase
+    .from("products")
+    .select("id, product_code, product_name, unit, stock_qty, min_stock_qty, default_sale_price, cost_price, price_quality_1, price_quality_2, price_commercial, product_group, series_name, size, brand")
+    .eq("company_id", companyId)
+    .eq("is_active", true)
+    .is("deleted_at", null)
+    .or(`product_name.ilike.%${cleanQ}%,product_code.ilike.%${cleanQ}%,series_name.ilike.%${cleanQ}%,size.ilike.%${cleanQ}%,product_group.ilike.%${cleanQ}%,brand.ilike.%${cleanQ}%`)
+    .order("product_name", { ascending: true })
+    .limit(60);
+
+  return data || [];
 }
