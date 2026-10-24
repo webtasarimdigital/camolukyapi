@@ -188,3 +188,204 @@ export async function deleteSale(saleId: string) {
   revalidatePath("/finans");
   return { success: true };
 }
+
+export interface UpdateSaleItemInput {
+  id?: string;
+  productId?: string | null;
+  productCode?: string | null;
+  productName: string;
+  unit?: string;
+  quantity: number;
+  unitPrice: number;
+  discountType?: "percent" | "fixed" | null;
+  discountValue?: number;
+  discountAmount?: number;
+  lineTotal: number;
+}
+
+export interface UpdateSaleInput {
+  saleId: string;
+  items: UpdateSaleItemInput[];
+  vatRate: number;
+  subtotal: number;
+  discountTotal: number;
+  netTotal: number;
+  vatTotal: number;
+  grandTotal: number;
+  paidAmount: number;
+  remainingAmount: number;
+  paymentStatus: "paid" | "partial" | "unpaid";
+  notes?: string;
+  dueDate?: string | null;
+  saleDate?: string | null;
+}
+
+export async function updateSale(input: UpdateSaleInput) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Oturum açmanız gerekiyor.");
+
+  const { data: profile } = await supabase.from("profiles").select("role, company_id, full_name").eq("id", user.id).single();
+  const role = (profile as any)?.role || "staff";
+  if (!["admin", "muhasebe1", "satis"].includes(role)) {
+    throw new Error("Yetkiniz bulunmuyor! Yalnızca yetkili kullanıcılar satış düzenleyebilir.");
+  }
+
+  const companyId = (profile as any)?.company_id;
+  const service = await createServiceClient();
+
+  // Fetch current sale with items
+  const { data: currentSaleData, error: fetchErr } = await service
+    .from("sales")
+    .select("*, items:sale_items(*)")
+    .eq("id", input.saleId)
+    .single();
+
+  if (fetchErr || !currentSaleData) throw new Error("Satış bulunamadı");
+  const currentSale = currentSaleData as any;
+  const oldItems = currentSale.items || [];
+
+  // Calculate payment status & remaining amount
+  const paidAmount = Number(input.paidAmount) || 0;
+  const grandTotal = Number(input.grandTotal) || 0;
+  const remainingAmount = Math.max(0, grandTotal - paidAmount);
+  const paymentStatus = remainingAmount <= 0.01 ? "paid" : paidAmount > 0 ? "partial" : "unpaid";
+
+  // 1. Stock adjustments for completed sale
+  if (currentSale.status === "completed") {
+    const oldItemsMap = new Map<string, any>();
+    for (const oi of oldItems) {
+      if (oi.product_id) {
+        oldItemsMap.set(oi.id, oi);
+      }
+    }
+
+    const processedOldItemIds = new Set<string>();
+
+    for (const newItem of input.items) {
+      if (newItem.id && oldItemsMap.has(newItem.id)) {
+        processedOldItemIds.add(newItem.id);
+        const oldItem = oldItemsMap.get(newItem.id);
+        const delta = (Number(oldItem.quantity) || 0) - (Number(newItem.quantity) || 0);
+        if (delta !== 0 && oldItem.product_id) {
+          try {
+            await service.rpc("add_stock_movement" as never, {
+              p_company_id: companyId || currentSale.company_id,
+              p_product_id: oldItem.product_id,
+              p_movement_type: "manual_correction",
+              p_quantity: delta,
+              p_reference_type: "sale_edit",
+              p_reference_id: input.saleId,
+              p_reason: `Satış Düzenleme: ${currentSale.sale_code}`,
+              p_user_id: user.id
+            } as never);
+          } catch (e) {
+            console.warn("Stock adjust error:", e);
+          }
+        }
+      } else if (!newItem.id && newItem.productId) {
+        try {
+          await service.rpc("add_stock_movement" as never, {
+            p_company_id: companyId || currentSale.company_id,
+            p_product_id: newItem.productId,
+            p_movement_type: "sale",
+            p_quantity: -Number(newItem.quantity || 0),
+            p_reference_type: "sale_edit",
+            p_reference_id: input.saleId,
+            p_reason: `Satışa Yeni Kalem Eklendi: ${currentSale.sale_code}`,
+            p_user_id: user.id
+          } as never);
+        } catch (e) {
+          console.warn("Stock deduct error:", e);
+        }
+      }
+    }
+
+    for (const [oldId, oldItem] of oldItemsMap.entries()) {
+      if (!processedOldItemIds.has(oldId) && oldItem.product_id) {
+        try {
+          await service.rpc("add_stock_movement" as never, {
+            p_company_id: companyId || currentSale.company_id,
+            p_product_id: oldItem.product_id,
+            p_movement_type: "manual_correction",
+            p_quantity: Number(oldItem.quantity || 0),
+            p_reference_type: "sale_edit",
+            p_reference_id: input.saleId,
+            p_reason: `Satıştan Kalem Çıkarıldı (İade): ${currentSale.sale_code}`,
+            p_user_id: user.id
+          } as never);
+        } catch (e) {
+          console.warn("Stock return error:", e);
+        }
+      }
+    }
+  }
+
+  // 2. Delete existing sale_items and re-insert updated ones
+  await service.from("sale_items").delete().eq("sale_id", input.saleId);
+
+  const itemsToInsert = input.items.map((item, idx) => ({
+    sale_id: input.saleId,
+    sort_order: idx + 1,
+    product_id: item.productId || null,
+    product_code_snapshot: item.productCode || null,
+    product_name_snapshot: item.productName,
+    unit_snapshot: item.unit || "ADET",
+    quantity: Number(item.quantity) || 0,
+    unit_price: Number(item.unitPrice) || 0,
+    discount_type: item.discountType || null,
+    discount_value: Number(item.discountValue) || 0,
+    discount_amount: Number(item.discountAmount) || 0,
+    line_total: Number(item.lineTotal) || 0,
+  }));
+
+  const { error: insertItemsErr } = await service.from("sale_items").insert(itemsToInsert as any);
+  if (insertItemsErr) throw new Error("Satış kalemleri güncellenemedi: " + insertItemsErr.message);
+
+  // 3. Update sales record
+  const updatePayload: any = {
+    vat_rate: Number(input.vatRate) || 0,
+    subtotal: Number(input.subtotal) || 0,
+    discount_total: Number(input.discountTotal) || 0,
+    net_total: Number(input.netTotal) || 0,
+    vat_total: Number(input.vatTotal) || 0,
+    grand_total: grandTotal,
+    paid_amount: paidAmount,
+    remaining_amount: remainingAmount,
+    payment_status: paymentStatus,
+    notes: input.notes ?? currentSale.notes,
+    due_date: input.dueDate || null,
+  };
+
+  if (input.saleDate) {
+    updatePayload.sale_date = input.saleDate;
+  }
+
+  const { error: updateSaleErr } = await (service.from("sales") as any).update(updatePayload).eq("id", input.saleId);
+  if (updateSaleErr) throw new Error("Satış kaydı güncellenemedi: " + updateSaleErr.message);
+
+  // 4. Financial transactions update if paidAmount changed
+  if (paidAmount !== Number(currentSale.paid_amount)) {
+    const { data: ftData } = await service
+      .from("financial_transactions")
+      .select("id")
+      .eq("source_id", input.saleId)
+      .eq("category", "satis_tahsilat")
+      .limit(1);
+
+    if (ftData && ftData.length > 0) {
+      await (service.from("financial_transactions") as any).update({ amount: paidAmount }).eq("id", (ftData[0] as any).id);
+    }
+  }
+
+  revalidatePath(`/satislar/${input.saleId}`);
+  revalidatePath(`/satislar/${input.saleId}/duzenle`);
+  revalidatePath("/satislar");
+  revalidatePath("/dashboard");
+  revalidatePath("/musteriler");
+  revalidatePath("/finans");
+  revalidatePath("/stok");
+  revalidatePath("/urunler");
+
+  return { success: true };
+}

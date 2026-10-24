@@ -3,7 +3,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/formatters";
 import { redirect } from "next/navigation";
-import { ShoppingCart, Plus, ArrowRight } from "lucide-react";
+import { ShoppingCart, Plus, ArrowRight, PenLine } from "lucide-react";
 import { DeleteSaleButton } from "./DeleteSaleButton";
 import { ExportSalesButton } from "./ExportSalesButton";
 
@@ -147,6 +147,13 @@ export default async function SalesPage() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
+                        <Link 
+                          href={`/satislar/${sale.id}/duzenle`} 
+                          className="inline-flex items-center gap-1 text-slate-700 hover:text-brand-navy font-bold text-xs bg-white px-2 py-1 rounded-lg border border-border hover:border-brand-navy transition"
+                          title="Satışı Düzenle"
+                        >
+                          <PenLine size={12} /> Düzenle
+                        </Link>
                         <Link 
                           href={`/satislar/${sale.id}`} 
                           className="inline-flex items-center gap-1 text-brand-navy hover:text-black font-bold text-xs bg-surface px-2.5 py-1 rounded-lg border border-border hover:border-brand-navy transition"

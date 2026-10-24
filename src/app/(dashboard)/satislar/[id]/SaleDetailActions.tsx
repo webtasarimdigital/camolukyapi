@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { addPayment, cancelSale, deleteSale } from "./actions";
 import { toast } from "sonner";
 import { 
@@ -12,7 +13,8 @@ import {
   CheckCircle2, 
   Printer, 
   X,
-  PlusCircle
+  PlusCircle,
+  PenLine
 } from "lucide-react";
 
 export function SaleDetailActions({
@@ -123,6 +125,17 @@ export function SaleDetailActions({
             <PlusCircle size={15} />
             Tahsilat Ekle
           </button>
+        )}
+
+        {/* Edit Sale button */}
+        {status !== "cancelled" && (
+          <Link
+            href={`/satislar/${saleId}/duzenle`}
+            className="inline-flex items-center gap-1.5 bg-brand-navy hover:bg-brand-navy/90 text-white text-xs font-bold px-3.5 py-2 rounded-xl transition shadow-xs"
+          >
+            <PenLine size={14} />
+            Satışı Düzenle
+          </Link>
         )}
 
         {/* Print Button */}
