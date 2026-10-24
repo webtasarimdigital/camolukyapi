@@ -3,6 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { CustomerRowActions } from "./CustomerRowActions";
 import { CustomerImportModal } from "./CustomerImportModal";
+import { InteractiveTable } from "@/components/ui/InteractiveTable";
 import {
   ChevronLeft,
   ChevronRight,
@@ -197,7 +198,7 @@ export default async function MusterilerPage({
 
       {/* Müşteri Tablosu */}
       <div className="bg-white rounded-xl border border-border overflow-hidden shadow-xs">
-        <div className="overflow-x-auto">
+        <InteractiveTable tableId="tbl_musteriler">
           <table className="w-full text-sm">
             <thead className="bg-surface/80 border-b border-border">
               <tr>
@@ -290,7 +291,7 @@ export default async function MusterilerPage({
               )}
             </tbody>
           </table>
-        </div>
+        </InteractiveTable>
 
         {/* ──────────────────── SAYFALAMA (PAGINATION) ALANI ──────────────────── */}
         {totalCount > 0 && (

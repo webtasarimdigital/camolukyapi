@@ -7,6 +7,7 @@ import { Suspense } from 'react';
 import { StockQtyImportModal } from './StockQtyImportModal';
 import { DeleteAllStockModal } from './DeleteAllStockModal';
 import AdjustStockModal from '../stok/AdjustStockModal';
+import { InteractiveTable } from '@/components/ui/InteractiveTable';
 
 export default async function UrunlerPage({
   searchParams,
@@ -107,7 +108,7 @@ export default async function UrunlerPage({
       </div>
 
       <div className="bg-white rounded-xl border border-border overflow-hidden">
-        <div className="overflow-x-auto">
+        <InteractiveTable tableId="tbl_urunler">
           <table className="w-full text-sm sticky-header">
             <thead className="bg-surface border-b border-border">
               <tr>
@@ -174,7 +175,7 @@ export default async function UrunlerPage({
               })}
             </tbody>
           </table>
-        </div>
+        </InteractiveTable>
       </div>
       
       {/* Pagination controls */}

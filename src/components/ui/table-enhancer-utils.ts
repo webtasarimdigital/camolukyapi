@@ -110,15 +110,6 @@ function getTableStorageKey(table: HTMLTableElement, colIdx: number): string {
  * Verilen HTMLTableElement'i sütun genişletme ve sıralama yetenekleriyle donatır.
  */
 export function enhanceTable(table: HTMLTableElement) {
-  if (table.dataset.enhanced === "true") return;
-  table.dataset.enhanced = "true";
-
-  // Tablo konteynerine yatay kaydırma garantisi ver
-  if (table.parentElement && !table.parentElement.classList.contains("overflow-x-auto")) {
-    table.parentElement.classList.add("overflow-x-auto");
-  }
-  table.style.minWidth = "100%";
-
   const thead = table.querySelector("thead");
   const tbody = table.querySelector("tbody");
   if (!thead || !tbody) return;
@@ -126,6 +117,18 @@ export function enhanceTable(table: HTMLTableElement) {
   const headerRows = thead.querySelectorAll("tr");
   if (headerRows.length === 0) return;
   const thList = Array.from(headerRows[headerRows.length - 1].querySelectorAll("th"));
+  if (thList.length === 0) return;
+
+  // Başlıklar zaten donatılmış mı kontrol et (React re-render durumunda eksikleri tamamla)
+  const alreadySetup = thList.every((th) => th.querySelector(".table-col-resizer"));
+  if (alreadySetup && table.dataset.enhanced === "true") return;
+  table.dataset.enhanced = "true";
+
+  // Tablo konteynerine yatay kaydırma garantisi ver
+  if (table.parentElement && !table.parentElement.classList.contains("overflow-x-auto")) {
+    table.parentElement.classList.add("overflow-x-auto");
+  }
+  table.style.minWidth = "100%";
 
   // Form kalemleri tablosu mu? (Quote/Sale builder'da fatura sırasını bozmamak için sıralama yapılmaz)
   const isFormItemTable =

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { ShoppingCart, Plus, ArrowRight, PenLine } from "lucide-react";
 import { DeleteSaleButton } from "./DeleteSaleButton";
 import { ExportSalesButton } from "./ExportSalesButton";
+import { InteractiveTable } from "@/components/ui/InteractiveTable";
 
 export default async function SalesPage() {
   const supabase = await createClient();
@@ -63,7 +64,8 @@ export default async function SalesPage() {
       </div>
 
       <div className="bg-white rounded-2xl border border-border shadow-xs overflow-hidden">
-        <table className="w-full text-xs">
+        <InteractiveTable tableId="tbl_satislar">
+          <table className="w-full text-xs">
           <thead className="bg-surface border-b border-border text-text-muted uppercase text-[10px] font-bold">
             <tr>
               <th className="text-left px-4 py-3">Satış No</th>
@@ -169,6 +171,7 @@ export default async function SalesPage() {
             )}
           </tbody>
         </table>
+        </InteractiveTable>
       </div>
     </div>
   );

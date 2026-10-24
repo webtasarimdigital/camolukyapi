@@ -13,10 +13,7 @@ export function GlobalTableEnhancer() {
 
   useEffect(() => {
     function scanAndEnhance() {
-      const main = document.querySelector("main");
-      if (!main) return;
-
-      const tables = main.querySelectorAll<HTMLTableElement>("table");
+      const tables = document.querySelectorAll<HTMLTableElement>("table");
       tables.forEach((tbl) => {
         try {
           enhanceTable(tbl);
@@ -26,21 +23,28 @@ export function GlobalTableEnhancer() {
       });
     }
 
-    // İlk tarama
-    const timer = setTimeout(scanAndEnhance, 80);
+    // İlk taramalar (hemen, 80ms, 300ms ve 800ms)
+    scanAndEnhance();
+    const t1 = setTimeout(scanAndEnhance, 80);
+    const t2 = setTimeout(scanAndEnhance, 300);
+    const t3 = setTimeout(scanAndEnhance, 800);
 
     // Dinamik React güncellemeleri için MutationObserver
+    let debounceTimer: any = null;
     const observer = new MutationObserver(() => {
-      scanAndEnhance();
+      clearTimeout(debounceTimer);
+      debounceTimer = setTimeout(scanAndEnhance, 60);
     });
 
-    const main = document.querySelector("main");
-    if (main) {
-      observer.observe(main, { childList: true, subtree: true });
+    if (typeof document !== "undefined" && document.body) {
+      observer.observe(document.body, { childList: true, subtree: true });
     }
 
     return () => {
-      clearTimeout(timer);
+      clearTimeout(t1);
+      clearTimeout(t2);
+      clearTimeout(t3);
+      clearTimeout(debounceTimer);
       observer.disconnect();
     };
   }, [pathname]);

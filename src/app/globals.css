@@ -69,20 +69,20 @@
 
 /* ── Interactive Table (Column Resizing & Header Sorting) ── */
 .table-sortable-th {
-  cursor: pointer;
-  user-select: none;
+  cursor: pointer !important;
+  user-select: none !important;
   transition: background-color 0.15s ease, color 0.15s ease;
-  position: relative;
+  position: relative !important;
 }
 
 .table-sortable-th:hover {
-  background-color: rgba(215, 166, 74, 0.08) !important;
-  color: #131B2A !important;
+  background-color: rgba(215, 166, 74, 0.12) !important;
+  color: #0F172A !important;
 }
 
 .table-sortable-th.is-sorted {
-  background-color: rgba(215, 166, 74, 0.14) !important;
-  color: #131B2A !important;
+  background-color: rgba(215, 166, 74, 0.18) !important;
+  color: #0F172A !important;
   font-weight: 700 !important;
 }
 
@@ -90,24 +90,24 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 11px;
-  line-height: 1;
   width: 14px;
   height: 14px;
   margin-left: 6px;
-  opacity: 0.35;
-  transition: opacity 0.15s ease, color 0.15s ease;
+  opacity: 0.65;
+  color: #64748B;
+  transition: opacity 0.15s ease, color 0.15s ease, transform 0.15s ease;
   vertical-align: middle;
 }
 
 .table-sortable-th:hover .table-sort-icon {
-  opacity: 0.85;
-  color: #131B2A;
+  opacity: 1 !important;
+  color: #0F172A !important;
 }
 
 .table-sortable-th.is-sorted .table-sort-icon {
-  opacity: 1;
-  color: #D7A64A; /* Brand gold */
+  opacity: 1 !important;
+  color: #D7A64A !important;
+  transform: scale(1.15);
 }
 
 /* Sütun Tutamacı (Resizer) */
@@ -116,8 +116,8 @@
   right: 0;
   top: 0;
   bottom: 0;
-  width: 10px;
-  cursor: col-resize;
+  width: 12px;
+  cursor: col-resize !important;
   user-select: none;
   z-index: 30;
   display: flex;
@@ -129,18 +129,19 @@
   content: "";
   position: absolute;
   right: 2px;
-  top: 20%;
-  bottom: 20%;
+  top: 15%;
+  bottom: 15%;
   width: 2px;
-  background-color: transparent;
+  background-color: #CBD5E1; /* Belirgin açık gri ayırıcı çizgi */
   border-radius: 1px;
-  transition: background-color 0.15s ease;
+  transition: background-color 0.15s ease, width 0.15s ease;
 }
 
 th:hover .table-col-resizer::after,
 .table-col-resizer:hover::after,
 .table-col-resizer.is-resizing::after {
-  background-color: #D7A64A; /* Brand gold */
+  background-color: #D7A64A !important; /* Brand gold */
+  width: 3px !important;
 }
 
 /* Sürükleme esnasındaki düşey rehber çizgisi */

@@ -7,6 +7,7 @@ import { QuickQuoteSearch } from "./QuickQuoteSearch";
 import { DeleteQuoteButton } from "./DeleteQuoteButton";
 import { getUploadedQuotes } from "./uploaded-quotes-actions";
 import { UploadedQuotesClient } from "./UploadedQuotesClient";
+import { InteractiveTable } from "@/components/ui/InteractiveTable";
 import {
   FileText,
   TrendingUp,
@@ -294,7 +295,8 @@ export default async function TekliflerPage({
 
       {/* TEKLİF LİSTESİ TABLOSU */}
       <div className="bg-white rounded-2xl border border-border overflow-hidden shadow-sm">
-        <table className="w-full text-sm">
+        <InteractiveTable tableId="tbl_teklifler">
+          <table className="w-full text-sm">
           <thead className="bg-surface border-b border-border">
             <tr>
               <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide">
@@ -429,6 +431,7 @@ export default async function TekliflerPage({
             )}
           </tbody>
         </table>
+        </InteractiveTable>
       </div>
       </>
       )}

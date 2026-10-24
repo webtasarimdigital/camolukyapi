@@ -20,15 +20,25 @@ export function InteractiveTable({
   const containerRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
-    const table = containerRef.current.querySelector<HTMLTableElement>("table");
-    if (table) {
-      if (tableId && !table.id) {
-        table.id = tableId;
+    function setup() {
+      if (!containerRef.current) return;
+      const table = containerRef.current.querySelector<HTMLTableElement>("table");
+      if (table) {
+        if (tableId && !table.id) {
+          table.id = tableId;
+        }
+        enhanceTable(table);
       }
-      enhanceTable(table);
     }
-  }, [tableId]);
+
+    setup();
+    const t1 = setTimeout(setup, 60);
+    const t2 = setTimeout(setup, 250);
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+    };
+  }, [tableId, children]);
 
   return (
     <div
