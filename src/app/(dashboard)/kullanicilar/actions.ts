@@ -49,7 +49,7 @@ export async function actionCreateUser(formData: FormData) {
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: fullName },
+      user_metadata: { full_name: fullName, plain_password: password },
     });
 
     if (authError || !authData.user) {
@@ -156,5 +156,49 @@ export async function actionDeleteUser(userId: string) {
     return { success: true, message: "Kullanıcı başarıyla silindi." };
   } catch (err: any) {
     return { success: false, error: err?.message || "Kullanıcı silinemedi." };
+  }
+}
+
+export async function actionResetUserPassword(userId: string, newPass: string) {
+  try {
+    const supabase = await createClient();
+    const { data: { user: currentUser } } = await supabase.auth.getUser();
+    if (!currentUser) return { success: false, error: "Yetkisiz erişim." };
+
+    const { data: curProfileData } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", currentUser.id)
+      .single();
+
+    if ((curProfileData as any)?.role !== "admin") {
+      return { success: false, error: "Yalnızca Yöneticiler şifre değiştirebilir." };
+    }
+
+    if (!newPass || newPass.trim().length < 6) {
+      return { success: false, error: "Şifre en az 6 karakter olmalıdır." };
+    }
+
+    const serviceClient = await createServiceClient();
+    const { data: authUser } = await serviceClient.auth.admin.getUserById(userId);
+    const existingMeta = authUser?.user?.user_metadata || {};
+
+    const { error } = await serviceClient.auth.admin.updateUserById(userId, {
+      password: newPass.trim(),
+      user_metadata: {
+        ...existingMeta,
+        plain_password: newPass.trim(),
+      },
+    });
+
+    if (error) return { success: false, error: error.message };
+
+    try {
+      revalidatePath("/kullanicilar");
+    } catch {}
+
+    return { success: true, message: "Şifre başarıyla güncellendi." };
+  } catch (err: any) {
+    return { success: false, error: err?.message || "Şifre güncellenemedi." };
   }
 }

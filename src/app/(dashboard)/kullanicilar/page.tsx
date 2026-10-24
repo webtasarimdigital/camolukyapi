@@ -150,14 +150,17 @@ export default async function KullanicilarPage() {
     .eq("company_id", profile.company_id)
     .order("created_at", { ascending: true });
 
-  // Fetch auth users to get exact emails
-  let authUsersMap = new Map<string, string>();
+  // Fetch auth users to get exact emails and plain passwords
+  let authUsersMap = new Map<string, { email: string; pass?: string }>();
   try {
     const serviceClient = await createServiceClient();
     const { data: authList } = await serviceClient.auth.admin.listUsers();
     if (authList?.users) {
       authList.users.forEach((u) => {
-        authUsersMap.set(u.id, u.email || "");
+        authUsersMap.set(u.id, {
+          email: u.email || "",
+          pass: u.user_metadata?.plain_password as string | undefined,
+        });
       });
     }
   } catch {
@@ -210,13 +213,25 @@ export default async function KullanicilarPage() {
           <tbody className="divide-y divide-border">
             {profiles && profiles.length > 0 ? (
               profiles.map((p: any) => {
+                const authInfo = authUsersMap.get(p.id);
                 const email =
-                  authUsersMap.get(p.id) ||
+                  authInfo?.email ||
                   (p.role === "admin"
                     ? "camoluk@camolukyapi.com"
                     : `${p.role}@camolukyapi.com`);
                 const roleInfo = ROLE_CONFIG[p.role] || ROLE_CONFIG.staff;
-                const cred = ACCOUNT_CREDENTIALS_MAP[p.role];
+                const defaultCred = ACCOUNT_CREDENTIALS_MAP[p.role];
+                const isSystemRoleAccount = [
+                  "camoluk@camolukyapi.com",
+                  "muhasebe1@camolukyapi.com",
+                  "satis@camolukyapi.com",
+                  "depo@camolukyapi.com",
+                  "sofor@camolukyapi.com",
+                  "bayi@camolukyapi.com",
+                ].includes(email);
+
+                const displayPass = authInfo?.pass || (isSystemRoleAccount ? defaultCred?.pass : null);
+                const displayUser = isSystemRoleAccount ? defaultCred?.username : email.split("@")[0];
                 const isSelf = p.id === userData.user.id;
                 const isProtected = email === "camoluk@camolukyapi.com";
                 return (
@@ -233,23 +248,30 @@ export default async function KullanicilarPage() {
                       {email}
                     </td>
                     <td className="px-4 py-3">
-                      {cred ? (
+                      {displayPass ? (
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-1.5">
                             <span className="text-[10px] text-text-muted font-medium">Şifre:</span>
                             <span className="font-mono font-bold text-xs text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-300 select-all tracking-wide">
-                              {cred.pass}
+                              {displayPass}
                             </span>
                           </div>
                           <div className="flex items-center gap-1 text-[11px] text-text-muted">
                             <span>Giriş Adı:</span>
                             <span className="font-mono font-semibold text-brand-navy bg-surface px-1.5 py-0.2 rounded border border-border">
-                              {cred.username}
+                              {displayUser}
                             </span>
                           </div>
                         </div>
                       ) : (
-                        <span className="text-xs text-text-muted italic">Özel Şifre</span>
+                        <div className="flex flex-col gap-1">
+                          <span className="text-xs text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-amber-200 w-fit">
+                            Özel Şifre
+                          </span>
+                          <span className="text-[10px] text-text-muted">
+                            Yandaki 🔑 butonuyla şifre belirleyebilirsiniz
+                          </span>
+                        </div>
                       )}
                     </td>
                     <td className="px-4 py-3">
