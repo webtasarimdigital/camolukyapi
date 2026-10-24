@@ -5,6 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import type { ParsedProductRow } from "./types";
 import { parseTurkishNumber } from "@/lib/formatters";
+import { extractTextFromPdfBuffer } from "@/lib/pdf-extractor";
 
 export async function saveExcelProducts(payload: {
   fileName: string;
@@ -291,56 +292,9 @@ export async function extractProductsFromPdf(formData: FormData): Promise<{
       }
     }
 
-    // Polyfill DOMMatrix, Path2D, ImageData if missing (e.g. in Vercel Serverless / Node environment)
-    if (typeof globalThis !== "undefined") {
-      if (!(globalThis as any).DOMMatrix) {
-        class FakeDOMMatrix {
-          a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
-          m11 = 1; m12 = 0; m21 = 0; m22 = 1; m41 = 0; m42 = 0;
-          constructor(_init?: any) {}
-          multiplySelf() { return this; }
-          preMultiplySelf() { return this; }
-          invertSelf() { return this; }
-          translate() { return this; }
-          scale() { return this; }
-        }
-        (globalThis as any).DOMMatrix = FakeDOMMatrix;
-      }
-      if (!(globalThis as any).Path2D) {
-        (globalThis as any).Path2D = class Path2D { addPath() {} };
-      }
-      if (!(globalThis as any).ImageData) {
-        (globalThis as any).ImageData = class ImageData {};
-      }
-    }
-
-    // 2. Metin çıkarma: pdf-parse v2 veya fallback
-    let text = "";
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfModule = require("pdf-parse");
-      const PDFParseClass = pdfModule.PDFParse || pdfModule;
-      if (typeof PDFParseClass === "function") {
-        const parser = new PDFParseClass({ data: new Uint8Array(buffer), verbosity: 0 });
-        const res = await parser.getText();
-        text = (res?.text || "") as string;
-        try {
-          await parser.destroy();
-        } catch {
-          // ignore destroy errors
-        }
-      } else if (typeof pdfModule === "function") {
-        const res = await pdfModule(buffer);
-        text = (res?.text || "") as string;
-      }
-    } catch (e: unknown) {
-      console.warn("pdf-parse standard engine failed, trying fallback:", (e as Error)?.message);
-    }
-
-    // Fallback: ham binary stream decoder
-    if (!text || text.trim().length === 0) {
-      text = extractRawPdfFallback(buffer);
-    }
+    // 2. Metin çıkarma: pdfjs-dist legacy & multi-engine
+    const uint8 = new Uint8Array(await file.arrayBuffer());
+    const text = await extractTextFromPdfBuffer(uint8);
 
     if (!text || text.trim().length === 0) {
       return {
@@ -589,7 +543,6 @@ export async function updateProductPricesFromPdf(formData: FormData): Promise<{
   }
 
   try {
-    const buffer = Buffer.from(await file.arrayBuffer());
     const supabase = await createClient();
     const {
       data: { user },
@@ -624,55 +577,9 @@ export async function updateProductPricesFromPdf(formData: FormData): Promise<{
 
     const companyId = profile.company_id;
 
-    // Polyfill DOMMatrix, Path2D, ImageData if missing
-    if (typeof globalThis !== "undefined") {
-      if (!(globalThis as any).DOMMatrix) {
-        class FakeDOMMatrix {
-          a = 1; b = 0; c = 0; d = 1; e = 0; f = 0;
-          m11 = 1; m12 = 0; m21 = 0; m22 = 1; m41 = 0; m42 = 0;
-          constructor(_init?: any) {}
-          multiplySelf() { return this; }
-          preMultiplySelf() { return this; }
-          invertSelf() { return this; }
-          translate() { return this; }
-          scale() { return this; }
-        }
-        (globalThis as any).DOMMatrix = FakeDOMMatrix;
-      }
-      if (!(globalThis as any).Path2D) {
-        (globalThis as any).Path2D = class Path2D { addPath() {} };
-      }
-      if (!(globalThis as any).ImageData) {
-        (globalThis as any).ImageData = class ImageData {};
-      }
-    }
-
-    // 1. PDF metnini çıkar
-    let text = "";
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const pdfModule = require("pdf-parse");
-      const PDFParseClass = pdfModule.PDFParse || pdfModule;
-      if (typeof PDFParseClass === "function") {
-        const parser = new PDFParseClass({ data: new Uint8Array(buffer), verbosity: 0 });
-        const res = await parser.getText();
-        text = (res?.text || "") as string;
-        try {
-          await parser.destroy();
-        } catch {
-          // ignore
-        }
-      } else if (typeof pdfModule === "function") {
-        const res = await pdfModule(buffer);
-        text = (res?.text || "") as string;
-      }
-    } catch (e: unknown) {
-      console.warn("pdf-parse error:", (e as Error)?.message);
-    }
-
-    if (!text || text.trim().length === 0) {
-      text = extractRawPdfFallback(buffer);
-    }
+    // 1. PDF metnini çıkar: pdfjs-dist legacy & multi-engine
+    const uint8 = new Uint8Array(await file.arrayBuffer());
+    const text = await extractTextFromPdfBuffer(uint8);
 
     if (!text || text.trim().length === 0) {
       return {
