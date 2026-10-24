@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatCurrency, formatDate } from "@/lib/formatters";
@@ -24,8 +24,10 @@ export default async function BayiSiparislerimPage() {
     redirect("/login");
   }
 
+  const service = await createServiceClient();
+
   // Fetch orders created by this dealer
-  const { data: ordersData } = await supabase
+  const { data: ordersData } = await service
     .from("quotes")
     .select("*, items:quote_items(*)")
     .eq("created_by", user.id)

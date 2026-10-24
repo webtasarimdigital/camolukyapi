@@ -138,11 +138,13 @@ export function DealerOrderForm({ profile }: { profile: DealerProfile }) {
           notes,
         });
 
-        if (res.success) {
+        if (res && res.success) {
           toast.success(
             `Siparişiniz (${res.orderCode}) başarıyla oluşturuldu ve onay için merkeze iletildi!`
           );
           router.push("/bayi-siparis");
+        } else {
+          toast.error("Sipariş gönderilemedi: " + (res?.error || "Bilinmeyen bir hata oluştu"));
         }
       } catch (err: any) {
         toast.error("Sipariş gönderilemedi: " + (err?.message || "Bilinmeyen hata"));

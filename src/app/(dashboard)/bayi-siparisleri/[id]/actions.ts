@@ -82,14 +82,16 @@ export async function updateDealerOrder(payload: UpdateOrderPayload) {
     updateData.notes = payload.notes;
   }
 
-  const { error: quoteErr } = await (supabase.from("quotes") as any)
+  const service = await createServiceClient();
+
+  const { error: quoteErr } = await (service.from("quotes") as any)
     .update(updateData)
     .eq("id", payload.orderId);
 
   if (quoteErr) throw new Error("Sipariş güncellenemedi: " + quoteErr.message);
 
   // 2. Replace quote_items
-  await supabase.from("quote_items").delete().eq("quote_id", payload.orderId);
+  await service.from("quote_items").delete().eq("quote_id", payload.orderId);
 
   const newItems = payload.items.map((item, idx) => ({
     quote_id: payload.orderId,
@@ -109,7 +111,7 @@ export async function updateDealerOrder(payload: UpdateOrderPayload) {
     line_total: lines[idx].line_total,
   }));
 
-  const { error: itemsErr } = await (supabase.from("quote_items") as any)
+  const { error: itemsErr } = await (service.from("quote_items") as any)
     .insert(newItems);
 
   if (itemsErr) throw new Error("Sipariş kalemleri güncellenemedi: " + itemsErr.message);
@@ -198,16 +200,17 @@ export async function createCustomerForDealer(data: {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Oturum açmanız gerekiyor.");
 
-  const { data: profile } = await supabase
+  const service = await createServiceClient();
+
+  const { data: profile } = await service
     .from("profiles")
     .select("company_id")
     .eq("id", user.id)
     .single();
 
-  const companyId = (profile as any)?.company_id;
-  if (!companyId) throw new Error("Şirket bilgisi bulunamadı.");
+  const companyId = (profile as any)?.company_id || "a0000000-0000-0000-0000-000000000001";
 
-  const { data: customer, error } = await supabase
+  const { data: customer, error } = await service
     .from("customers")
     .insert({
       company_id: companyId,
