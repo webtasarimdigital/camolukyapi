@@ -78,6 +78,46 @@ export function RentClient({ initialItems, userName }: Props) {
     return matchQ && matchType;
   });
 
+  function handleExportAllRents() {
+    if (!filtered || filtered.length === 0) {
+      toast.error("İndirilecek kira kaydı bulunamadı.");
+      return;
+    }
+
+    const rows = filtered.map((r, idx) => {
+      const typeLabel = r.type === "toplanan" ? "Kiracı (Gelir)" : "Mülk Sahibi (Gider)";
+      return {
+        "Sıra": idx + 1,
+        "Kira Adı / Mülk": r.title || "-",
+        "Kişi / Kurum": r.counterpart_name || "-",
+        "Kira Türü": typeLabel,
+        "Aylık Kira Bedeli (₺)": Number(r.amount) || 0,
+        "Ödeme Günü": r.payment_day ? `Her ayın ${r.payment_day}. günü` : "-",
+        "Ödeme Şekli": r.payment_method || "-",
+        "Statü": r.status || "Bekliyor",
+        "Açıklama / Not": r.notes || "-",
+      };
+    });
+
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws["!cols"] = [
+      { wch: 6 },
+      { wch: 25 },
+      { wch: 25 },
+      { wch: 20 },
+      { wch: 22 },
+      { wch: 18 },
+      { wch: 18 },
+      { wch: 15 },
+      { wch: 35 },
+    ];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Kira_Listesi");
+    const todayStr = new Date().toISOString().split("T")[0];
+    XLSX.writeFile(wb, `Kira_Listesi_${todayStr}.xlsx`);
+    toast.success("Kira listesi Excel olarak indirildi.");
+  }
+
   function handleOpenNew() {
     setEditingItem(null);
     setIsModalOpen(true);
@@ -310,8 +350,8 @@ export function RentClient({ initialItems, userName }: Props) {
         </div>
       </div>
 
-      {/* Arama */}
-      <div className="bg-white p-4 rounded-2xl border border-border flex items-center justify-between shadow-xs">
+      {/* Arama ve Excel Dışa Aktarma */}
+      <div className="bg-white p-4 rounded-2xl border border-border flex flex-wrap items-center justify-between gap-3 shadow-xs">
         <div className="relative flex-1 max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted" size={16} />
           <input
@@ -322,6 +362,15 @@ export function RentClient({ initialItems, userName }: Props) {
             className="w-full pl-9 pr-3 py-2 bg-surface border border-border rounded-xl text-xs outline-none focus:border-brand-navy"
           />
         </div>
+        <button
+          type="button"
+          onClick={handleExportAllRents}
+          className="bg-surface hover:bg-neutral-100 text-text border border-border px-3.5 py-2 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer ml-auto"
+          title="Tüm kira listesini Excel olarak indir"
+        >
+          <Download size={15} />
+          <span>Tüm Kiraları Excel'e İndir</span>
+        </button>
       </div>
 
       {/* Tablo */}

@@ -8,6 +8,7 @@ import {
   actionAddRentPayment,
   actionDeleteRentPayment,
 } from "@/lib/data/actions";
+import * as XLSX from "xlsx";
 import {
   X,
   Building2,
@@ -26,6 +27,8 @@ import {
   Receipt,
   Loader2,
   Coins,
+  Download,
+  FileSpreadsheet,
 } from "lucide-react";
 
 interface Props {
@@ -201,6 +204,113 @@ export function RentDetailDrawer({
     });
   }
 
+  // 🌟 TÜM DETAYLARI VE AY AY KİRA GEÇMİŞİNİ EXCEL'E AKTARMA
+  function handleExportExcel() {
+    try {
+      // 1. Sayfa: Ay Ay Detaylı Kira Dökümü
+      const monthlyRows = monthList.map((ym) => {
+        const calc = monthCalculations.monthMap[ym];
+        const due = calc ? calc.monthRent : rent.amount;
+        const paid = calc ? calc.paidTotal : 0;
+        const rem = calc ? calc.remaining : due;
+        const status = calc
+          ? calc.isFullyPaid
+            ? "Tam Ödendi"
+            : calc.isPartiallyPaid
+            ? `Kısmi Ödendi (${formatCurrency(rem)} Kalan)`
+            : "Ödenmedi"
+          : "Ödenmedi";
+        const mPayments = calc ? calc.payments : [];
+
+        return {
+          "Dönem (Ay / Yıl)": monthLabel(ym),
+          "Dönem Kodu": ym,
+          "Kişi / Kurum": rent.counterpart_name,
+          "Kira Türü": rent.type === "toplanan" ? "Kiracı (Gelir)" : "Mülk Sahibi (Gider)",
+          "Mülk / Konum": rent.title || "-",
+          "Ödeme Günü": rent.payment_day ? `Her ayın ${rent.payment_day}. günü` : "-",
+          "Sözleşme Kira Bedeli (₺)": Number(due) || 0,
+          "Ödenen Tutar (₺)": Number(paid) || 0,
+          "Kalan Güncel Borç (₺)": Number(rem) || 0,
+          "Ödeme Durumu": status,
+          "Parça Ödeme Sayısı": mPayments.length,
+          "Ödeme Tarihleri": mPayments.map((p) => p.payment_date).join(", ") || "-",
+          "Ödeme Tutarları (₺)": mPayments.map((p) => formatCurrency(p.amount)).join(" + ") || "-",
+          "Ödeme Yöntemleri": Array.from(new Set(mPayments.map((p) => p.payment_method).filter(Boolean))).join(", ") || rent.payment_method || "-",
+          "Ödeme Notları & Açıklamalar": mPayments.map((p) => p.notes).filter(Boolean).join(" | ") || "-",
+        };
+      });
+
+      // 2. Sayfa: Tüm Parça Ödemelerin Tekil İşlem Dökümü
+      const paymentRows = (payments || []).map((p, idx) => ({
+        "Sıra": idx + 1,
+        "Ödeme Tarihi": p.payment_date || "-",
+        "Ait Olduğu Dönem": monthLabel(p.period),
+        "Dönem Kodu": p.period,
+        "Kişi / Kurum": rent.counterpart_name,
+        "Mülk / Konum": rent.title || "-",
+        "Kira Türü": rent.type === "toplanan" ? "Kiracı (Gelir)" : "Mülk Sahibi (Gider)",
+        "Ödenen Tutar (₺)": Number(p.amount) || 0,
+        "Ödeme Yöntemi": p.payment_method || rent.payment_method || "-",
+        "İşlemi Kaydeden Yetkili": p.created_by_name || "-",
+        "Açıklama / Not": p.notes || "-",
+        "Kayıt Tarihi": p.created_at ? p.created_at.replace("T", " ").substring(0, 19) : "-",
+      }));
+
+      // 3. Sayfa: Genel Finansal Özet Kartı
+      const summaryRows = [
+        { "Bilgi Alanı": "Kişi / Kurum", "Detay": rent.counterpart_name },
+        { "Bilgi Alanı": "Mülk / Konum", "Detay": rent.title || "-" },
+        { "Bilgi Alanı": "Kira Türü", "Detay": rent.type === "toplanan" ? "Kiracı (Gelir)" : "Mülk Sahibi (Gider)" },
+        { "Bilgi Alanı": "Ödeme / Vade Günü", "Detay": rent.payment_day ? `Her ayın ${rent.payment_day}. günü` : "-" },
+        { "Bilgi Alanı": "Ödeme Yöntemi", "Detay": rent.payment_method || "-" },
+        { "Bilgi Alanı": "Aylık Sözleşme Kirası", "Detay": formatCurrency(rent.amount) },
+        { "Bilgi Alanı": "Toplam Ödenen (Tüm Aylar)", "Detay": formatCurrency(monthCalculations.cumulativeTotalPaid) },
+        { "Bilgi Alanı": "Toplam Tahakkuk Eden Kira", "Detay": formatCurrency(monthCalculations.cumulativeTotalDue) },
+        { "Bilgi Alanı": "Kalan Güncel Borç", "Detay": formatCurrency(monthCalculations.netRemainingDebt) },
+        { "Bilgi Alanı": "Borç Durumu", "Detay": monthCalculations.netRemainingDebt > 0 ? "Kişinin bekleyen kira borcu vardır!" : "Tüm kiralar eksiksiz ödendi!" },
+        { "Bilgi Alanı": "Toplam Parça Ödeme Sayısı", "Detay": `${payments.length} Adet` },
+        { "Bilgi Alanı": "Rapor Alınma Tarihi", "Detay": new Date().toLocaleString("tr-TR") },
+      ];
+
+      const wb = XLSX.utils.book_new();
+
+      // 1. Sheet: Ay Ay Döküm
+      const wsMonthly = XLSX.utils.json_to_sheet(monthlyRows);
+      wsMonthly["!cols"] = [
+        { wch: 16 }, { wch: 12 }, { wch: 22 }, { wch: 20 },
+        { wch: 22 }, { wch: 18 }, { wch: 22 }, { wch: 20 },
+        { wch: 20 }, { wch: 26 }, { wch: 18 }, { wch: 24 },
+        { wch: 28 }, { wch: 20 }, { wch: 45 },
+      ];
+      XLSX.utils.book_append_sheet(wb, wsMonthly, "Ay Ay Kira Dökümü");
+
+      // 2. Sheet: Parça Ödemeler
+      if (paymentRows.length > 0) {
+        const wsPayments = XLSX.utils.json_to_sheet(paymentRows);
+        wsPayments["!cols"] = [
+          { wch: 6 }, { wch: 14 }, { wch: 16 }, { wch: 12 },
+          { wch: 22 }, { wch: 22 }, { wch: 20 }, { wch: 18 },
+          { wch: 18 }, { wch: 22 }, { wch: 35 }, { wch: 20 },
+        ];
+        XLSX.utils.book_append_sheet(wb, wsPayments, "Parça Ödemeler Detayı");
+      }
+
+      // 3. Sheet: Genel Özet
+      const wsSummary = XLSX.utils.json_to_sheet(summaryRows);
+      wsSummary["!cols"] = [{ wch: 28 }, { wch: 40 }];
+      XLSX.utils.book_append_sheet(wb, wsSummary, "Genel Özet");
+
+      const safeName = (rent.counterpart_name || "Kira").replace(/[^a-zA-Z0-9ğüşıöçĞÜŞİÖÇ]/g, "_");
+      const todayStr = new Date().toISOString().split("T")[0];
+      XLSX.writeFile(wb, `Kira_Detay_${safeName}_${todayStr}.xlsx`);
+      toast.success(`${rent.counterpart_name} için tüm detaylar Excel olarak indirildi!`);
+    } catch (err: unknown) {
+      console.error("Excel export error:", err);
+      toast.error("Excel dosyası oluşturulurken bir hata meydana geldi.");
+    }
+  }
+
   return (
     <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex justify-end animate-in fade-in duration-200">
       <div className="bg-white w-full max-w-2xl h-full shadow-2xl flex flex-col overflow-hidden animate-in slide-in-from-right duration-300">
@@ -229,12 +339,23 @@ export function RentDetailDrawer({
             </div>
           </div>
 
-          <button
-            onClick={onClose}
-            className="text-slate-300 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition"
-          >
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="bg-emerald-600 hover:bg-emerald-500 text-white px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+              title="Tüm aylık dökümü ve parça ödemeleri Excel'e indir"
+            >
+              <FileSpreadsheet size={15} />
+              <span className="hidden sm:inline">Excel İndir</span>
+            </button>
+            <button
+              onClick={onClose}
+              className="text-slate-300 hover:text-white p-1.5 rounded-lg hover:bg-white/10 transition"
+            >
+              <X size={20} />
+            </button>
+          </div>
         </div>
 
         {/* GÖVDE: KAYDIRILABİLİR İÇERİK */}
@@ -421,14 +542,25 @@ export function RentDetailDrawer({
 
           {/* 🌟 AYLARA GÖRE KİRA VE PARÇA ÖDEME DÖKÜMÜ (ACCORDION) 🌟 */}
           <div className="space-y-2">
-            <div className="flex items-center justify-between px-1">
+            <div className="flex flex-wrap items-center justify-between gap-2 px-1">
               <span className="font-bold text-sm text-text flex items-center gap-1.5">
                 <Calendar size={16} className="text-brand-navy" />
                 Aylık Kira Geçmişi & Parça Ödeme Dökümü
               </span>
-              <span className="text-[11px] text-text-muted">
-                (Aylara tıklayarak parça ödemeleri görebilirsiniz)
-              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleExportExcel}
+                  className="bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  title="Tüm aylık dökümü ve parça ödemeleri Excel'e aktar"
+                >
+                  <FileSpreadsheet size={14} className="text-emerald-700" />
+                  <span>Tüm Detayları Excel'e İndir</span>
+                </button>
+                <span className="text-[11px] text-text-muted hidden md:inline">
+                  (Aylara tıklayarak parça ödemeleri görebilirsiniz)
+                </span>
+              </div>
             </div>
 
             <div className="space-y-2">
@@ -583,14 +715,24 @@ export function RentDetailDrawer({
 
         </div>
 
-        {/* ALT KAPATMA BAR */}
-        <div className="px-5 py-3.5 bg-slate-50 border-t border-border flex items-center justify-between">
-          <span className="text-xs text-text-muted">
-            Kişi: <strong className="text-text">{rent.counterpart_name}</strong>
-          </span>
+        {/* ALT KAPATMA VE AKSİYON BARI */}
+        <div className="px-5 py-3.5 bg-slate-50 border-t border-border flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-text-muted">
+              Kişi: <strong className="text-text">{rent.counterpart_name}</strong>
+            </span>
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white px-3.5 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition shadow-xs cursor-pointer"
+            >
+              <FileSpreadsheet size={14} />
+              <span>Tüm Detayları Excel'e İndir</span>
+            </button>
+          </div>
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-brand-navy hover:bg-black text-white rounded-xl font-bold text-xs transition shadow-xs"
+            className="px-5 py-2 bg-brand-navy hover:bg-black text-white rounded-xl font-bold text-xs transition shadow-xs cursor-pointer"
           >
             Kapat
           </button>
