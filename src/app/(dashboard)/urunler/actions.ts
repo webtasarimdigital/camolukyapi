@@ -64,11 +64,27 @@ export async function createProduct(formData: FormData) {
 }
 
 export async function updateProduct(id: string, formData: FormData) {
-  const { supabase, role } = await getRoleAndCompany();
+  const { supabase, companyId, user, role } = await getRoleAndCompany();
   if (['tali_bayi', 'bayi', 'depo', 'sofor'].includes(role)) {
     throw new Error('Yetkiniz bulunmuyor! Yalnızca görüntüleme yetkiniz bulunmaktadır.');
   }
-  
+
+  // Get current product to log stock difference if needed
+  const { data: currentProduct } = await supabase
+    .from('products')
+    .select('stock_qty')
+    .eq('id', id)
+    .single();
+
+  const rawStock = formData.get('stock_qty');
+  let newStockQty = (currentProduct as any)?.stock_qty ?? 0;
+  if (rawStock !== null && rawStock !== '') {
+    const parsed = typeof rawStock === 'string' ? parseFloat(rawStock.replace(',', '.')) : Number(rawStock);
+    if (!isNaN(parsed)) {
+      newStockQty = parsed;
+    }
+  }
+
   const updatedProduct = {
     product_name: formData.get('product_name') as string,
     product_group: formData.get('product_group') as string,
@@ -78,6 +94,7 @@ export async function updateProduct(id: string, formData: FormData) {
     supplier: formData.get('supplier') as string,
     unit: formData.get('unit') as string,
     allows_decimal_qty: formData.get('allows_decimal_qty') === 'on',
+    stock_qty: newStockQty,
     min_stock_qty: Number(formData.get('min_stock_qty') || 0),
     price_quality_1: parseCurrencyInput(formData.get('price_quality_1') as string || '0'),
     price_quality_2: parseCurrencyInput(formData.get('price_quality_2') as string || '0'),
@@ -93,8 +110,31 @@ export async function updateProduct(id: string, formData: FormData) {
     throw new Error(error.message);
   }
 
+  // Record stock movement if stock was changed
+  const oldStock = (currentProduct as any)?.stock_qty ?? 0;
+  if (oldStock !== newStockQty) {
+    const diff = newStockQty - oldStock;
+    try {
+      await supabase.rpc('add_stock_movement', {
+        p_company_id: companyId,
+        p_product_id: id,
+        p_movement_type: 'manual_correction',
+        p_quantity: diff,
+        p_reason: 'Ürün kartı düzenleme ekranından manuel stok düzeltmesi',
+        p_reference_id: null,
+        p_reference_type: 'manual',
+        p_user_id: user.id,
+      } as never);
+    } catch (moveErr) {
+      console.warn('add_stock_movement rpc warning in updateProduct:', moveErr);
+    }
+  }
+
   revalidatePath('/urunler');
   revalidatePath(`/urunler/${id}`);
+  revalidatePath('/stok');
+  revalidatePath('/stok/hareketler');
+  revalidatePath('/raporlar/kritik-stok');
   return { success: true };
 }
 

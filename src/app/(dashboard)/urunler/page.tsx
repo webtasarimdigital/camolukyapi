@@ -6,6 +6,7 @@ import { formatCurrency, formatQty } from '@/lib/formatters';
 import { Suspense } from 'react';
 import { StockQtyImportModal } from './StockQtyImportModal';
 import { DeleteAllStockModal } from './DeleteAllStockModal';
+import AdjustStockModal from '../stok/AdjustStockModal';
 
 export default async function UrunlerPage({
   searchParams,
@@ -155,10 +156,18 @@ export default async function UrunlerPage({
                         Aktif
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-brand-navy hover:underline">
-                      <Link href={`/urunler/${product.id}`}>
-                        {isReadOnly ? "İncele" : "Düzenle"}
-                      </Link>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2.5">
+                        <Link
+                          href={`/urunler/${product.id}`}
+                          className="text-brand-navy hover:underline font-semibold"
+                        >
+                          {isReadOnly ? "İncele" : "Düzenle"}
+                        </Link>
+                        {!isReadOnly && (
+                          <AdjustStockModal product={product} companyId={profile.company_id} />
+                        )}
+                      </div>
                     </td>
                   </tr>
                 );

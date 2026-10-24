@@ -173,8 +173,20 @@ export default function DuzenleUrunPage() {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-medium text-text mb-1">Mevcut Stok</label>
-              <input type="text" readOnly value={product.stock_qty} className="w-full border border-border rounded-lg px-3 py-2 text-sm bg-gray-100" />
+              <label className="block text-sm font-medium text-text mb-1">
+                Mevcut Stok {product.unit ? `(${product.unit})` : ''} *
+              </label>
+              <input
+                type="number"
+                step="any"
+                name="stock_qty"
+                required
+                readOnly={isReadOnly}
+                defaultValue={product.stock_qty ?? 0}
+                className={`w-full border border-border rounded-lg px-3 py-2 text-sm font-bold text-brand-navy outline-none ${
+                  isReadOnly ? 'bg-gray-100 cursor-not-allowed' : 'bg-surface focus:bg-white focus:border-brand-navy'
+                }`}
+              />
             </div>
             <div>
               <label className="block text-sm font-medium text-text mb-1">Min Stok</label>
