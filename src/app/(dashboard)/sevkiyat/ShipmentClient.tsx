@@ -68,12 +68,12 @@ export function ShipmentClient({
   const [photoUploading, setPhotoUploading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const isReadOnly =
-    userRole === "depo" ||
-    userRole === "sofor" ||
-    userRole === "tali_bayi" ||
-    userRole === "bayi";
-  const canDelete = !isReadOnly && userRole !== "satis";
+  const isDealer = userRole === "tali_bayi" || userRole === "bayi";
+  const isDriverOrDepo = userRole === "depo" || userRole === "sofor";
+  const canCreate = !isDriverOrDepo && !isDealer;
+  const canDelete = ["admin", "muhasebe1"].includes(userRole);
+  const canChangeStatus = ["admin", "muhasebe1", "satis", "depo", "sofor"].includes(userRole);
+  const canUploadPhotos = ["admin", "muhasebe1", "satis", "depo", "sofor"].includes(userRole);
 
   // Otobil URL
   const [otobilUrl, setOtobilUrl] = useState("https://web.otobil.com.tr");
@@ -153,8 +153,8 @@ export function ShipmentClient({
   const countTeslim = shipments.filter((s) => s.status === "Teslim Edildi").length;
 
   function handleOpenNew() {
-    if (isReadOnly) {
-      toast.error("Yetkiniz bulunmuyor! Yeni sevkiyat kaydı ekleme yetkiniz yoktur (Yalnızca Görüntüleme).");
+    if (!canCreate) {
+      toast.error("Yetkiniz bulunmuyor! Yeni sevkiyat kaydı ekleme yetkiniz yoktur.");
       return;
     }
     setEditingShipment(null);
@@ -166,10 +166,6 @@ export function ShipmentClient({
   }
 
   function handleOpenEdit(item: Shipment) {
-    if (isReadOnly) {
-      toast.error("Yetkiniz bulunmuyor! Sevkiyat düzenleme yetkiniz yoktur (Yalnızca Görüntüleme).");
-      return;
-    }
     setEditingShipment(item);
     setModalPhotos(Array.isArray(item.photos) ? item.photos : []);
     setSelectedVehiclePlate(item.vehicle_plate || "");
@@ -187,7 +183,7 @@ export function ShipmentClient({
   }
 
   async function handleAddPhotoFile(e: React.ChangeEvent<HTMLInputElement>) {
-    if (isReadOnly) {
+    if (!canUploadPhotos) {
       toast.error("Yetkiniz bulunmuyor! Fotoğraf yükleme yetkiniz yoktur.");
       return;
     }
@@ -225,7 +221,7 @@ export function ShipmentClient({
   }
 
   function handleRemovePhoto(index: number) {
-    if (isReadOnly) {
+    if (!canUploadPhotos) {
       toast.error("Yetkiniz bulunmuyor! Fotoğraf silme yetkiniz yoktur.");
       return;
     }
@@ -233,8 +229,8 @@ export function ShipmentClient({
   }
 
   async function handleStatusChange(id: string, newStatus: Shipment["status"]) {
-    if (isReadOnly) {
-      toast.error("Yetkiniz bulunmuyor! Sevkiyat durumu değiştirme yetkiniz yoktur (Yalnızca Görüntüleme).");
+    if (!canChangeStatus) {
+      toast.error("Yetkiniz bulunmuyor! Sevkiyat durumu değiştirme yetkiniz yoktur.");
       return;
     }
     setShipments((prev) =>
@@ -280,8 +276,8 @@ export function ShipmentClient({
 
   async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (isReadOnly) {
-      toast.error("Yetkiniz bulunmuyor! Sevkiyat kaydetme veya güncelleme yetkiniz yoktur.");
+    if (isDealer) {
+      toast.error("Yetkiniz bulunmuyor! Sevkiyat güncelleme yetkiniz yoktur (Yalnızca Görüntüleme).");
       return;
     }
     const form = e.currentTarget;
@@ -338,7 +334,7 @@ export function ShipmentClient({
         </div>
 
         <div className="flex items-center gap-3">
-          {!isReadOnly && (
+          {canCreate && (
             <button
               onClick={handleOpenNew}
               className="flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs cursor-pointer"
@@ -743,12 +739,12 @@ export function ShipmentClient({
                           <td className="py-3 px-4 text-right">
                             <select
                               value={item.status}
-                              disabled={isPending || isReadOnly}
+                              disabled={isPending || !canChangeStatus}
                               onChange={(e) =>
                                 handleStatusChange(item.id, e.target.value as Shipment["status"])
                               }
                               className={`px-2.5 py-1 rounded-lg font-bold text-xs border outline-none transition ${
-                                isReadOnly ? "opacity-80 cursor-not-allowed" : "cursor-pointer"
+                                !canChangeStatus ? "opacity-80 cursor-not-allowed" : "cursor-pointer"
                               } ${
                                 item.status === "Depoya Gitti"
                                   ? "bg-amber-100 text-amber-900 border-amber-300"
@@ -763,14 +759,34 @@ export function ShipmentClient({
                             </select>
                           </td>
                           <td className="py-3 px-4 text-center">
-                            <div className="flex items-center justify-center gap-1">
-                              {!isReadOnly && (
+                            <div className="flex items-center justify-center gap-1.5">
+                              {canCreate && (
                                 <button
                                   onClick={() => handleOpenEdit(item)}
                                   className="p-1 rounded text-brand-navy hover:bg-surface transition"
-                                  title="Sevkiyatı Düzenle / Fotoğraf Ekle"
+                                  title="Sevkiyatı Düzenle"
                                 >
                                   <Edit3 size={15} />
+                                </button>
+                              )}
+                              {isDriverOrDepo && (
+                                <button
+                                  onClick={() => handleOpenEdit(item)}
+                                  className="inline-flex items-center gap-1.5 bg-brand-navy text-white hover:bg-brand-navy/90 px-2.5 py-1 rounded-lg text-xs font-bold transition shadow-xs cursor-pointer"
+                                  title="Sevkiyatı Görüntüle ve Fotoğraf Ekle"
+                                >
+                                  <Eye size={13} />
+                                  <span>Görüntüle / Foto Ekle</span>
+                                </button>
+                              )}
+                              {isDealer && (
+                                <button
+                                  onClick={() => handleOpenEdit(item)}
+                                  className="inline-flex items-center gap-1 bg-surface hover:bg-neutral-200 text-text px-2 py-1 rounded-lg text-xs font-semibold transition border border-border cursor-pointer"
+                                  title="Sevkiyatı Görüntüle"
+                                >
+                                  <Eye size={13} />
+                                  <span>Görüntüle</span>
                                 </button>
                               )}
                               {canDelete && (
@@ -781,9 +797,6 @@ export function ShipmentClient({
                                 >
                                   <Trash2 size={15} />
                                 </button>
-                              )}
-                              {isReadOnly && (
-                                <span className="text-[11px] font-semibold text-text-muted">Görüntüleme</span>
                               )}
                             </div>
                           </td>
@@ -870,12 +883,12 @@ export function ShipmentClient({
                       <div className="flex items-center justify-between pt-1">
                         <select
                           value={item.status}
-                          disabled={isPending || isReadOnly}
+                          disabled={isPending || !canChangeStatus}
                           onChange={(e) =>
                             handleStatusChange(item.id, e.target.value as Shipment["status"])
                           }
                           className={`px-2.5 py-1 rounded-lg font-bold text-xs border outline-none ${
-                            isReadOnly ? "opacity-80 cursor-not-allowed" : "cursor-pointer"
+                            !canChangeStatus ? "opacity-80 cursor-not-allowed" : "cursor-pointer"
                           } ${
                             item.status === "Depoya Gitti"
                               ? "bg-amber-100 text-amber-900 border-amber-300"
@@ -890,13 +903,33 @@ export function ShipmentClient({
                         </select>
 
                         <div className="flex items-center gap-2">
-                          {!isReadOnly && (
+                          {canCreate && (
                             <button
                               onClick={() => handleOpenEdit(item)}
                               className="p-1.5 rounded-lg bg-surface hover:bg-neutral-200 text-brand-navy transition"
                               title="Düzenle"
                             >
                               <Edit3 size={16} />
+                            </button>
+                          )}
+                          {isDriverOrDepo && (
+                            <button
+                              onClick={() => handleOpenEdit(item)}
+                              className="inline-flex items-center gap-1 bg-brand-navy text-white px-2.5 py-1 rounded-lg text-xs font-bold transition shadow-xs"
+                              title="Görüntüle ve Fotoğraf Ekle"
+                            >
+                              <Eye size={13} />
+                              <span>Görüntüle / Foto Ekle</span>
+                            </button>
+                          )}
+                          {isDealer && (
+                            <button
+                              onClick={() => handleOpenEdit(item)}
+                              className="inline-flex items-center gap-1 bg-surface text-text px-2 py-1 rounded text-xs font-semibold border border-border"
+                              title="Görüntüle"
+                            >
+                              <Eye size={13} />
+                              <span>Görüntüle</span>
                             </button>
                           )}
                           {canDelete && (
@@ -907,9 +940,6 @@ export function ShipmentClient({
                             >
                               <Trash2 size={16} />
                             </button>
-                          )}
-                          {isReadOnly && (
-                            <span className="text-[11px] font-semibold text-text-muted">Görüntüleme</span>
                           )}
                         </div>
                       </div>
@@ -929,7 +959,13 @@ export function ShipmentClient({
             <div className="flex items-center justify-between border-b border-border pb-3">
               <h3 className="font-bold text-base text-text flex items-center gap-2">
                 <Truck className="text-brand-navy" size={20} />
-                {editingShipment ? "Sevkiyat Kaydını Düzenle" : "Yeni Sevkiyat Kaydı Gir"}
+                {editingShipment
+                  ? isDriverOrDepo
+                    ? "Sevkiyat Detayı ve Fotoğraf / Durum"
+                    : isDealer
+                    ? "Sevkiyat Detayı (Görüntüleme)"
+                    : "Sevkiyat Kaydını Düzenle"
+                  : "Yeni Sevkiyat Kaydı Gir"}
               </h3>
               <button
                 onClick={() => setIsModalOpen(false)}
@@ -950,8 +986,13 @@ export function ShipmentClient({
                     type="date"
                     required
                     name="shipment_date"
+                    readOnly={isDriverOrDepo || isDealer}
                     defaultValue={editingShipment?.shipment_date || todayStr}
-                    className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-semibold"
+                    className={`w-full border border-border rounded-lg px-3 py-2 outline-none font-semibold ${
+                      isDriverOrDepo || isDealer
+                        ? "bg-slate-100 text-text/80 cursor-default"
+                        : "bg-surface focus:bg-white focus:border-brand-navy"
+                    }`}
                   />
                 </div>
                 <div>
@@ -959,8 +1000,13 @@ export function ShipmentClient({
                   <input
                     type="time"
                     name="shipment_time"
+                    readOnly={isDriverOrDepo || isDealer}
                     defaultValue={editingShipment?.shipment_time || ""}
-                    className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy"
+                    className={`w-full border border-border rounded-lg px-3 py-2 outline-none ${
+                      isDriverOrDepo || isDealer
+                        ? "bg-slate-100 text-text/80 cursor-default"
+                        : "bg-surface focus:bg-white focus:border-brand-navy"
+                    }`}
                   />
                 </div>
               </div>
@@ -973,9 +1019,14 @@ export function ShipmentClient({
                     type="text"
                     required
                     name="customer_name"
+                    readOnly={isDriverOrDepo || isDealer}
                     defaultValue={editingShipment?.customer_name || ""}
                     placeholder="Örn: Yılmaz İnşaat Ltd."
-                    className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-semibold"
+                    className={`w-full border border-border rounded-lg px-3 py-2 outline-none font-semibold ${
+                      isDriverOrDepo || isDealer
+                        ? "bg-slate-100 text-text/80 cursor-default"
+                        : "bg-surface focus:bg-white focus:border-brand-navy"
+                    }`}
                   />
                 </div>
                 <div>
@@ -983,9 +1034,14 @@ export function ShipmentClient({
                   <input
                     type="text"
                     name="seller"
+                    readOnly={isDriverOrDepo || isDealer}
                     defaultValue={editingShipment?.seller || ""}
                     placeholder="Örn: Ahmet Duvarbaşı"
-                    className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy"
+                    className={`w-full border border-border rounded-lg px-3 py-2 outline-none ${
+                      isDriverOrDepo || isDealer
+                        ? "bg-slate-100 text-text/80 cursor-default"
+                        : "bg-surface focus:bg-white focus:border-brand-navy"
+                    }`}
                   />
                 </div>
               </div>
@@ -997,21 +1053,35 @@ export function ShipmentClient({
                   <input
                     type="text"
                     name="receipt_no"
+                    readOnly={isDriverOrDepo || isDealer}
                     defaultValue={editingShipment?.receipt_no || ""}
                     placeholder="SEV-2026-003"
-                    className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-mono"
+                    className={`w-full border border-border rounded-lg px-3 py-2 outline-none font-mono ${
+                      isDriverOrDepo || isDealer
+                        ? "bg-slate-100 text-text/80 cursor-default"
+                        : "bg-surface focus:bg-white focus:border-brand-navy"
+                    }`}
                   />
                 </div>
                 <div>
                   <label className="block font-semibold text-text mb-1">Resmi / Gayri Resmi *</label>
-                  <select
-                    name="is_official"
-                    defaultValue={editingShipment?.is_official || "Resmi"}
-                    className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-semibold"
-                  >
-                    <option value="Resmi">Resmi Fiş / Fatura</option>
-                    <option value="Gayriresmi">Gayriresmi / Sevk</option>
-                  </select>
+                  {isDriverOrDepo || isDealer ? (
+                    <>
+                      <input type="hidden" name="is_official" value={editingShipment?.is_official || "Resmi"} />
+                      <div className="w-full border border-border rounded-lg px-3 py-2 bg-slate-100 text-text/80 font-semibold">
+                        {editingShipment?.is_official === "Resmi" ? "Resmi Fiş / Fatura" : "Gayriresmi / Sevk"}
+                      </div>
+                    </>
+                  ) : (
+                    <select
+                      name="is_official"
+                      defaultValue={editingShipment?.is_official || "Resmi"}
+                      className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-semibold"
+                    >
+                      <option value="Resmi">Resmi Fiş / Fatura</option>
+                      <option value="Gayriresmi">Gayriresmi / Sevk</option>
+                    </select>
+                  )}
                 </div>
               </div>
 
@@ -1023,8 +1093,11 @@ export function ShipmentClient({
                     <label className="block font-semibold text-text mb-1">Araç Seçimi</label>
                     <select
                       value={selectedVehiclePlate}
+                      disabled={isDealer}
                       onChange={(e) => handleVehicleChange(e.target.value)}
-                      className="w-full border border-border rounded-lg px-3 py-2 bg-white outline-none focus:border-brand-navy font-semibold text-xs"
+                      className={`w-full border border-border rounded-lg px-3 py-2 outline-none font-semibold text-xs ${
+                        isDealer ? "bg-slate-100 cursor-not-allowed" : "bg-white focus:border-brand-navy"
+                      }`}
                     >
                       <option value="">-- Araç Seçin veya Boş Bırakın --</option>
                       {vehicles.map((v) => (
@@ -1039,10 +1112,13 @@ export function ShipmentClient({
                     <input
                       type="text"
                       name="vehicle_plate"
+                      readOnly={isDealer}
                       value={selectedVehiclePlate}
                       onChange={(e) => setSelectedVehiclePlate(e.target.value.toUpperCase())}
                       placeholder="34 CLK 28"
-                      className="w-full border border-border rounded-lg px-3 py-2 bg-white outline-none focus:border-brand-navy font-mono uppercase text-xs"
+                      className={`w-full border border-border rounded-lg px-3 py-2 outline-none font-mono uppercase text-xs ${
+                        isDealer ? "bg-slate-100 cursor-default" : "bg-white focus:border-brand-navy"
+                      }`}
                     />
                   </div>
                 </div>
@@ -1052,10 +1128,13 @@ export function ShipmentClient({
                   <input
                     type="text"
                     name="driver_name"
+                    readOnly={isDealer}
                     value={driverNameInput}
                     onChange={(e) => setDriverNameInput(e.target.value)}
                     placeholder="Mehmet Kaya"
-                    className="w-full border border-border rounded-lg px-3 py-2 bg-white outline-none focus:border-brand-navy text-xs"
+                    className={`w-full border border-border rounded-lg px-3 py-2 outline-none text-xs ${
+                      isDealer ? "bg-slate-100 cursor-default" : "bg-white focus:border-brand-navy"
+                    }`}
                   />
                 </div>
               </div>
@@ -1068,12 +1147,12 @@ export function ShipmentClient({
                       href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(modalDestination.trim())}`}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[11px] font-bold text-brand-navy hover:underline inline-flex items-center gap-1 bg-brand-navy/5 px-2 py-0.5 rounded border border-brand-navy/15 transition hover:bg-brand-navy/10"
-                      title="Google Haritalar'da Konumu Gör"
+                      className="text-[11px] font-bold text-brand-navy hover:underline inline-flex items-center gap-1 bg-brand-navy/10 px-2.5 py-1 rounded-lg border border-brand-navy/20 transition hover:bg-brand-navy/20"
+                      title="Google Haritalar'da Konumu Gör (Navigasyon)"
                     >
-                      <MapPin size={11} className="text-brand-navy" />
-                      <span>Haritada Gör</span>
-                      <ExternalLink size={9} />
+                      <MapPin size={12} className="text-brand-navy" />
+                      <span>Haritada Gör (Navigasyon)</span>
+                      <ExternalLink size={10} />
                     </a>
                   )}
                 </div>
@@ -1081,10 +1160,15 @@ export function ShipmentClient({
                   type="text"
                   required
                   name="destination"
+                  readOnly={isDriverOrDepo || isDealer}
                   value={modalDestination}
                   onChange={(e) => setModalDestination(e.target.value)}
                   placeholder="Şantiye adresi, ilçe veya depo (örn: Çekmeköy Alibey Mahallesi)..."
-                  className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy"
+                  className={`w-full border border-border rounded-lg px-3 py-2 outline-none ${
+                    isDriverOrDepo || isDealer
+                      ? "bg-slate-100 text-text/80 cursor-default"
+                      : "bg-surface focus:bg-white focus:border-brand-navy"
+                  }`}
                 />
               </div>
 
@@ -1095,9 +1179,14 @@ export function ShipmentClient({
                     type="number"
                     step="any"
                     name="m2"
+                    readOnly={isDriverOrDepo || isDealer}
                     defaultValue={editingShipment?.m2 || ""}
                     placeholder="0.00"
-                    className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-bold"
+                    className={`w-full border border-border rounded-lg px-3 py-2 outline-none font-bold ${
+                      isDriverOrDepo || isDealer
+                        ? "bg-slate-100 text-text/80 cursor-default"
+                        : "bg-surface focus:bg-white focus:border-brand-navy"
+                    }`}
                   />
                 </div>
                 <div>
@@ -1106,9 +1195,14 @@ export function ShipmentClient({
                     type="number"
                     step="any"
                     name="pallet_count"
+                    readOnly={isDriverOrDepo || isDealer}
                     defaultValue={editingShipment?.pallet_count || ""}
                     placeholder="0"
-                    className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-bold"
+                    className={`w-full border border-border rounded-lg px-3 py-2 outline-none font-bold ${
+                      isDriverOrDepo || isDealer
+                        ? "bg-slate-100 text-text/80 cursor-default"
+                        : "bg-surface focus:bg-white focus:border-brand-navy"
+                    }`}
                   />
                 </div>
               </div>
@@ -1118,9 +1212,14 @@ export function ShipmentClient({
                 <textarea
                   name="preparation_notes"
                   rows={2}
+                  readOnly={isDealer}
                   defaultValue={editingShipment?.preparation_notes || ""}
-                  placeholder="Palet hazırlandı, yapıştırıcılar ayrıldı, şoför arandı..."
-                  className="w-full border border-border rounded-lg p-2.5 bg-surface outline-none focus:bg-white focus:border-brand-navy"
+                  placeholder={isDriverOrDepo ? "Teslimat veya hazırlık notunuzu buraya yazabilirsiniz..." : "Palet hazırlandı, yapıştırıcılar ayrıldı, şoför arandı..."}
+                  className={`w-full border border-border rounded-lg p-2.5 outline-none ${
+                    isDealer
+                      ? "bg-slate-100 text-text/80 cursor-default"
+                      : "bg-surface focus:bg-white focus:border-brand-navy"
+                  }`}
                 />
               </div>
 
@@ -1136,81 +1235,104 @@ export function ShipmentClient({
                       </span>
                     )}
                   </label>
-                  <div className="flex gap-2">
-                    <label className="bg-brand-navy text-white px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer hover:bg-brand-navy/90 transition flex items-center gap-1">
-                      <ImageIcon size={12} /> Galeriden
-                      <input
-                        type="file"
-                        accept="image/*"
-                        multiple
-                        onChange={handleAddPhotoFile}
-                        className="hidden"
-                        disabled={photoUploading}
-                      />
-                    </label>
-                    <label className="bg-emerald-600 text-white px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer hover:bg-emerald-700 transition flex items-center gap-1">
-                      <Camera size={12} /> Kamera
-                      <input
-                        type="file"
-                        accept="image/*"
-                        capture="environment"
-                        onChange={handleAddPhotoFile}
-                        className="hidden"
-                        disabled={photoUploading}
-                      />
-                    </label>
-                  </div>
+                  {canUploadPhotos && (
+                    <div className="flex gap-2">
+                      <label className="bg-brand-navy text-white px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer hover:bg-brand-navy/90 transition flex items-center gap-1 shadow-xs">
+                        <ImageIcon size={12} /> Galeriden
+                        <input
+                          type="file"
+                          accept="image/*"
+                          multiple
+                          onChange={handleAddPhotoFile}
+                          className="hidden"
+                          disabled={photoUploading}
+                        />
+                      </label>
+                      <label className="bg-emerald-600 text-white px-2.5 py-1 rounded-lg text-[11px] font-bold cursor-pointer hover:bg-emerald-700 transition flex items-center gap-1 shadow-xs">
+                        <Camera size={12} /> Kamera
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={handleAddPhotoFile}
+                          className="hidden"
+                          disabled={photoUploading}
+                        />
+                      </label>
+                    </div>
+                  )}
                 </div>
                 {modalPhotos.length > 0 && (
                   <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 pt-2">
                     {modalPhotos.map((photo, idx) => (
                       <div key={idx} className="relative group rounded-lg overflow-hidden border border-border aspect-square bg-black/5">
                         <img src={photo} alt={`Foto ${idx + 1}`} className="w-full h-full object-cover" />
-                        <button
-                          type="button"
-                          onClick={() => handleRemovePhoto(idx)}
-                          className="absolute top-1 right-1 bg-rose-600 text-white rounded-full p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition shadow-xs"
-                          title="Fotoğrafı Kaldır"
-                        >
-                          <X size={10} />
-                        </button>
+                        {canUploadPhotos && (
+                          <button
+                            type="button"
+                            onClick={() => handleRemovePhoto(idx)}
+                            className="absolute top-1 right-1 bg-rose-600 text-white rounded-full p-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition shadow-xs"
+                            title="Fotoğrafı Kaldır"
+                          >
+                            <X size={10} />
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
                 )}
                 {modalPhotos.length === 0 && !photoUploading && (
-                  <p className="text-xs text-text-muted text-center py-3">Teslimat kanıtı veya irsaliye fotoğrafı ekleyin.</p>
+                  <p className="text-xs text-text-muted text-center py-3">
+                    {canUploadPhotos ? "Teslimat kanıtı veya irsaliye fotoğrafı ekleyin." : "Yüklü fotoğraf bulunmuyor."}
+                  </p>
                 )}
               </div>
 
               <div>
                 <label className="block font-semibold text-text mb-1">Statü</label>
-                <select
-                  name="status"
-                  defaultValue={editingShipment?.status || "Depoya Gitti"}
-                  className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-bold text-amber-900"
-                >
-                  <option value="Depoya Gitti">Depoya Gitti</option>
-                  <option value="Sevkiyata Çıktı">Sevkiyata Çıktı</option>
-                  <option value="Teslim Edildi">Teslim Edildi</option>
-                </select>
+                {canChangeStatus ? (
+                  <select
+                    name="status"
+                    defaultValue={editingShipment?.status || "Depoya Gitti"}
+                    className="w-full border border-border rounded-lg px-3 py-2 bg-surface outline-none focus:bg-white focus:border-brand-navy font-bold text-amber-900 cursor-pointer"
+                  >
+                    <option value="Depoya Gitti">Depoya Gitti</option>
+                    <option value="Sevkiyata Çıktı">Sevkiyata Çıktı</option>
+                    <option value="Teslim Edildi">Teslim Edildi</option>
+                  </select>
+                ) : (
+                  <>
+                    <input type="hidden" name="status" value={editingShipment?.status || "Depoya Gitti"} />
+                    <div className="w-full border border-border rounded-lg px-3 py-2 bg-slate-100 font-bold text-amber-900">
+                      {editingShipment?.status || "Depoya Gitti"}
+                    </div>
+                  </>
+                )}
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-border">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 border border-border rounded-lg text-text-muted hover:text-text font-semibold"
+                  className="px-4 py-2 border border-border rounded-lg text-text-muted hover:text-text font-semibold cursor-pointer"
                 >
-                  İptal
+                  {isDealer ? "Kapat" : "İptal"}
                 </button>
-                <button
-                  type="submit"
-                  disabled={isPending}
-                  className="bg-brand-navy text-white px-5 py-2 rounded-lg font-bold hover:bg-brand-navy/90 transition shadow-xs"
-                >
-                  {isPending ? "Kaydediliyor..." : editingShipment ? "Güncellemeleri Kaydet" : "Sevkiyatı Kaydet"}
-                </button>
+                {!isDealer && (
+                  <button
+                    type="submit"
+                    disabled={isPending}
+                    className="bg-brand-navy text-white px-5 py-2 rounded-lg font-bold hover:bg-brand-navy/90 transition shadow-xs cursor-pointer"
+                  >
+                    {isPending
+                      ? "Kaydediliyor..."
+                      : isDriverOrDepo
+                      ? "Fotoğraf & Durumu Kaydet"
+                      : editingShipment
+                      ? "Güncellemeleri Kaydet"
+                      : "Sevkiyatı Kaydet"}
+                  </button>
+                )}
               </div>
             </form>
           </div>

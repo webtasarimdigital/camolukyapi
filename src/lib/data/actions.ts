@@ -99,26 +99,36 @@ async function getCallerRole(): Promise<string> {
 export async function actionSaveShipment(formData: FormData) {
   try {
     const role = await getCallerRole();
-    if (role === "depo" || role === "sofor" || role === "tali_bayi" || role === "bayi") {
-      return { success: false, error: "Yetkiniz bulunmuyor! Sevkiyat ekleme veya düzenleme yetkiniz yoktur (Yalnızca Görüntüleme)." };
+    if (role === "tali_bayi" || role === "bayi" || role === "anon") {
+      return { success: false, error: "Yetkiniz bulunmuyor! Sevkiyat güncelleme yetkiniz yoktur (Yalnızca Görüntüleme)." };
+    }
+
+    const id = (formData.get("id") as string) || undefined;
+    if ((role === "depo" || role === "sofor") && !id) {
+      return { success: false, error: "Yetkiniz bulunmuyor! Yeni sevkiyat oluşturma yetkiniz yoktur. Yalnızca mevcut sevkiyatları güncelleyebilirsiniz." };
+    }
+
+    let existingShipment: Shipment | null = null;
+    if (id) {
+      const all = await getShipments();
+      existingShipment = all.find((s) => s.id === id) || null;
     }
 
     const userName = await getCurrentUserName();
-    const id = (formData.get("id") as string) || undefined;
-    const customer_name = (formData.get("customer_name") as string) || "";
-    const seller = (formData.get("seller") as string) || "";
-    const destination = (formData.get("destination") as string) || "";
-    const receipt_no = (formData.get("receipt_no") as string) || "";
-    const is_official = (formData.get("is_official") as "Resmi" | "Gayriresmi") || "Resmi";
-    const m2 = parseFloat(formData.get("m2") as string) || 0;
-    const pallet_count = parseFloat(formData.get("pallet_count") as string) || 0;
-    const preparation_notes = (formData.get("preparation_notes") as string) || "";
-    const status = (formData.get("status") as Shipment["status"]) || "Depoya Gitti";
+    const customer_name = (formData.get("customer_name") as string) || existingShipment?.customer_name || "";
+    const seller = (formData.get("seller") as string) || existingShipment?.seller || "";
+    const destination = (formData.get("destination") as string) || existingShipment?.destination || "";
+    const receipt_no = (formData.get("receipt_no") as string) || existingShipment?.receipt_no || "";
+    const is_official = ((formData.get("is_official") as "Resmi" | "Gayriresmi") || existingShipment?.is_official || "Resmi");
+    const m2 = formData.get("m2") !== null && formData.get("m2") !== "" ? parseFloat(formData.get("m2") as string) : (existingShipment?.m2 || 0);
+    const pallet_count = formData.get("pallet_count") !== null && formData.get("pallet_count") !== "" ? parseFloat(formData.get("pallet_count") as string) : (existingShipment?.pallet_count || 0);
+    const preparation_notes = (formData.get("preparation_notes") as string) ?? existingShipment?.preparation_notes ?? "";
+    const status = (formData.get("status") as Shipment["status"]) || existingShipment?.status || "Depoya Gitti";
 
-    const shipment_date = (formData.get("shipment_date") as string) || new Date().toISOString().split("T")[0];
-    const shipment_time = (formData.get("shipment_time") as string) || null;
-    const vehicle_plate = (formData.get("vehicle_plate") as string) || null;
-    const driver_name = (formData.get("driver_name") as string) || null;
+    const shipment_date = (formData.get("shipment_date") as string) || existingShipment?.shipment_date || new Date().toISOString().split("T")[0];
+    const shipment_time = (formData.get("shipment_time") as string) || existingShipment?.shipment_time || null;
+    const vehicle_plate = (formData.get("vehicle_plate") as string) || existingShipment?.vehicle_plate || null;
+    const driver_name = (formData.get("driver_name") as string) || existingShipment?.driver_name || null;
     let photos: any[] = [];
     const photosRaw = formData.get("photos") as string;
     if (photosRaw) {
@@ -127,6 +137,8 @@ export async function actionSaveShipment(formData: FormData) {
       } catch {
         photos = [];
       }
+    } else if (existingShipment?.photos) {
+      photos = existingShipment.photos;
     }
 
     const saved = await saveShipment({
@@ -145,7 +157,7 @@ export async function actionSaveShipment(formData: FormData) {
       vehicle_plate,
       driver_name,
       photos,
-      created_by_name: userName,
+      created_by_name: existingShipment?.created_by_name || userName,
     });
 
     try {
@@ -162,8 +174,8 @@ export async function actionSaveShipment(formData: FormData) {
 export async function actionUpdateShipmentStatus(id: string, status: Shipment["status"]) {
   try {
     const role = await getCallerRole();
-    if (role === "depo" || role === "sofor" || role === "tali_bayi" || role === "bayi") {
-      return { success: false, error: "Yetkiniz bulunmuyor! Durum değiştirme yetkiniz yoktur (Yalnızca Görüntüleme)." };
+    if (role === "tali_bayi" || role === "bayi" || role === "anon") {
+      return { success: false, error: "Yetkiniz bulunmuyor! Durum değiştirme yetkiniz yoktur." };
     }
 
     const updated = await updateShipmentStatus(id, status);

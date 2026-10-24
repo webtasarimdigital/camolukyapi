@@ -4,7 +4,8 @@
  * @supabase/supabase-js client kullanır — compact key formatını otomatik çözer.
  */
 
-import { createClient } from "@supabase/supabase-js";
+import { createClient as createBrowserSupabaseClient } from "@/lib/supabase/client";
+import { createClient as createJsSupabaseClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const SUPABASE_ANON_KEY = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
@@ -46,8 +47,12 @@ export async function uploadToStorage(
     : `${timestamp}_${safeName}`;
 
   try {
-    // Supabase JS client kullan — compact key formatını otomatik JWT'ye çevirir
-    const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    let supabase: any;
+    try {
+      supabase = createBrowserSupabaseClient();
+    } catch {
+      supabase = createJsSupabaseClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+    }
 
     const { data, error } = await supabase.storage
       .from(bucket)
