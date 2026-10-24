@@ -46,6 +46,7 @@ import {
   ExternalLink,
   Receipt,
   FileSpreadsheet,
+  BarChart3,
 } from "lucide-react";
 import { InteractiveTable } from "@/components/ui/InteractiveTable";
 
@@ -81,6 +82,7 @@ const EMPTY_FORM = {
 };
 
 export function VehicleClient({ initialVehicles, userRole }: Props) {
+  const isAdmin = !userRole || ["admin", "yonetici", "muhasebe1", "owner"].includes(userRole);
   const [vehicles, setVehicles] = useState<Vehicle[]>(initialVehicles);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingVehicle, setEditingVehicle] = useState<Vehicle | null>(null);
@@ -110,7 +112,145 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
   const [filterAlertOnly, setFilterAlertOnly] = useState(false);
   const [isPending, startTransition] = useTransition();
 
-  const isAdmin = userRole === "admin" || userRole === "muhasebe1";
+  // Ana Ekran Genel Masraf & Ay Ay Filtresi State
+  const [fleetSelectedMonth, setFleetSelectedMonth] = useState<string>("all");
+  const [showMonthlyBreakdown, setShowMonthlyBreakdown] = useState<boolean>(false);
+
+  // ── TÜM FİLO MASRAFLARI & AY AY DAĞILIMI (İLK EKRAN İÇİN) ──
+  const allFleetExpenses = useMemo(() => {
+    const list: (VehicleExpense & { vehiclePlate: string; vehicleId: string })[] = [];
+    for (const v of vehicles) {
+      if (Array.isArray(v.expenses)) {
+        for (const e of v.expenses) {
+          list.push({ ...e, vehiclePlate: v.plate, vehicleId: v.id });
+        }
+      }
+    }
+    return list;
+  }, [vehicles]);
+
+  const fleetMonthsSummary = useMemo(() => {
+    const monthsMap = new Map<
+      string,
+      {
+        monthKey: string;
+        label: string;
+        fuelTotal: number;
+        repairTotal: number;
+        grandTotal: number;
+        count: number;
+        vehicleCount: number;
+        vehiclePlates: Set<string>;
+      }
+    >();
+
+    const monthNames = [
+      "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+      "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
+    ];
+
+    for (const exp of allFleetExpenses) {
+      if (exp.date) {
+        const ym = exp.date.substring(0, 7); // YYYY-MM
+        if (!monthsMap.has(ym)) {
+          const [year, month] = ym.split("-");
+          const idx = parseInt(month, 10) - 1;
+          const label = `${monthNames[idx] || month} ${year}`;
+          monthsMap.set(ym, {
+            monthKey: ym,
+            label,
+            fuelTotal: 0,
+            repairTotal: 0,
+            grandTotal: 0,
+            count: 0,
+            vehicleCount: 0,
+            vehiclePlates: new Set(),
+          });
+        }
+        const m = monthsMap.get(ym)!;
+        const amt = Number(exp.amount) || 0;
+        if (exp.type === "fuel") {
+          m.fuelTotal += amt;
+        } else if (exp.type === "repair") {
+          m.repairTotal += amt;
+        }
+        m.grandTotal += amt;
+        m.count += 1;
+        m.vehiclePlates.add(exp.vehiclePlate);
+      }
+    }
+
+    // Her ay için araç sayısını güncelle
+    for (const m of monthsMap.values()) {
+      m.vehicleCount = m.vehiclePlates.size;
+    }
+
+    // Mevcut ayı ekle
+    const currentYm = new Date().toISOString().substring(0, 7);
+    if (!monthsMap.has(currentYm)) {
+      const [year, month] = currentYm.split("-");
+      const idx = parseInt(month, 10) - 1;
+      const label = `${monthNames[idx] || month} ${year}`;
+      monthsMap.set(currentYm, {
+        monthKey: currentYm,
+        label,
+        fuelTotal: 0,
+        repairTotal: 0,
+        grandTotal: 0,
+        count: 0,
+        vehicleCount: 0,
+        vehiclePlates: new Set(),
+      });
+    }
+
+    return Array.from(monthsMap.values()).sort((a, b) => b.monthKey.localeCompare(a.monthKey));
+  }, [allFleetExpenses]);
+
+  // İlk ekranda seçili aya göre toplamlar
+  const fleetTotals = useMemo(() => {
+    let fuelTotal = 0;
+    let repairTotal = 0;
+    let count = 0;
+    const activeVehicles = new Set<string>();
+
+    for (const v of vehicles) {
+      const expenses = v.expenses || [];
+      for (const e of expenses) {
+        if (fleetSelectedMonth === "all" || (e.date && e.date.startsWith(fleetSelectedMonth))) {
+          const amt = Number(e.amount) || 0;
+          if (e.type === "fuel") fuelTotal += amt;
+          else if (e.type === "repair") repairTotal += amt;
+          count += 1;
+          activeVehicles.add(v.id);
+        }
+      }
+    }
+
+    // Fallback: Masraf kaydı yoksa v.fuel_cost ve v.maintenance_cost
+    if (fleetSelectedMonth === "all" && fuelTotal === 0 && repairTotal === 0) {
+      for (const v of vehicles) {
+        const fc = Number(v.fuel_cost) || 0;
+        const mc = Number(v.maintenance_cost) || 0;
+        fuelTotal += fc;
+        repairTotal += mc;
+        if (fc > 0 || mc > 0) activeVehicles.add(v.id);
+      }
+    }
+
+    return {
+      fuelTotal,
+      repairTotal,
+      grandTotal: fuelTotal + repairTotal,
+      count,
+      activeVehicleCount: activeVehicles.size,
+    };
+  }, [vehicles, fleetSelectedMonth]);
+
+  const selectedFleetMonthLabel = useMemo(() => {
+    if (fleetSelectedMonth === "all") return "Tüm Zamanlar";
+    const found = fleetMonthsSummary.find((m) => m.monthKey === fleetSelectedMonth);
+    return found ? found.label : fleetSelectedMonth;
+  }, [fleetSelectedMonth, fleetMonthsSummary]);
 
   // ── SÜRE BİTİMİ HATIRLATICILARI ──
   const allAlerts = useMemo(() => {
@@ -469,6 +609,260 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
         </div>
       </div>
 
+      {/* ── İLK EKRAN: DÖNEM / AY SEÇİCİ & TOPLAM MASRAF VE YAKIT KPI KARTLARI ── */}
+      <div className="space-y-4">
+        {/* Ay Seçim Çubuğu */}
+        <div className="bg-white p-4 rounded-2xl border border-border shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-brand-navy/5 border border-brand-navy/15 flex items-center justify-center text-brand-navy flex-shrink-0">
+              <Calendar size={18} />
+            </div>
+            <div>
+              <span className="text-xs font-bold text-slate-900 uppercase tracking-wide">
+                Masraf Dönemi / Ay Seçimi
+              </span>
+              <p className="text-[11px] text-slate-500">
+                Seçtiğiniz aya göre aşağıdaki tüm yakıt, tamir ve genel masraflar anında güncellenir.
+              </p>
+            </div>
+          </div>
+
+          {/* Ay Hapları / Butonları */}
+          <div className="flex flex-wrap items-center gap-1.5">
+            <button
+              type="button"
+              onClick={() => setFleetSelectedMonth("all")}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1 ${
+                fleetSelectedMonth === "all"
+                  ? "bg-brand-navy text-white shadow-xs"
+                  : "bg-surface border border-border text-slate-700 hover:bg-slate-100"
+              }`}
+            >
+              <span>🔘 Tüm Zamanlar</span>
+            </button>
+
+            {fleetMonthsSummary.map((m) => {
+              const isSelected = fleetSelectedMonth === m.monthKey;
+              return (
+                <button
+                  key={m.monthKey}
+                  type="button"
+                  onClick={() => setFleetSelectedMonth(m.monthKey)}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition cursor-pointer flex items-center gap-1.5 ${
+                    isSelected
+                      ? "bg-brand-gold text-brand-navy shadow-xs ring-2 ring-brand-gold/40"
+                      : "bg-surface border border-border text-slate-700 hover:bg-slate-100"
+                  }`}
+                >
+                  <Calendar size={13} className={isSelected ? "text-brand-navy" : "text-slate-400"} />
+                  <span>{m.label}</span>
+                  {m.grandTotal > 0 && (
+                    <span
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-semibold ${
+                        isSelected
+                          ? "bg-brand-navy/15 text-brand-navy"
+                          : "bg-slate-200 text-slate-600"
+                      }`}
+                    >
+                      {formatCurrency(m.grandTotal)}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+
+            <button
+              type="button"
+              onClick={() => setShowMonthlyBreakdown(!showMonthlyBreakdown)}
+              className="px-2.5 py-1.5 rounded-xl text-xs font-semibold text-slate-600 hover:text-slate-900 border border-border bg-white hover:bg-slate-50 flex items-center gap-1 ml-1 cursor-pointer"
+              title="Tüm ayların masraf tablosunu göster/gizle"
+            >
+              <BarChart3 size={14} className="text-brand-navy" />
+              <span>{showMonthlyBreakdown ? "Tabloyu Gizle" : "Ay Ay Tablo"}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 4 BÜYÜK VE BELİRGİN KPI KARTI (İLK EKRAN) */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {/* 1. TOPLAM YAKIT MASRAFI */}
+          <div className="bg-gradient-to-br from-amber-50 to-amber-100/60 p-5 rounded-2xl border-2 border-amber-300 shadow-xs relative overflow-hidden group">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-amber-900 uppercase tracking-wide flex items-center gap-1.5">
+                <Fuel size={17} className="text-amber-600" />
+                Toplam Yakıt Masrafı
+              </span>
+              <span className="text-[10px] font-bold bg-amber-200/90 text-amber-900 px-2.5 py-0.5 rounded-full">
+                {selectedFleetMonthLabel}
+              </span>
+            </div>
+            <p className="text-2xl lg:text-3xl font-black text-amber-950 tracking-tight tabular-nums">
+              {formatCurrency(fleetTotals.fuelTotal)}
+            </p>
+            <div className="flex items-center justify-between text-xs text-amber-800 mt-2 pt-2 border-t border-amber-200/80">
+              <span>Filodaki Yakıt Gideri</span>
+              {fleetTotals.grandTotal > 0 && (
+                <span className="font-bold">
+                  %{Math.round((fleetTotals.fuelTotal / fleetTotals.grandTotal) * 100)} Pay
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 2. TOPLAM TAMİR & BAKIM */}
+          <div className="bg-gradient-to-br from-blue-50 to-blue-100/60 p-5 rounded-2xl border-2 border-blue-300 shadow-xs relative overflow-hidden group">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-blue-900 uppercase tracking-wide flex items-center gap-1.5">
+                <Wrench size={17} className="text-blue-600" />
+                Toplam Tamir & Bakım
+              </span>
+              <span className="text-[10px] font-bold bg-blue-200/90 text-blue-900 px-2.5 py-0.5 rounded-full">
+                {selectedFleetMonthLabel}
+              </span>
+            </div>
+            <p className="text-2xl lg:text-3xl font-black text-blue-950 tracking-tight tabular-nums">
+              {formatCurrency(fleetTotals.repairTotal)}
+            </p>
+            <div className="flex items-center justify-between text-xs text-blue-800 mt-2 pt-2 border-t border-blue-200/80">
+              <span>Periyodik & Onarım</span>
+              {fleetTotals.grandTotal > 0 && (
+                <span className="font-bold">
+                  %{Math.round((fleetTotals.repairTotal / fleetTotals.grandTotal) * 100)} Pay
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* 3. GENEL TOPLAM MASRAF (YAKIT + TAMİR) */}
+          <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/70 p-5 rounded-2xl border-2 border-emerald-400 shadow-xs relative overflow-hidden group">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                <Receipt size={17} className="text-emerald-700" />
+                Genel Toplam Masraf
+              </span>
+              <span className="text-[10px] font-black bg-emerald-200 text-emerald-950 px-2.5 py-0.5 rounded-full">
+                {selectedFleetMonthLabel}
+              </span>
+            </div>
+            <p className="text-2xl lg:text-3xl font-black text-emerald-950 tracking-tight tabular-nums">
+              {formatCurrency(fleetTotals.grandTotal)}
+            </p>
+            <div className="flex items-center justify-between text-xs text-emerald-800 mt-2 pt-2 border-t border-emerald-300/80">
+              <span>Yakıt + Bakım Toplamı</span>
+              <span className="font-semibold">{fleetTotals.count} İşlem Kaydı</span>
+            </div>
+          </div>
+
+          {/* 4. FİLO MASRAF DURUMU */}
+          <div className="bg-white p-5 rounded-2xl border border-border shadow-xs flex flex-col justify-between">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs font-bold text-slate-700 uppercase tracking-wide flex items-center gap-1.5">
+                <Truck size={17} className="text-brand-navy" />
+                Filo Masraf Durumu
+              </span>
+              <span className="text-xs font-bold text-slate-500">
+                {vehicles.length} Araç
+              </span>
+            </div>
+            <div>
+              <p className="text-2xl lg:text-3xl font-black text-slate-900 tracking-tight">
+                {fleetTotals.activeVehicleCount} <span className="text-sm font-semibold text-slate-500">/ {vehicles.length} Araç</span>
+              </p>
+              <p className="text-xs text-slate-500 mt-0.5">
+                {selectedFleetMonthLabel} masraf kaydı olan
+              </p>
+            </div>
+            <div className="flex items-center justify-between text-xs text-slate-500 mt-2 pt-2 border-t border-border">
+              <span>Kayıtlı Fiş/Fatura:</span>
+              <span className="font-bold text-slate-900">{fleetTotals.count} Adet</span>
+            </div>
+          </div>
+        </div>
+
+        {/* AY AY MASRAF DAĞILIMI TABLOSU */}
+        {showMonthlyBreakdown && (
+          <div className="bg-white rounded-2xl border border-border p-5 shadow-xs animate-in fade-in space-y-3">
+            <div className="flex items-center justify-between border-b border-border pb-3">
+              <div className="flex items-center gap-2">
+                <BarChart3 className="text-brand-navy" size={18} />
+                <h3 className="text-sm font-bold text-slate-900">
+                  Ay Ay Filo Masraf Dökümü Tablosu
+                </h3>
+              </div>
+              <span className="text-xs text-slate-500">
+                Tüm ayların yakıt ve tamir masrafları dökümü
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 text-slate-600 font-bold uppercase text-[11px] border-b border-border">
+                  <tr>
+                    <th className="py-2.5 px-3">Dönem / Ay</th>
+                    <th className="py-2.5 px-3 text-right">⛽ Yakıt Masrafı</th>
+                    <th className="py-2.5 px-3 text-right">🔧 Tamir / Bakım</th>
+                    <th className="py-2.5 px-3 text-right">💰 Toplam Masraf</th>
+                    <th className="py-2.5 px-3 text-center">Masraf Yapan Araç</th>
+                    <th className="py-2.5 px-3 text-center">Fiş Adedi</th>
+                    <th className="py-2.5 px-3 text-center">Filtrele</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {fleetMonthsSummary.map((m) => {
+                    const isSelected = fleetSelectedMonth === m.monthKey;
+                    return (
+                      <tr
+                        key={m.monthKey}
+                        className={`transition ${
+                          isSelected ? "bg-brand-gold/15 font-bold" : "hover:bg-slate-50"
+                        }`}
+                      >
+                        <td className="py-2.5 px-3">
+                          <span className="font-bold text-slate-900">{m.label}</span>
+                          {isSelected && (
+                            <span className="ml-2 text-[10px] bg-brand-navy text-white px-1.5 py-0.2 rounded font-semibold">
+                              Seçili
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-semibold text-amber-700 tabular-nums">
+                          {formatCurrency(m.fuelTotal)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-semibold text-blue-700 tabular-nums">
+                          {formatCurrency(m.repairTotal)}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-black text-slate-900 tabular-nums">
+                          {formatCurrency(m.grandTotal)}
+                        </td>
+                        <td className="py-2.5 px-3 text-center text-slate-600">
+                          {m.vehicleCount} Araç
+                        </td>
+                        <td className="py-2.5 px-3 text-center text-slate-500">
+                          {m.count}
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <button
+                            type="button"
+                            onClick={() => setFleetSelectedMonth(isSelected ? "all" : m.monthKey)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition cursor-pointer ${
+                              isSelected
+                                ? "bg-brand-navy text-white"
+                                : "bg-slate-100 hover:bg-brand-gold hover:text-brand-navy text-slate-700"
+                            }`}
+                          >
+                            {isSelected ? "Filtreyi Kaldır" : "Bu Ayı Filtrele"}
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
+
       {/* ── SÜRE HATIRLATICI UYARI BANTLARI (1 Hafta ve 1 Ay Kalanlar) ── */}
       {urgentAlerts.length > 0 && (
         <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 shadow-xs animate-in fade-in">
@@ -579,8 +973,15 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
                   <th className="py-3 px-4">Şoför & İletişim</th>
                   <th className="py-3 px-4">Konum</th>
                   <th className="py-3 px-4">Muayene / Sigorta</th>
-                  <th className="py-3 px-4 text-right">Toplam Yakıt</th>
-                  <th className="py-3 px-4 text-right">Toplam Tamir</th>
+                  <th className="py-3 px-4 text-right">
+                    {fleetSelectedMonth === "all" ? "Toplam Yakıt" : `Yakıt (${selectedFleetMonthLabel})`}
+                  </th>
+                  <th className="py-3 px-4 text-right">
+                    {fleetSelectedMonth === "all" ? "Toplam Tamir" : `Tamir (${selectedFleetMonthLabel})`}
+                  </th>
+                  <th className="py-3 px-4 text-right">
+                    {fleetSelectedMonth === "all" ? "Toplam Masraf" : `Toplam (${selectedFleetMonthLabel})`}
+                  </th>
                   <th className="py-3 px-4 text-center">İşlem</th>
                 </tr>
               </thead>
@@ -588,11 +989,29 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
                 {filteredVehicles.map((v) => {
                   const expenses = v.expenses || [];
                   const fuelTotal = expenses
-                    .filter((e) => e.type === "fuel")
+                    .filter(
+                      (e) =>
+                        e.type === "fuel" &&
+                        (fleetSelectedMonth === "all" || (e.date && e.date.startsWith(fleetSelectedMonth)))
+                    )
                     .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
                   const repairTotal = expenses
-                    .filter((e) => e.type === "repair")
+                    .filter(
+                      (e) =>
+                        e.type === "repair" &&
+                        (fleetSelectedMonth === "all" || (e.date && e.date.startsWith(fleetSelectedMonth)))
+                    )
                     .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+
+                  const displayFuel =
+                    fleetSelectedMonth === "all" && fuelTotal === 0 && Number(v.fuel_cost || 0) > 0
+                      ? Number(v.fuel_cost)
+                      : fuelTotal;
+                  const displayRepair =
+                    fleetSelectedMonth === "all" && repairTotal === 0 && Number(v.maintenance_cost || 0) > 0
+                      ? Number(v.maintenance_cost)
+                      : repairTotal;
+                  const displayTotal = displayFuel + displayRepair;
 
                   const inspAlert = v.inspection_date ? getExpiryAlert(v.inspection_date) : null;
                   const insAlert = v.insurance_date ? getExpiryAlert(v.insurance_date) : null;
@@ -660,14 +1079,19 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
                         </div>
                       </td>
 
-                      {/* Toplam Yakıt */}
-                      <td className="py-3 px-4 text-right font-bold text-slate-900">
-                        {formatCurrency(fuelTotal)}
+                      {/* Yakıt */}
+                      <td className="py-3 px-4 text-right font-bold text-amber-700 tabular-nums">
+                        {formatCurrency(displayFuel)}
                       </td>
 
-                      {/* Toplam Tamir */}
-                      <td className="py-3 px-4 text-right font-bold text-slate-900">
-                        {formatCurrency(repairTotal)}
+                      {/* Tamir */}
+                      <td className="py-3 px-4 text-right font-bold text-blue-700 tabular-nums">
+                        {formatCurrency(displayRepair)}
+                      </td>
+
+                      {/* Toplam Masraf */}
+                      <td className="py-3 px-4 text-right font-black text-slate-900 tabular-nums bg-slate-50/50">
+                        {formatCurrency(displayTotal)}
                       </td>
 
                       {/* Aksiyonlar */}
