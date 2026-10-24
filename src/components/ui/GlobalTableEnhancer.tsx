@@ -6,7 +6,7 @@ import { enhanceTable } from "./table-enhancer-utils";
 
 /**
  * Dashboard genelinde tüm sayfalardaki <table> etiketlerini otomatik olarak
- * sütun genişletme ve tıklamayla sıralama (tarih için en güncel önce) yetenekleriyle donatır.
+ * sütun genişletme ve tıklamayla sıralama yetenekleriyle donatır.
  */
 export function GlobalTableEnhancer() {
   const pathname = usePathname();
@@ -23,17 +23,39 @@ export function GlobalTableEnhancer() {
       });
     }
 
-    // İlk taramalar (hemen, 80ms, 300ms ve 800ms)
+    // İlk taramalar (hemen, 100ms ve 400ms)
     scanAndEnhance();
-    const t1 = setTimeout(scanAndEnhance, 80);
-    const t2 = setTimeout(scanAndEnhance, 300);
-    const t3 = setTimeout(scanAndEnhance, 800);
+    const t1 = setTimeout(scanAndEnhance, 100);
+    const t2 = setTimeout(scanAndEnhance, 400);
 
-    // Dinamik React güncellemeleri için MutationObserver
+    // Yalnızca yeni bir tablo veya sayfa eklendiğinde tetiklenen akıllı observer
     let debounceTimer: any = null;
-    const observer = new MutationObserver(() => {
-      clearTimeout(debounceTimer);
-      debounceTimer = setTimeout(scanAndEnhance, 60);
+    const observer = new MutationObserver((mutations) => {
+      let shouldScan = false;
+
+      for (let i = 0; i < mutations.length; i++) {
+        const m = mutations[i];
+        const targetEl = m.target as HTMLElement | null;
+
+        // Resizer veya rehber çizgisi kaynaklı mutasyonları yoksay
+        if (targetEl?.classList?.contains("table-resize-guide")) continue;
+        if (targetEl?.closest?.(".table-col-resizer")) continue;
+
+        // Eklenen düğümlerde tablo var mı kontrol et
+        for (let j = 0; j < m.addedNodes.length; j++) {
+          const node = m.addedNodes[j] as HTMLElement;
+          if (node.nodeType === 1 && (node.tagName === "TABLE" || node.querySelector?.("table"))) {
+            shouldScan = true;
+            break;
+          }
+        }
+        if (shouldScan) break;
+      }
+
+      if (shouldScan) {
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(scanAndEnhance, 150);
+      }
     });
 
     if (typeof document !== "undefined" && document.body) {
@@ -43,7 +65,6 @@ export function GlobalTableEnhancer() {
     return () => {
       clearTimeout(t1);
       clearTimeout(t2);
-      clearTimeout(t3);
       clearTimeout(debounceTimer);
       observer.disconnect();
     };

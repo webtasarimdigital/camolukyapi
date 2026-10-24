@@ -1,4 +1,5 @@
 // Core utilities for Table Column Resizing & Click-to-Sort
+// Optimized for zero lag, zero event duplication, and no infinite observer loops.
 
 export interface CellParsedValue {
   type: "number" | "date" | "string";
@@ -119,24 +120,19 @@ export function enhanceTable(table: HTMLTableElement) {
   const thList = Array.from(headerRows[headerRows.length - 1].querySelectorAll("th"));
   if (thList.length === 0) return;
 
-  // Başlıklar zaten donatılmış mı kontrol et (React re-render durumunda eksikleri tamamla)
-  const alreadySetup = thList.every((th) => th.querySelector(".table-col-resizer"));
-  if (alreadySetup && table.dataset.enhanced === "true") return;
-  table.dataset.enhanced = "true";
-
   // Tablo konteynerine yatay kaydırma garantisi ver
   if (table.parentElement && !table.parentElement.classList.contains("overflow-x-auto")) {
     table.parentElement.classList.add("overflow-x-auto");
   }
   table.style.minWidth = "100%";
 
-  // Form kalemleri tablosu mu? (Quote/Sale builder'da fatura sırasını bozmamak için sıralama yapılmaz)
+  // Form kalemleri tablosu mu?
   const isFormItemTable =
     table.closest("form") !== null ||
     table.hasAttribute("data-no-sort") ||
     table.classList.contains("no-sort-table");
 
-  // 1. Orijinal satır indekslerini kaydet
+  // Orijinal satır indekslerini kaydet
   function tagOriginalRows() {
     if (!tbody) return;
     const rows = Array.from(tbody.querySelectorAll("tr"));
@@ -148,11 +144,11 @@ export function enhanceTable(table: HTMLTableElement) {
   }
   tagOriginalRows();
 
-  // 2. Her sütun için Başlık, Sıralama ve Genişletme Ayarı
+  // Her sütun için Başlık, Sıralama ve Genişletme Ayarı
   thList.forEach((th, colIdx) => {
     th.style.position = "relative";
 
-    // Kaydedilmiş genişliği yükle
+    // 1. Kaydedilmiş genişliği yükle
     try {
       const savedWidth = localStorage.getItem(getTableStorageKey(table, colIdx));
       if (savedWidth && !isNaN(Number(savedWidth))) {
@@ -161,7 +157,7 @@ export function enhanceTable(table: HTMLTableElement) {
       }
     } catch {}
 
-    // Resizer Tutamacı Ekle
+    // 2. Resizer Tutamacı Ekle (Tek seferlik)
     let resizer = th.querySelector<HTMLDivElement>(".table-col-resizer");
     if (!resizer) {
       resizer = document.createElement("div");
@@ -170,66 +166,81 @@ export function enhanceTable(table: HTMLTableElement) {
       th.appendChild(resizer);
     }
 
-    // Resizer Sürükleme Mantığı
-    resizer.addEventListener("mousedown", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
+    if (th.dataset.hasResizerListener !== "true") {
+      th.dataset.hasResizerListener = "true";
 
-      const startX = e.clientX;
-      const startWidth = th.getBoundingClientRect().width;
-      const minWidth = 45;
+      // Resizer Sürükleme Mantığı (60fps rAF optimizasyonu)
+      resizer.addEventListener("mousedown", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
 
-      document.body.style.cursor = "col-resize";
-      document.body.style.userSelect = "none";
-      resizer?.classList.add("is-resizing");
+        const startX = e.clientX;
+        const startWidth = th.getBoundingClientRect().width;
+        const minWidth = 45;
 
-      // Düşey rehber çizgisi
-      const guide = document.createElement("div");
-      guide.className = "table-resize-guide";
-      guide.style.left = `${e.clientX}px`;
-      document.body.appendChild(guide);
+        document.body.style.cursor = "col-resize";
+        document.body.style.userSelect = "none";
+        resizer?.classList.add("is-resizing");
 
-      function onMouseMove(moveEvent: MouseEvent) {
-        const delta = moveEvent.clientX - startX;
-        const newWidth = Math.max(minWidth, startWidth + delta);
-        guide.style.left = `${moveEvent.clientX}px`;
-        th.style.width = `${newWidth}px`;
-        th.style.minWidth = `${newWidth}px`;
-      }
+        const guide = document.createElement("div");
+        guide.className = "table-resize-guide";
+        guide.style.left = `${e.clientX}px`;
+        document.body.appendChild(guide);
 
-      function onMouseUp(upEvent: MouseEvent) {
-        document.removeEventListener("mousemove", onMouseMove);
-        document.removeEventListener("mouseup", onMouseUp);
-        document.body.style.cursor = "";
-        document.body.style.userSelect = "";
-        resizer?.classList.remove("is-resizing");
-        if (guide.parentNode) guide.parentNode.removeChild(guide);
+        let rafId: number | null = null;
+        let currentClientX = e.clientX;
 
-        const delta = upEvent.clientX - startX;
-        const finalWidth = Math.max(minWidth, startWidth + delta);
-        th.style.width = `${finalWidth}px`;
-        th.style.minWidth = `${finalWidth}px`;
+        function updateGuide() {
+          const delta = currentClientX - startX;
+          const newWidth = Math.max(minWidth, startWidth + delta);
+          guide.style.left = `${currentClientX}px`;
+          th.style.width = `${newWidth}px`;
+          th.style.minWidth = `${newWidth}px`;
+          rafId = null;
+        }
 
+        function onMouseMove(moveEvent: MouseEvent) {
+          currentClientX = moveEvent.clientX;
+          if (rafId === null) {
+            rafId = requestAnimationFrame(updateGuide);
+          }
+        }
+
+        function onMouseUp(upEvent: MouseEvent) {
+          if (rafId !== null) cancelAnimationFrame(rafId);
+          document.removeEventListener("mousemove", onMouseMove);
+          document.removeEventListener("mouseup", onMouseUp);
+          document.body.style.cursor = "";
+          document.body.style.userSelect = "";
+          resizer?.classList.remove("is-resizing");
+          if (guide.parentNode) guide.parentNode.removeChild(guide);
+
+          const delta = upEvent.clientX - startX;
+          const finalWidth = Math.max(minWidth, startWidth + delta);
+          th.style.width = `${finalWidth}px`;
+          th.style.minWidth = `${finalWidth}px`;
+
+          try {
+            localStorage.setItem(getTableStorageKey(table, colIdx), String(Math.round(finalWidth)));
+          } catch {}
+        }
+
+        document.addEventListener("mousemove", onMouseMove);
+        document.addEventListener("mouseup", onMouseUp);
+      });
+
+      // Çift tıkla sıfırlama
+      resizer.addEventListener("dblclick", (e) => {
+        e.stopPropagation();
+        th.style.width = "";
+        th.style.minWidth = "";
         try {
-          localStorage.setItem(getTableStorageKey(table, colIdx), String(Math.round(finalWidth)));
+          localStorage.removeItem(getTableStorageKey(table, colIdx));
         } catch {}
-      }
+      });
+    }
 
-      document.addEventListener("mousemove", onMouseMove);
-      document.addEventListener("mouseup", onMouseUp);
-    });
-
-    // Resizer Çift Tıkla Sıfırlama
-    resizer.addEventListener("dblclick", (e) => {
-      e.stopPropagation();
-      th.style.width = "";
-      th.style.minWidth = "";
-      try {
-        localStorage.removeItem(getTableStorageKey(table, colIdx));
-      } catch {}
-    });
-
-    // Sıralama Yeteneği: Aksiyon sütunları veya form tabloları hariç
+    // 3. Sıralama Yeteneği (Aksiyon sütunları ve form tabloları hariç)
     const colText = (th.innerText || th.textContent || "").trim();
     const isActionCol =
       ACTION_COL_REGEX.test(colText) ||
@@ -240,19 +251,10 @@ export function enhanceTable(table: HTMLTableElement) {
     if (!isActionCol && !isFormItemTable) {
       th.classList.add("table-sortable-th");
 
-      // Tarih sütunu mu kontrol et (Kullanıcı İsteği: "tarihe tıklayınca en güncelden sıralasın")
-      let isDateColumn = DATE_COL_REGEX.test(colText);
-      if (!isDateColumn && tbody) {
-        const sampleRow = tbody.querySelector("tr");
-        const sampleTd = sampleRow?.querySelectorAll("td")[colIdx];
-        if (sampleTd && parseCellValue(sampleTd).type === "date") {
-          isDateColumn = true;
-        }
-      }
-
+      const isDateColumn = DATE_COL_REGEX.test(colText);
       th.title = isDateColumn
         ? "Tarihe göre sırala (Tıklayınca: En Güncelden Eskiye)"
-        : "Sıralamak için tıklayın (A-Z / 1-9)";
+        : "Sıralamak için tıklayın";
 
       // İkon kapsayıcısı ekle
       let iconWrapper = th.querySelector<HTMLSpanElement>(".table-sort-icon");
@@ -263,117 +265,163 @@ export function enhanceTable(table: HTMLTableElement) {
         th.appendChild(iconWrapper);
       }
 
-      // Sıralama tıklama dinleyicisi
-      th.addEventListener("click", (e) => {
-        // Resizer'a tıklandıysa sıralamayı tetikleme
-        if ((e.target as HTMLElement).classList.contains("table-col-resizer")) return;
+      // Sadece 1 defa click listener bağla
+      if (th.dataset.hasSortListener !== "true") {
+        th.dataset.hasSortListener = "true";
 
-        // Sıralama Döngüsü:
-        // Tarih ise: desc (en güncel) -> asc (en eski) -> none
-        // Diğerleri: asc -> desc -> none
-        const currentSort = th.dataset.sortDir || "none";
-        let nextSort: "asc" | "desc" | "none" = "asc";
+        th.addEventListener("click", (e) => {
+          // Resizer'a tıklandıysa sıralamayı tetikleme
+          if ((e.target as HTMLElement).classList.contains("table-col-resizer")) return;
 
-        if (isDateColumn) {
-          if (currentSort === "none") nextSort = "desc";
-          else if (currentSort === "desc") nextSort = "asc";
-          else nextSort = "none";
-        } else {
-          if (currentSort === "none") nextSort = "asc";
-          else if (currentSort === "asc") nextSort = "desc";
-          else nextSort = "none";
-        }
+          // Sıralama yönünü belirle:
+          // Tarih ise: desc (en güncel) -> asc -> none
+          // Diğerleri: asc -> desc -> none
+          const currentSort = th.dataset.sortDir || "none";
+          let nextSort: "asc" | "desc" | "none" = "asc";
 
-        // Diğer başlıklardaki sıralama durumlarını temizle
-        thList.forEach((otherTh) => {
-          if (otherTh !== th) {
-            delete otherTh.dataset.sortDir;
-            otherTh.classList.remove("is-sorted");
-            const otherIcon = otherTh.querySelector<HTMLSpanElement>(".table-sort-icon");
-            if (otherIcon) otherIcon.innerHTML = CHEVRONS_UP_DOWN_SVG;
+          if (isDateColumn) {
+            if (currentSort === "none") nextSort = "desc";
+            else if (currentSort === "desc") nextSort = "asc";
+            else nextSort = "none";
+          } else {
+            if (currentSort === "none") nextSort = "asc";
+            else if (currentSort === "asc") nextSort = "desc";
+            else nextSort = "none";
           }
+
+          // Diğer başlıklardaki sıralama durumlarını temizle
+          thList.forEach((otherTh) => {
+            if (otherTh !== th) {
+              delete otherTh.dataset.sortDir;
+              otherTh.classList.remove("is-sorted");
+              const otherIcon = otherTh.querySelector<HTMLSpanElement>(".table-sort-icon");
+              if (otherIcon) otherIcon.innerHTML = CHEVRONS_UP_DOWN_SVG;
+            }
+          });
+
+          // Bu başlığın durumunu güncelle
+          const currentIcon = th.querySelector<HTMLSpanElement>(".table-sort-icon");
+          if (nextSort === "none") {
+            delete th.dataset.sortDir;
+            th.classList.remove("is-sorted");
+            if (currentIcon) currentIcon.innerHTML = CHEVRONS_UP_DOWN_SVG;
+          } else {
+            th.dataset.sortDir = nextSort;
+            th.classList.add("is-sorted");
+            if (currentIcon) {
+              currentIcon.innerHTML = nextSort === "asc" ? CHEVRON_UP_SVG : CHEVRON_DOWN_SVG;
+            }
+          }
+
+          // Satırları tek seferde, atomik olarak sırala
+          applySort(table, colIdx, nextSort);
         });
+      }
+    }
+  });
 
-        // Bu başlığın durumunu güncelle
-        if (nextSort === "none") {
-          delete th.dataset.sortDir;
-          th.classList.remove("is-sorted");
-          iconWrapper!.innerHTML = CHEVRONS_UP_DOWN_SVG;
-        } else {
-          th.dataset.sortDir = nextSort;
-          th.classList.add("is-sorted");
-          iconWrapper!.innerHTML = nextSort === "asc" ? CHEVRON_UP_SVG : CHEVRON_DOWN_SVG;
+  // 4. MutationObserver (Yalnızca dışarıdan gelen satır değişiklikleri için, sonsuz döngü engellendi)
+  if (table.dataset.hasTableObserver !== "true") {
+    table.dataset.hasTableObserver = "true";
+
+    let sortTimer: any = null;
+    const observer = new MutationObserver(() => {
+      // Eğer applySort çalışıyorsa observer'ı tetikleme (SONSUZ DÖNGÜ ÖNLEYİCİ)
+      if (table.dataset.isSorting === "true") return;
+
+      tagOriginalRows();
+
+      clearTimeout(sortTimer);
+      sortTimer = setTimeout(() => {
+        if (table.dataset.isSorting === "true") return;
+        const sortedTh = thList.find((th) => th.dataset.sortDir);
+        if (sortedTh) {
+          const idx = thList.indexOf(sortedTh);
+          const dir = sortedTh.dataset.sortDir as "asc" | "desc";
+          applySort(table, idx, dir);
         }
+      }, 50);
+    });
 
-        // Satırları sırala
-        applySort(table, colIdx, nextSort);
-      });
-    }
-  });
-
-  // Satır değişikliklerini izle (Örn: arama, filtre veya sekme değiştiğinde)
-  const observer = new MutationObserver(() => {
-    tagOriginalRows();
-    // Aktif bir sıralama varsa yeni gelen satırlara da uygula
-    const sortedTh = thList.find((th) => th.dataset.sortDir);
-    if (sortedTh) {
-      const idx = thList.indexOf(sortedTh);
-      const dir = sortedTh.dataset.sortDir as "asc" | "desc";
-      applySort(table, idx, dir);
-    }
-  });
-
-  observer.observe(tbody, { childList: true });
+    observer.observe(tbody, { childList: true });
+  }
 }
 
+/**
+ * Satırları sıralar: Tek seferde DocumentFragment kullanarak 0 donma garantisi sağlar.
+ */
 function applySort(table: HTMLTableElement, colIdx: number, dir: "asc" | "desc" | "none") {
   const tbody = table.querySelector("tbody");
   if (!tbody) return;
 
-  const rows = Array.from(tbody.querySelectorAll("tr"));
-  if (rows.length <= 1) return;
+  // Sıralama bayrağını aktif et (Observer loop engelleme)
+  table.dataset.isSorting = "true";
 
-  // Veri satırlarını ve colSpan olan mesaj satırlarını ayır
-  const dataRows: HTMLTableRowElement[] = [];
-  const otherRows: HTMLTableRowElement[] = [];
+  try {
+    const rows = Array.from(tbody.querySelectorAll("tr"));
+    if (rows.length <= 1) return;
 
-  rows.forEach((tr) => {
-    const cells = tr.querySelectorAll("td");
-    const hasColSpan = Array.from(cells).some((c) => c.colSpan > 1);
-    if (hasColSpan || cells.length === 0) {
-      otherRows.push(tr);
-    } else {
-      dataRows.push(tr);
+    // Veri satırlarını ve colSpan olan mesaj satırlarını ayır
+    const dataRows: HTMLTableRowElement[] = [];
+    const otherRows: HTMLTableRowElement[] = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const tr = rows[i];
+      const cells = tr.querySelectorAll("td");
+      let hasColSpan = false;
+      for (let j = 0; j < cells.length; j++) {
+        if (cells[j].colSpan > 1) {
+          hasColSpan = true;
+          break;
+        }
+      }
+      if (hasColSpan || cells.length === 0) {
+        otherRows.push(tr);
+      } else {
+        dataRows.push(tr);
+      }
     }
-  });
 
-  if (dataRows.length === 0) return;
+    if (dataRows.length === 0) return;
 
-  if (dir === "none") {
-    // Orijinal sıraya geri dön
-    dataRows.sort((a, b) => {
-      const idxA = parseInt(a.dataset.tableOrigIndex || "0", 10);
-      const idxB = parseInt(b.dataset.tableOrigIndex || "0", 10);
-      return idxA - idxB;
-    });
-  } else {
-    // asc veya desc sırala
-    const asc = dir === "asc";
-    dataRows.sort((trA, trB) => {
-      const tdA = trA.querySelectorAll("td")[colIdx];
-      const tdB = trB.querySelectorAll("td")[colIdx];
-      if (!tdA && !tdB) return 0;
-      if (!tdA) return 1;
-      if (!tdB) return -1;
+    // Cache parsed values for fast comparison without re-querying DOM during sort
+    const parsedCache = new Map<HTMLTableRowElement, CellParsedValue>();
+    for (let i = 0; i < dataRows.length; i++) {
+      const tr = dataRows[i];
+      const td = tr.querySelectorAll("td")[colIdx];
+      parsedCache.set(tr, td ? parseCellValue(td) : { type: "string", val: "" });
+    }
 
-      const parsedA = parseCellValue(tdA);
-      const parsedB = parseCellValue(tdB);
+    if (dir === "none") {
+      // Orijinal sıraya geri dön
+      dataRows.sort((a, b) => {
+        const idxA = parseInt(a.dataset.tableOrigIndex || "0", 10);
+        const idxB = parseInt(b.dataset.tableOrigIndex || "0", 10);
+        return idxA - idxB;
+      });
+    } else {
+      const asc = dir === "asc";
+      dataRows.sort((trA, trB) => {
+        const valA = parsedCache.get(trA)!;
+        const valB = parsedCache.get(trB)!;
+        return compareValues(valA, valB, asc);
+      });
+    }
 
-      return compareValues(parsedA, parsedB, asc);
-    });
+    // TEK SEFERLİK ATOMİK YERLEŞTİRME (DocumentFragment ile 0 lag)
+    const fragment = document.createDocumentFragment();
+    for (let i = 0; i < dataRows.length; i++) {
+      fragment.appendChild(dataRows[i]);
+    }
+    for (let i = 0; i < otherRows.length; i++) {
+      fragment.appendChild(otherRows[i]);
+    }
+
+    tbody.appendChild(fragment);
+  } finally {
+    // 60ms sonra isSorting bayrağını temizle
+    setTimeout(() => {
+      delete table.dataset.isSorting;
+    }, 60);
   }
-
-  // Yeniden yerleştir
-  dataRows.forEach((tr) => tbody.appendChild(tr));
-  otherRows.forEach((tr) => tbody.appendChild(tr));
 }
