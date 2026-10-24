@@ -7,6 +7,7 @@ import { Sidebar } from "./Sidebar";
 import { TopBar } from "./TopBar";
 import { ShieldAlert, ArrowRight } from "lucide-react";
 import { type UserRole } from "@/lib/auth/role-constants";
+import { GlobalTableEnhancer } from "@/components/ui/GlobalTableEnhancer";
 
 interface DashboardShellProps {
   userName?: string;
@@ -119,6 +120,7 @@ export function DashboardShell({
           onToggleMobile={() => setMobileOpen(!mobileOpen)}
         />
         <main className="flex-1 overflow-y-auto p-3 sm:p-5 md:p-6 min-w-0">
+          <GlobalTableEnhancer />
           {hasAccess ? (
             children
           ) : (

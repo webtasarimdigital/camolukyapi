@@ -67,3 +67,91 @@
 .animate-in.duration-200 { animation-duration: 200ms; }
 .animate-in.duration-300 { animation-duration: 300ms; }
 
+/* ── Interactive Table (Column Resizing & Header Sorting) ── */
+.table-sortable-th {
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s ease, color 0.15s ease;
+  position: relative;
+}
+
+.table-sortable-th:hover {
+  background-color: rgba(215, 166, 74, 0.08) !important;
+  color: #131B2A !important;
+}
+
+.table-sortable-th.is-sorted {
+  background-color: rgba(215, 166, 74, 0.14) !important;
+  color: #131B2A !important;
+  font-weight: 700 !important;
+}
+
+.table-sort-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  line-height: 1;
+  width: 14px;
+  height: 14px;
+  margin-left: 6px;
+  opacity: 0.35;
+  transition: opacity 0.15s ease, color 0.15s ease;
+  vertical-align: middle;
+}
+
+.table-sortable-th:hover .table-sort-icon {
+  opacity: 0.85;
+  color: #131B2A;
+}
+
+.table-sortable-th.is-sorted .table-sort-icon {
+  opacity: 1;
+  color: #D7A64A; /* Brand gold */
+}
+
+/* Sütun Tutamacı (Resizer) */
+.table-col-resizer {
+  position: absolute;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  width: 10px;
+  cursor: col-resize;
+  user-select: none;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.table-col-resizer::after {
+  content: "";
+  position: absolute;
+  right: 2px;
+  top: 20%;
+  bottom: 20%;
+  width: 2px;
+  background-color: transparent;
+  border-radius: 1px;
+  transition: background-color 0.15s ease;
+}
+
+th:hover .table-col-resizer::after,
+.table-col-resizer:hover::after,
+.table-col-resizer.is-resizing::after {
+  background-color: #D7A64A; /* Brand gold */
+}
+
+/* Sürükleme esnasındaki düşey rehber çizgisi */
+.table-resize-guide {
+  position: fixed;
+  top: 0;
+  bottom: 0;
+  width: 2px;
+  background-color: #D7A64A;
+  box-shadow: 0 0 6px rgba(215, 166, 74, 0.7);
+  z-index: 99999;
+  pointer-events: none;
+}
+
