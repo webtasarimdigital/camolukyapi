@@ -112,8 +112,7 @@ export default async function BayiSiparislerimPage() {
                   <th className="py-3 px-4">Sipariş No</th>
                   <th className="py-3 px-4">Tarih</th>
                   <th className="py-3 px-4">Kalem Sayısı</th>
-                  <th className="py-3 px-4 text-right">Ara Toplam</th>
-                  <th className="py-3 px-4 text-right">Genel Toplam</th>
+                  <th className="py-3 px-4 text-right">Sipariş Tutarı</th>
                   <th className="py-3 px-4 text-center">Durum</th>
                   <th className="py-3 px-4">Notlar</th>
                 </tr>
@@ -134,11 +133,8 @@ export default async function BayiSiparislerimPage() {
                       <td className="py-3 px-4 text-slate-700">
                         {itemsCount} Kalem
                       </td>
-                      <td className="py-3 px-4 text-right font-medium text-slate-700">
-                        {formatCurrency(order.subtotal || 0)}
-                      </td>
                       <td className="py-3 px-4 text-right font-bold text-slate-900">
-                        {formatCurrency(order.grand_total || 0)}
+                        {formatCurrency(order.grand_total || order.subtotal || 0)}
                       </td>
                       <td className="py-3 px-4 text-center">
                         {isConverted ? (

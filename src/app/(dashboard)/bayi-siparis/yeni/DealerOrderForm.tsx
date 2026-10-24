@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { formatCurrency } from "@/lib/formatters";
 import {
@@ -48,23 +48,22 @@ export function DealerOrderForm({ profile }: { profile: DealerProfile }) {
   const [shippingAddress, setShippingAddress] = useState("");
   const [notes, setNotes] = useState("");
 
-  // Handle Search
-  async function handleSearch(q: string) {
-    setSearchQuery(q);
-    if (!q.trim() || q.trim().length < 2) {
-      setSearchResults([]);
-      return;
-    }
-    setIsSearching(true);
-    try {
-      const results = await searchProductsForDealer(q);
-      setSearchResults(results);
-    } catch {
-      toast.error("Ürün arama sırasında hata oluştu.");
-    } finally {
-      setIsSearching(false);
-    }
-  }
+  // Debounced Live Search
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      setIsSearching(true);
+      try {
+        const results = await searchProductsForDealer(searchQuery);
+        setSearchResults(results);
+      } catch {
+        // silent catch on typing
+      } finally {
+        setIsSearching(false);
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
   // Add product to order
   function addProductToOrder(product: any) {
@@ -121,8 +120,6 @@ export function DealerOrderForm({ profile }: { profile: DealerProfile }) {
     (sum, item) => sum + item.quantity * item.unitPrice,
     0
   );
-  const vatTotal = subtotal * 0.2;
-  const grandTotal = subtotal + vatTotal;
 
   // Submit
   function handleSubmitOrder(e: React.FormEvent) {
@@ -201,7 +198,7 @@ export function DealerOrderForm({ profile }: { profile: DealerProfile }) {
               <input
                 type="text"
                 value={searchQuery}
-                onChange={(e) => handleSearch(e.target.value)}
+                onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Ürün adı, ürün kodu, seri veya ebat ile arayın (örn: 60x120, Kütahya, Alessa)..."
                 className="w-full bg-surface border border-border rounded-xl pl-10 pr-10 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-brand-gold/50 focus:border-brand-gold transition"
               />
@@ -478,34 +475,21 @@ export function DealerOrderForm({ profile }: { profile: DealerProfile }) {
                   Birim
                 </span>
               </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Ara Toplam (KDV Hariç):</span>
-                <span className="font-bold text-slate-900">
-                  {formatCurrency(subtotal)}
-                </span>
-              </div>
-              <div className="flex justify-between text-slate-600">
-                <span>Tahmini KDV (%20):</span>
-                <span className="font-semibold text-slate-700">
-                  {formatCurrency(vatTotal)}
-                </span>
-              </div>
             </div>
 
             <div className="flex justify-between items-center text-sm pt-1">
-              <span className="font-bold text-slate-900">
-                Tahmini Genel Toplam:
+              <span className="font-bold text-slate-800">
+                Liste Fiyatı Tutarı:
               </span>
               <span className="font-black text-xl text-brand-navy">
-                {formatCurrency(grandTotal)}
+                {formatCurrency(subtotal)}
               </span>
             </div>
 
-            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2.5 text-xs text-amber-800">
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 flex gap-2.5 text-xs text-amber-900">
               <AlertCircle size={16} className="text-amber-600 flex-shrink-0 mt-0.5" />
               <p>
-                Siparişiniz merkeze (admin onayına) iletilecektir. Yetkili
-                incelemesinde bayi iskontosu ve nihai fiyatlar uygulanıp onaylanacaktır.
+                Siparişiniz doğrudan Çamoluk Yapı yönetimine iletilecektir. Bayi özel iskontonuz ve KDV oranınız yönetim tarafından onay esnasında uygulanarak kesin satışa dönüştürülecektir.
               </p>
             </div>
 

@@ -90,7 +90,7 @@ export default function LoginPage() {
     if (actualRole === "depo" || actualRole === "sofor") {
       router.push("/sevkiyat");
     } else if (actualRole === "tali_bayi" || (actualRole as string) === "bayi") {
-      router.push("/urunler");
+      router.push("/bayi-siparis/yeni");
     } else if (actualRole === "satis") {
       router.push("/teklifler");
     } else {

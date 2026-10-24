@@ -56,7 +56,7 @@ export async function middleware(request: NextRequest) {
     if (role === "depo" || role === "sofor") {
       url.pathname = "/sevkiyat";
     } else if (role === "tali_bayi" || role === "bayi") {
-      url.pathname = "/urunler";
+      url.pathname = "/bayi-siparis/yeni";
     } else if (role === "satis") {
       url.pathname = "/teklifler";
     } else {
@@ -75,11 +75,11 @@ export async function middleware(request: NextRequest) {
         return NextResponse.redirect(url);
       }
     } else if (role === "tali_bayi" || role === "bayi") {
-      const allowedBayi = ["/urunler", "/stok", "/portallar"];
+      const allowedBayi = ["/bayi-siparis", "/urunler", "/stok", "/portallar"];
       const isAllowed = allowedBayi.some((r) => pathname.startsWith(r)) && !pathname.startsWith("/urunler/yeni");
       if (!isAllowed && pathname !== "/login") {
         const url = request.nextUrl.clone();
-        url.pathname = "/urunler";
+        url.pathname = "/bayi-siparis/yeni";
         return NextResponse.redirect(url);
       }
     } else if (role === "satis") {
@@ -88,6 +88,7 @@ export async function middleware(request: NextRequest) {
         "/teklifler",
         "/satis",
         "/satislar",
+        "/bayi-siparisleri",
         "/sevkiyat",
         "/musteriler",
         "/urunler",

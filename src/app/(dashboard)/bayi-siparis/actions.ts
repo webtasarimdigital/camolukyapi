@@ -35,7 +35,17 @@ export async function searchProductsForDealer(query: string) {
   if (!companyId) return [];
 
   const cleanQ = query.trim();
-  if (!cleanQ) return [];
+  if (!cleanQ) {
+    const { data: products } = await supabase
+      .from("products")
+      .select("id, product_code, product_name, unit, stock_qty, product_group, series_name, size, price_quality_1, price_quality_2, price_commercial, default_sale_price")
+      .eq("company_id", companyId)
+      .eq("is_active", true)
+      .is("deleted_at", null)
+      .order("product_name", { ascending: true })
+      .limit(30);
+    return products || [];
+  }
 
   const { data: products } = await supabase
     .from("products")
@@ -72,7 +82,7 @@ export async function submitDealerOrder(input: SubmitDealerOrderInput) {
     throw new Error("Lütfen siparişe en az 1 ürün ekleyin.");
   }
 
-  // Calculate lines and totals (Standard 20% VAT estimate, 0 discount on initial dealer draft)
+  // Calculate lines and totals (0 VAT and 0 discount on dealer draft; Admin will set discount and VAT upon review)
   const lines = input.items.map((item) =>
     calculateLine({
       quantity: item.quantity,
@@ -82,7 +92,7 @@ export async function submitDealerOrder(input: SubmitDealerOrderInput) {
     })
   );
 
-  const vatRate = 20;
+  const vatRate = 0;
   const totals = calculateTotals(lines, vatRate, null, 0);
 
   // Generate order code (BAYI-2026-XXXX)
