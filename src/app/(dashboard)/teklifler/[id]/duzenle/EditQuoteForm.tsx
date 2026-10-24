@@ -640,19 +640,33 @@ export function EditQuoteForm({
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
-                      <input
-                        type="number"
-                        min="0"
-                        max="100"
-                        value={item.discount_value || 0}
-                        onChange={(e) => {
-                          const val = parseFloat(e.target.value) || 0;
-                          handleItemChange(idx, "discount_value", val);
-                          handleItemChange(idx, "discount_type", val > 0 ? "percent" : null);
-                        }}
-                        placeholder="%"
-                        className="w-full bg-surface border border-border rounded px-2 py-1 text-right tabular-nums text-text-muted"
-                      />
+                      <div className="inline-flex items-center gap-1 justify-end">
+                        <select
+                          value={item.discount_type || "percent"}
+                          onChange={(e) => {
+                            const newType = e.target.value as "percent" | "fixed";
+                            handleItemChange(idx, "discount_type", newType);
+                          }}
+                          className="border border-border rounded px-1 py-1 text-xs bg-surface font-semibold outline-none cursor-pointer"
+                        >
+                          <option value="percent">%</option>
+                          <option value="fixed">₺</option>
+                        </select>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={item.discount_value === 0 ? "" : item.discount_value}
+                          placeholder="0"
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => {
+                            const val = parseFloat(e.target.value) || 0;
+                            handleItemChange(idx, "discount_value", val);
+                            handleItemChange(idx, "discount_type", item.discount_type || "percent");
+                          }}
+                          className="w-16 border border-border rounded px-2 py-1 text-xs text-right font-bold outline-none focus:border-brand-navy"
+                        />
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-right font-bold text-text tabular-nums">
                       {formatCurrency(lineCalc?.line_total || 0)}
@@ -726,22 +740,76 @@ export function EditQuoteForm({
             </div>
           )}
 
-          <div className="flex items-center justify-between text-xs pt-1 border-t border-border">
-            <span className="text-text-muted">Genel İskonto:</span>
+          <div className="bg-surface/70 p-2.5 rounded-lg border border-border space-y-1.5">
+            <div className="flex items-center justify-between text-xs">
+              <span className="font-bold text-text">Genel İskonto:</span>
+              {totals.general_discount_amount > 0 && (
+                <span className="font-bold text-rose-600 tabular-nums">
+                  -{formatCurrency(totals.general_discount_amount)}
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-1.5">
-              <input
-                type="number"
-                min="0"
-                value={generalDiscountValue}
-                onChange={(e) => {
-                  const v = parseFloat(e.target.value) || 0;
-                  setGeneralDiscountValue(v);
-                  setGeneralDiscountType(v > 0 ? "percent" : null);
-                }}
-                className="w-16 bg-surface border border-border rounded px-2 py-0.5 text-right text-xs tabular-nums"
-                placeholder="%"
-              />
-              <span className="text-text-muted">%</span>
+              <div className="flex rounded border border-border bg-white overflow-hidden p-0.5 flex-shrink-0">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (generalDiscountType === "percent") {
+                      setGeneralDiscountType(null);
+                      setGeneralDiscountValue(0);
+                    } else {
+                      setGeneralDiscountType("percent");
+                    }
+                  }}
+                  className={`px-2 py-0.5 text-[11px] font-bold rounded transition cursor-pointer ${
+                    generalDiscountType === "percent"
+                      ? "bg-brand-navy text-white shadow-xs"
+                      : "text-text-muted hover:text-text hover:bg-surface"
+                  }`}
+                >
+                  % Yüzde
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (generalDiscountType === "fixed") {
+                      setGeneralDiscountType(null);
+                      setGeneralDiscountValue(0);
+                    } else {
+                      setGeneralDiscountType("fixed");
+                    }
+                  }}
+                  className={`px-2 py-0.5 text-[11px] font-bold rounded transition cursor-pointer ${
+                    generalDiscountType === "fixed"
+                      ? "bg-brand-navy text-white shadow-xs"
+                      : "text-text-muted hover:text-text hover:bg-surface"
+                  }`}
+                >
+                  ₺ Tutar
+                </button>
+              </div>
+
+              {generalDiscountType ? (
+                <div className="flex-1 flex items-center gap-1 bg-white border border-brand-navy/30 focus-within:border-brand-navy rounded px-2 py-0.5">
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={generalDiscountValue === 0 ? "" : generalDiscountValue}
+                    placeholder={generalDiscountType === "percent" ? "Örn: 10" : "Örn: 1000"}
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setGeneralDiscountValue(parseFloat(e.target.value) || 0)}
+                    className="w-full text-xs font-bold text-right outline-none text-text"
+                  />
+                  <span className="text-xs font-bold text-text-muted">
+                    {generalDiscountType === "percent" ? "%" : "₺"}
+                  </span>
+                </div>
+              ) : (
+                <span className="text-[11px] text-text-muted italic">
+                  İskonto için % veya ₺ seçin
+                </span>
+              )}
             </div>
           </div>
 

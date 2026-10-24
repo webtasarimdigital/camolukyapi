@@ -1018,13 +1018,26 @@ export function SaleForm({
                       </div>
                     </td>
                     <td className="py-3 px-4 text-center">
-                      {item.discountValue > 0 ? (
-                        <span className="text-xs font-semibold text-rose-600 bg-rose-50 px-2 py-1 rounded">
-                          {item.discountType === "percent" ? `%${item.discountValue}` : formatCurrency(item.discountValue)}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-text-muted">-</span>
-                      )}
+                      <div className="inline-flex items-center gap-1 justify-center">
+                        <select
+                          value={item.discountType || "percent"}
+                          onChange={(e) => handleUpdateItem(idx, "discountType", e.target.value as "percent" | "fixed")}
+                          className="border border-border rounded px-1 py-1 text-xs bg-surface font-semibold outline-none cursor-pointer"
+                        >
+                          <option value="percent">%</option>
+                          <option value="fixed">₺</option>
+                        </select>
+                        <input
+                          type="number"
+                          min="0"
+                          step="any"
+                          value={item.discountValue === 0 ? "" : item.discountValue}
+                          placeholder="0"
+                          onFocus={(e) => e.target.select()}
+                          onChange={(e) => handleUpdateItem(idx, "discountValue", parseFloat(e.target.value) || 0)}
+                          className="w-16 border border-border rounded px-2 py-1 text-xs text-right font-bold outline-none focus:border-brand-navy"
+                        />
+                      </div>
                     </td>
                     <td className="py-3 px-4 text-right font-black text-text tabular-nums text-sm">
                       {formatCurrency(item.lineTotal)}
