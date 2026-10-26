@@ -1,4 +1,4 @@
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { formatCurrency, formatDate } from "@/lib/formatters";
@@ -9,13 +9,12 @@ import {
   TrendingUp,
   Package,
   Search,
-  ArrowRight,
-  ShoppingCart,
-  Eye,
   Building2,
-  User,
+  XCircle,
+  Ban,
 } from "lucide-react";
 import { InteractiveTable } from "@/components/ui/InteractiveTable";
+import { DealerOrderRowActions } from "./DealerOrderRowActions";
 
 export default async function AdminBayiSiparisleriPage({
   searchParams,
@@ -23,7 +22,7 @@ export default async function AdminBayiSiparisleriPage({
   searchParams: Promise<{ q?: string; tab?: string }>;
 }) {
   const { q, tab } = await searchParams;
-  const currentTab = tab || "pending"; // pending | converted | all
+  const currentTab = tab || "pending"; // pending | converted | rejected | all
 
   const supabase = await createClient();
   const {
@@ -45,10 +44,12 @@ export default async function AdminBayiSiparisleriPage({
     redirect("/login");
   }
 
+  const service = await createServiceClient();
+
   // Fetch all dealer orders for stats
-  const { data: allOrdersData } = await supabase
+  const { data: allOrdersData } = await service
     .from("quotes")
-    .select("id, quote_code, status, subtotal, grand_total, created_at, customer_snapshot, delivery_terms")
+    .select("id, quote_code, status, subtotal, grand_total, created_at, customer_snapshot, delivery_terms, notes, converted_sale_id")
     .eq("company_id", companyId)
     .eq("delivery_terms", "BAYI_SIPARISI")
     .is("deleted_at", null)
@@ -62,8 +63,13 @@ export default async function AdminBayiSiparisleriPage({
   const convertedOrders = allOrders.filter(
     (o) => o.status === "converted_to_sale"
   );
+  const rejectedOrders = allOrders.filter(
+    (o) => o.status === "rejected" || o.status === "cancelled"
+  );
 
-  const totalVolume = allOrders.reduce(
+  // KRİTİK DÜZELTME: Toplam Hacim YALNIZCA resmi satışa dönüştürülmüş siparişleri kapsar!
+  // Reddedilen ve iptal edilen siparişler asla başarılı hacme eklenmez.
+  const totalVolume = convertedOrders.reduce(
     (acc, o) => acc + (Number(o.grand_total) || 0),
     0
   );
@@ -74,6 +80,8 @@ export default async function AdminBayiSiparisleriPage({
     filteredOrders = pendingOrders;
   } else if (currentTab === "converted") {
     filteredOrders = convertedOrders;
+  } else if (currentTab === "rejected") {
+    filteredOrders = rejectedOrders;
   }
 
   if (q && q.trim()) {
@@ -99,13 +107,13 @@ export default async function AdminBayiSiparisleriPage({
             Bayi Siparişleri Yönetimi
           </h1>
           <p className="text-xs text-slate-500 mt-1">
-            Tali bayilerden gelen siparişleri inceleyin, fiyat ve iskontoları düzenleyerek tek tıkla resmi satışa dönüştürün.
+            Tali bayilerden gelen siparişleri inceleyin, fiyat ve iskontoları düzenleyerek tek tıkla resmi satışa dönüştürün veya stok yoksa reddedin.
           </p>
         </div>
       </div>
 
-      {/* KPI Kartları */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      {/* KPI Kartları (4'lü Grid) */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Link
           href="/bayi-siparisleri?tab=pending"
           className={`p-4 rounded-xl border transition ${
@@ -117,7 +125,7 @@ export default async function AdminBayiSiparisleriPage({
           <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-amber-700 flex items-center gap-1.5">
               <Clock size={15} />
-              Onay Bekleyen Siparişler
+              Onay Bekleyenler
             </span>
             <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">
               İşlem Gerekiyor
@@ -153,34 +161,50 @@ export default async function AdminBayiSiparisleriPage({
         </Link>
 
         <Link
-          href="/bayi-siparisleri?tab=all"
+          href="/bayi-siparisleri?tab=rejected"
           className={`p-4 rounded-xl border transition ${
-            currentTab === "all"
-              ? "bg-blue-50/70 border-blue-300 ring-2 ring-blue-400/30"
+            currentTab === "rejected"
+              ? "bg-rose-50/70 border-rose-300 ring-2 ring-rose-400/30"
               : "bg-white border-border hover:bg-slate-50"
           }`}
         >
           <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-rose-700 flex items-center gap-1.5">
+              <XCircle size={15} />
+              Reddedilen / İptal
+            </span>
+            <span className="text-[10px] bg-rose-100 text-rose-800 font-bold px-2 py-0.5 rounded-full">
+              Ürün Yok / İptal
+            </span>
+          </div>
+          <p className="text-2xl font-black text-slate-900 mt-2">
+            {rejectedOrders.length}{" "}
+            <span className="text-xs font-normal text-slate-500">Sipariş</span>
+          </p>
+        </Link>
+
+        <div className="bg-white p-4 rounded-xl border border-border shadow-xs">
+          <div className="flex items-center justify-between">
             <span className="text-xs font-bold text-blue-700 flex items-center gap-1.5">
               <TrendingUp size={15} />
-              Toplam Bayi Sipariş Hacmi
+              Başarılı Sipariş Hacmi
             </span>
             <span className="text-[10px] bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">
-              Tümü
+              Resmi Satışlar
             </span>
           </div>
           <p className="text-2xl font-black text-slate-900 mt-2">
             {formatCurrency(totalVolume)}
           </p>
-        </Link>
+        </div>
       </div>
 
       {/* Filtre Sekmeleri & Arama */}
       <div className="bg-white p-3 rounded-2xl border border-border shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold">
+        <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl text-xs font-semibold overflow-x-auto">
           <Link
             href="/bayi-siparisleri?tab=pending"
-            className={`px-3 py-1.5 rounded-lg transition ${
+            className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap ${
               currentTab === "pending"
                 ? "bg-white text-slate-900 shadow-xs font-bold"
                 : "text-slate-600 hover:text-slate-900"
@@ -190,7 +214,7 @@ export default async function AdminBayiSiparisleriPage({
           </Link>
           <Link
             href="/bayi-siparisleri?tab=converted"
-            className={`px-3 py-1.5 rounded-lg transition ${
+            className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap ${
               currentTab === "converted"
                 ? "bg-white text-slate-900 shadow-xs font-bold"
                 : "text-slate-600 hover:text-slate-900"
@@ -199,8 +223,18 @@ export default async function AdminBayiSiparisleriPage({
             Satışa Dönüştürülenler ({convertedOrders.length})
           </Link>
           <Link
+            href="/bayi-siparisleri?tab=rejected"
+            className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap ${
+              currentTab === "rejected"
+                ? "bg-white text-rose-700 shadow-xs font-bold"
+                : "text-slate-600 hover:text-slate-900"
+            }`}
+          >
+            Reddedilenler ({rejectedOrders.length})
+          </Link>
+          <Link
             href="/bayi-siparisleri?tab=all"
-            className={`px-3 py-1.5 rounded-lg transition ${
+            className={`px-3 py-1.5 rounded-lg transition whitespace-nowrap ${
               currentTab === "all"
                 ? "bg-white text-slate-900 shadow-xs font-bold"
                 : "text-slate-600 hover:text-slate-900"
@@ -248,7 +282,6 @@ export default async function AdminBayiSiparisleriPage({
               </thead>
               <tbody className="divide-y divide-border">
                 {filteredOrders.map((order: any) => {
-                  const isConverted = order.status === "converted_to_sale";
                   const dealerName =
                     order.customer_snapshot?.dealer_name ||
                     order.customer_snapshot?.company_name ||
@@ -280,50 +313,38 @@ export default async function AdminBayiSiparisleriPage({
                         {formatCurrency(order.grand_total || 0)}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        {isConverted ? (
+                        {order.status === "converted_to_sale" && (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-800">
                             <CheckCircle2 size={12} />
                             Satışa Dönüştü
                           </span>
-                        ) : (
+                        )}
+                        {(order.status === "sent" || order.status === "draft") && (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
                             <Clock size={12} />
                             Onay Bekliyor
                           </span>
                         )}
+                        {order.status === "rejected" && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800" title={order.notes || "Reddedildi"}>
+                            <XCircle size={12} />
+                            Reddedildi
+                          </span>
+                        )}
+                        {order.status === "cancelled" && (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700" title={order.notes || "İptal"}>
+                            <Ban size={12} />
+                            İptal Edildi
+                          </span>
+                        )}
                       </td>
                       <td className="py-3 px-4 text-center">
-                        <div className="flex items-center justify-center gap-2">
-                          <Link
-                            href={`/bayi-siparisleri/${order.id}`}
-                            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition shadow-xs ${
-                              isConverted
-                                ? "bg-slate-100 hover:bg-slate-200 text-slate-800"
-                                : "bg-brand-navy hover:bg-brand-navy-2 text-white"
-                            }`}
-                          >
-                            {isConverted ? (
-                              <>
-                                <Eye size={13} /> İncele
-                              </>
-                            ) : (
-                              <>
-                                <ShoppingCart size={13} />
-                                <span>İncele & Satışa Dönüştür</span>
-                                <ArrowRight size={13} />
-                              </>
-                            )}
-                          </Link>
-                          {isConverted && order.converted_sale_id && (
-                            <Link
-                              href={`/satislar/${order.converted_sale_id}`}
-                              className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-semibold bg-emerald-50 text-emerald-700 hover:bg-emerald-100 border border-emerald-200 transition"
-                              title="Resmi Satış Belgesini Gör"
-                            >
-                              Satış Belgesi
-                            </Link>
-                          )}
-                        </div>
+                        <DealerOrderRowActions
+                          orderId={order.id}
+                          orderCode={order.quote_code}
+                          status={order.status}
+                          convertedSaleId={order.converted_sale_id}
+                        />
                       </td>
                     </tr>
                   );

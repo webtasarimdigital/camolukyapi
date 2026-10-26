@@ -61,7 +61,7 @@ export default async function BayiSiparislerimPage() {
       </div>
 
       {/* İstatistik Özet Kartları */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-border shadow-xs">
           <span className="text-xs text-slate-500 font-medium">Toplam Sipariş</span>
           <p className="text-2xl font-black text-slate-900 mt-1">{orders.length}</p>
@@ -84,6 +84,16 @@ export default async function BayiSiparislerimPage() {
           </span>
           <p className="text-2xl font-black text-emerald-600 mt-1">
             {orders.filter((o) => o.status === "converted_to_sale").length}
+          </p>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-border shadow-xs">
+          <span className="text-xs text-rose-600 font-medium flex items-center gap-1.5">
+            <AlertCircle size={14} />
+            Reddedilen / İptal
+          </span>
+          <p className="text-2xl font-black text-rose-600 mt-1">
+            {orders.filter((o) => o.status === "rejected" || o.status === "cancelled").length}
           </p>
         </div>
       </div>
@@ -122,6 +132,8 @@ export default async function BayiSiparislerimPage() {
               <tbody className="divide-y divide-border">
                 {orders.map((order: any) => {
                   const isConverted = order.status === "converted_to_sale";
+                  const isRejected = order.status === "rejected";
+                  const isCancelled = order.status === "cancelled";
                   const itemsCount = order.items?.length || 0;
 
                   return (
@@ -144,6 +156,16 @@ export default async function BayiSiparislerimPage() {
                             <CheckCircle2 size={12} />
                             Onaylandı & Satışa Döndü
                           </span>
+                        ) : isRejected ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800">
+                            <AlertCircle size={12} />
+                            Reddedildi
+                          </span>
+                        ) : isCancelled ? (
+                          <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-slate-100 text-slate-700">
+                            <AlertCircle size={12} />
+                            İptal Edildi
+                          </span>
                         ) : (
                           <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-100 text-amber-800">
                             <Clock size={12} />
@@ -151,7 +173,7 @@ export default async function BayiSiparislerimPage() {
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4 text-slate-500 max-w-xs truncate">
+                      <td className="py-3 px-4 text-slate-500 max-w-xs truncate" title={order.notes || ""}>
                         {order.notes || "-"}
                       </td>
                     </tr>

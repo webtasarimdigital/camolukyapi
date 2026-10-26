@@ -9,6 +9,9 @@ import {
   updateDealerOrder,
   convertDealerOrderToSale,
   createCustomerForDealer,
+  rejectDealerOrder,
+  deleteDealerOrder,
+  reopenDealerOrder,
   type EditableOrderItem,
 } from "./actions";
 import { toast } from "sonner";
@@ -35,6 +38,9 @@ import {
   ShieldCheck,
   AlertCircle,
   ExternalLink,
+  XCircle,
+  RotateCcw,
+  Ban,
 } from "lucide-react";
 
 interface CustomerOption {
@@ -70,6 +76,10 @@ export function ReviewAndConvertOrderForm({
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const isConverted = order.status === "converted_to_sale";
+  const isRejected = order.status === "rejected";
+  const isCancelled = order.status === "cancelled";
+  const [isRejectModalOpen, setIsRejectModalOpen] = useState(false);
+  const [rejectReason, setRejectReason] = useState("Stokta ürün bulunmuyor / Ürün yok");
 
   // Customer state
   const [customerList, setCustomerList] = useState<CustomerOption[]>(initialCustomers);
@@ -301,6 +311,57 @@ export function ReviewAndConvertOrderForm({
     });
   }
 
+  // Reject order
+  function handleRejectSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    startTransition(async () => {
+      try {
+        await rejectDealerOrder(order.id, rejectReason);
+        setIsRejectModalOpen(false);
+        toast.success(`${order.quote_code} numaralı sipariş başarıyla reddedildi.`);
+        router.refresh();
+      } catch (err: any) {
+        toast.error("Hata: " + (err?.message || "Sipariş reddedilemedi"));
+      }
+    });
+  }
+
+  // Delete order
+  function handleDeleteOrder() {
+    const msg = isConverted
+      ? `${order.quote_code} numaralı sipariş SATIŞA DÖNÜŞTÜRÜLMÜŞ durumdadır.\n\nSiparişi silerseniz bağlı resmi satış ve stok düşüşleri de otomatik iptal edilecektir.\n\nTamamen silmek istediğinize emin misiniz?`
+      : `${order.quote_code} numaralı bayi siparişini tamamen silmek istediğinize emin misiniz?\n\nBu işlem geri alınamaz.`;
+
+    if (!confirm(msg)) return;
+
+    startTransition(async () => {
+      try {
+        await deleteDealerOrder(order.id);
+        toast.success(`${order.quote_code} numaralı sipariş tamamen silindi.`);
+        router.push("/bayi-siparisleri");
+      } catch (err: any) {
+        toast.error("Silme hatası: " + (err?.message || "Sipariş silinemedi"));
+      }
+    });
+  }
+
+  // Reopen order
+  function handleReopenOrder() {
+    if (!confirm(`${order.quote_code} numaralı siparişi yeniden onaya sunmak istiyor musunuz?`)) {
+      return;
+    }
+
+    startTransition(async () => {
+      try {
+        await reopenDealerOrder(order.id);
+        toast.success(`${order.quote_code} yeniden onaya alındı.`);
+        router.refresh();
+      } catch (err: any) {
+        toast.error("Hata: " + (err?.message || "İşlem başarısız"));
+      }
+    });
+  }
+
   // Filtered products for quick add
   const filteredProducts = useMemo(() => {
     if (!searchProductQuery.trim()) return [];
@@ -335,6 +396,16 @@ export function ReviewAndConvertOrderForm({
                   <CheckCircle2 size={13} />
                   Satışa Dönüştü
                 </span>
+              ) : isRejected ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-800">
+                  <XCircle size={13} />
+                  Reddedildi
+                </span>
+              ) : isCancelled ? (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-700">
+                  <Ban size={13} />
+                  İptal Edildi
+                </span>
               ) : (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-100 text-amber-800">
                   <Clock size={13} />
@@ -351,13 +422,59 @@ export function ReviewAndConvertOrderForm({
         {/* Aksiyon Butonları */}
         <div className="flex flex-wrap items-center gap-2.5">
           {isConverted && order.converted_sale_id ? (
-            <Link
-              href={`/satislar/${order.converted_sale_id}`}
-              className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2 rounded-xl text-xs font-bold transition shadow-sm"
-            >
-              <ExternalLink size={15} />
-              <span>Oluşan Satışı Görüntüle</span>
-            </Link>
+            <>
+              <Link
+                href={`/satislar/${order.converted_sale_id}`}
+                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow-sm"
+              >
+                <ExternalLink size={15} />
+                <span>Oluşan Satışı Görüntüle</span>
+              </Link>
+              <button
+                type="button"
+                onClick={() => setIsRejectModalOpen(true)}
+                disabled={isPending}
+                className="inline-flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3.5 py-2.5 rounded-xl text-xs font-bold transition disabled:opacity-50"
+                title="Siparişi Reddet / İptal Et"
+              >
+                <XCircle size={15} />
+                <span>Siparişi Reddet</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteOrder}
+                disabled={isPending}
+                className="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-border"
+                title="Siparişi Tamamen Sil"
+              >
+                <Trash2 size={16} />
+              </button>
+            </>
+          ) : isRejected || isCancelled ? (
+            <>
+              <button
+                type="button"
+                onClick={handleReopenOrder}
+                disabled={isPending}
+                className="inline-flex items-center gap-1.5 bg-amber-500 hover:bg-amber-600 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50"
+              >
+                {isPending ? (
+                  <Loader2 size={15} className="animate-spin" />
+                ) : (
+                  <RotateCcw size={15} />
+                )}
+                <span>Tekrar Onaya Al</span>
+              </button>
+              <button
+                type="button"
+                onClick={handleDeleteOrder}
+                disabled={isPending}
+                className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white px-4 py-2.5 rounded-xl text-xs font-bold transition shadow-sm disabled:opacity-50"
+              >
+                <Trash2 size={15} />
+                <span>Siparişi Sil</span>
+              </button>
+            </>
           ) : (
             <>
               <button
@@ -372,6 +489,17 @@ export function ReviewAndConvertOrderForm({
                   <Save size={15} />
                 )}
                 <span>Değişiklikleri Kaydet</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsRejectModalOpen(true)}
+                disabled={isPending}
+                className="inline-flex items-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 px-3.5 py-2.5 rounded-xl text-xs font-bold transition disabled:opacity-50"
+                title="Ürün Yok / Siparişi Reddet"
+              >
+                <XCircle size={15} />
+                <span>Siparişi Reddet</span>
               </button>
 
               <button
@@ -393,10 +521,65 @@ export function ReviewAndConvertOrderForm({
                   </>
                 )}
               </button>
+
+              <button
+                type="button"
+                onClick={handleDeleteOrder}
+                disabled={isPending}
+                className="p-2.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-xl transition border border-border"
+                title="Siparişi Tamamen Sil"
+              >
+                <Trash2 size={16} />
+              </button>
             </>
           )}
         </div>
       </div>
+
+      {/* Reddedildi / İptal Bildirim Bandı */}
+      {isRejected && (
+        <div className="bg-rose-50 border-2 border-rose-300 rounded-2xl p-4 flex items-center justify-between gap-3 text-rose-900 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <XCircle size={20} className="text-rose-600 flex-shrink-0" />
+            <div>
+              <p className="font-bold text-sm">Bu Bayi Siparişi Reddedilmiştir</p>
+              <p className="text-xs text-rose-700 mt-0.5">
+                {order.notes || "Gerekçe: Stokta ürün bulunmuyor / Ürün temin edilemedi."}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleReopenOrder}
+            disabled={isPending}
+            className="px-3.5 py-1.5 bg-white text-rose-700 font-bold border border-rose-300 rounded-xl text-xs hover:bg-rose-100 transition whitespace-nowrap cursor-pointer"
+          >
+            Tekrar Onaya Al
+          </button>
+        </div>
+      )}
+
+      {isCancelled && (
+        <div className="bg-slate-100 border-2 border-slate-300 rounded-2xl p-4 flex items-center justify-between gap-3 text-slate-900 shadow-xs">
+          <div className="flex items-center gap-2.5">
+            <Ban size={20} className="text-slate-600 flex-shrink-0" />
+            <div>
+              <p className="font-bold text-sm">Bu Bayi Siparişi İptal Edilmiştir</p>
+              <p className="text-xs text-slate-600 mt-0.5">
+                {order.notes || "Bağlı satış silindi veya iptal edildi."}
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleReopenOrder}
+            disabled={isPending}
+            className="px-3.5 py-1.5 bg-white text-slate-700 font-bold border border-slate-300 rounded-xl text-xs hover:bg-slate-200 transition whitespace-nowrap cursor-pointer"
+          >
+            Tekrar Onaya Al
+          </button>
+        </div>
+      )}
 
       {/* Tali Bayi Bilgileri ve Cari Hesap Eşleştirme Kartı */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -907,7 +1090,39 @@ export function ReviewAndConvertOrderForm({
           </div>
 
           {/* Alt Onay Aksiyonu */}
-          {!isConverted ? (
+          {isConverted ? (
+            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
+              <p className="text-xs font-bold text-emerald-800">
+                Bu sipariş başarıyla onaylanmış ve satışa dönüştürülmüştür.
+              </p>
+              {order.converted_sale_id && (
+                <Link
+                  href={`/satislar/${order.converted_sale_id}`}
+                  className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-900 mt-2 underline"
+                >
+                  Satış Sayfasına Git <ArrowRight size={13} />
+                </Link>
+              )}
+            </div>
+          ) : isRejected ? (
+            <div className="bg-rose-50 border border-rose-200 rounded-xl p-4 text-center space-y-2">
+              <p className="text-xs font-bold text-rose-800">
+                Bu bayi siparişi reddedilmiştir.
+              </p>
+              <p className="text-[11px] text-rose-600">
+                Stok durumu veya fiyatlar değiştiyse yukarıdaki "Tekrar Onaya Al" butonuna basarak siparişi yeniden aktif hale getirebilirsiniz.
+              </p>
+            </div>
+          ) : isCancelled ? (
+            <div className="bg-slate-100 border border-slate-300 rounded-xl p-4 text-center space-y-2">
+              <p className="text-xs font-bold text-slate-800">
+                Bu bayi siparişi iptal edilmiştir.
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Yeniden onaya almak için yukarıdaki "Tekrar Onaya Al" butonunu kullanabilirsiniz.
+              </p>
+            </div>
+          ) : (
             <div className="space-y-2 pt-4">
               <button
                 type="button"
@@ -931,23 +1146,104 @@ export function ReviewAndConvertOrderForm({
                 Onaylandığında sipariş kapatılır, depodaki stok miktarları düşülür ve resmi satış kaydı oluşturulur.
               </p>
             </div>
-          ) : (
-            <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-4 text-center">
-              <p className="text-xs font-bold text-emerald-800">
-                Bu sipariş başarıyla onaylanmış ve satışa dönüştürülmüştür.
-              </p>
-              {order.converted_sale_id && (
-                <Link
-                  href={`/satislar/${order.converted_sale_id}`}
-                  className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 hover:text-emerald-900 mt-2 underline"
-                >
-                  Satış Sayfasına Git <ArrowRight size={13} />
-                </Link>
-              )}
-            </div>
           )}
         </div>
       </div>
+
+      {/* Reddetme Modalı */}
+      {isRejectModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-xs animate-in fade-in">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl border border-slate-100 space-y-4">
+            <div className="flex items-center gap-2.5 text-rose-600">
+              <div className="p-2 rounded-xl bg-rose-50">
+                <XCircle size={22} />
+              </div>
+              <div>
+                <h3 className="font-bold text-slate-900 text-sm">
+                  Siparişi Reddet ({order.quote_code})
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Bu işlem sipariş durumunu "Reddedildi" yapar ve bayiye iletilir.
+                </p>
+              </div>
+            </div>
+
+            <form onSubmit={handleRejectSubmit} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1.5">
+                  Reddetme Gerekçesi
+                </label>
+                <div className="space-y-2">
+                  <div className="flex flex-wrap gap-1.5">
+                    {[
+                      "Stokta ürün bulunmuyor / Ürün yok",
+                      "Talep edilen miktar temin edilemiyor",
+                      "Fiyat ve iskonto anlaşmazlığı",
+                      "Bayi talebi üzerine iptal edildi",
+                    ].map((opt) => (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setRejectReason(opt)}
+                        className={`text-[11px] px-2.5 py-1 rounded-lg border font-medium transition cursor-pointer ${
+                          rejectReason === opt
+                            ? "bg-rose-50 border-rose-300 text-rose-700 font-bold"
+                            : "bg-surface border-border text-slate-600 hover:bg-slate-100"
+                        }`}
+                      >
+                        {opt}
+                      </button>
+                    ))}
+                  </div>
+
+                  <textarea
+                    rows={3}
+                    value={rejectReason}
+                    onChange={(e) => setRejectReason(e.target.value)}
+                    placeholder="Örn: Stokta ürün bulunmamaktadır..."
+                    className="w-full bg-surface border border-border rounded-xl p-2.5 text-xs focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+                    required
+                  />
+                </div>
+              </div>
+
+              {isConverted && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-xs font-medium">
+                  ⚠️ Bu sipariş daha önce satışa dönüştürülmüştü. Reddedildiğinde bağlı satış iptal edilecek ve düşülen stoklar depoya geri eklenecektir.
+                </div>
+              )}
+
+              <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  disabled={isPending}
+                  onClick={() => setIsRejectModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-semibold text-slate-600 hover:bg-slate-100 transition cursor-pointer"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  disabled={isPending}
+                  className="inline-flex items-center gap-1.5 bg-rose-600 hover:bg-rose-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition shadow-sm cursor-pointer disabled:opacity-50"
+                >
+                  {isPending ? (
+                    <>
+                      <Loader2 size={13} className="animate-spin" />
+                      <span>İşleniyor...</span>
+                    </>
+                  ) : (
+                    <>
+                      <XCircle size={13} />
+                      <span>Siparişi Reddet</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

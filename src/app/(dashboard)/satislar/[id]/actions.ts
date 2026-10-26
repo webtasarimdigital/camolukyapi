@@ -30,6 +30,10 @@ export async function cancelSale(saleId: string, reason: string) {
     throw new Error("Yetkiniz bulunmuyor! Yalnızca muhasebe ve yöneticiler satışı iptal edebilir.");
   }
 
+  const service = await createServiceClient();
+  const { data: saleData } = await service.from("sales").select("source_quote_id").eq("id", saleId).single();
+  const sourceQuoteId = (saleData as any)?.source_quote_id;
+
   const { error } = await supabase.rpc("cancel_sale" as never, { 
     p_sale_id: saleId, 
     p_user_id: userData.user.id, 
@@ -37,8 +41,25 @@ export async function cancelSale(saleId: string, reason: string) {
   } as never);
   if (error) throw new Error(error.message);
 
+  if (sourceQuoteId) {
+    try {
+      await (service.from("quotes") as any)
+        .update({
+          status: "cancelled",
+          converted_sale_id: null,
+          notes: `[Bağlı Satış İptal Edildi: ${reason || "Kullanıcı iptali"}]`
+        })
+        .eq("id", sourceQuoteId);
+    } catch (e) {
+      console.warn("Could not sync quote status on cancelSale:", e);
+    }
+  }
+
   revalidatePath(`/satislar/${saleId}`);
   revalidatePath("/satislar");
+  revalidatePath("/bayi-siparisleri");
+  revalidatePath("/bayi-siparis");
+  revalidatePath("/teklifler");
   revalidatePath("/dashboard");
   revalidatePath("/stok");
 }
@@ -175,6 +196,8 @@ export async function deleteSale(saleId: string) {
     await service.from("sale_items").delete().eq("sale_id", saleId);
   } catch {}
 
+  const sourceQuoteId = sale.source_quote_id;
+
   // 7. Satışı sil
   const { error } = await service.from("sales").delete().eq("id", saleId);
   if (error) {
@@ -182,7 +205,25 @@ export async function deleteSale(saleId: string) {
     await (service.from("sales") as any).update({ status: "cancelled", notes: "Silindi / İptal" }).eq("id", saleId);
   }
 
+  // 8. Bağlı kaynak teklif/bayi siparişi varsa durumunu iptal et
+  if (sourceQuoteId) {
+    try {
+      await (service.from("quotes") as any)
+        .update({
+          status: "cancelled",
+          converted_sale_id: null,
+          notes: (sale.notes ? `${sale.notes} | ` : "") + "Bağlı satış kaydı silindi"
+        })
+        .eq("id", sourceQuoteId);
+    } catch (e) {
+      console.warn("Could not sync quote on deleteSale:", e);
+    }
+  }
+
   revalidatePath("/satislar");
+  revalidatePath("/bayi-siparisleri");
+  revalidatePath("/bayi-siparis");
+  revalidatePath("/teklifler");
   revalidatePath("/dashboard");
   revalidatePath("/stok");
   revalidatePath("/finans");

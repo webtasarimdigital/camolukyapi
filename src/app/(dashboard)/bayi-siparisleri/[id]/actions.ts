@@ -232,3 +232,156 @@ export async function createCustomerForDealer(data: {
   revalidatePath("/musteriler");
   return { success: true, customer: customer as any };
 }
+
+/**
+ * Bayi siparişini reddeder (Örn: Stokta ürün yoksa).
+ * Varsa bağlı satışı iptal eder ve stokları geri yükler.
+ */
+export async function rejectDealerOrder(orderId: string, reason?: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Oturum açmanız gerekiyor.");
+
+  const service = await createServiceClient();
+
+  const { data: quoteData } = await service
+    .from("quotes")
+    .select("id, notes, status, converted_sale_id")
+    .eq("id", orderId)
+    .single();
+
+  if (!quoteData) throw new Error("Sipariş bulunamadı.");
+  const quote = quoteData as any;
+
+  // 1. Eğer daha önce satışa dönüştürülmüşse satışı iptal et ve stoğu iade et
+  if (quote.converted_sale_id) {
+    try {
+      await service.rpc("cancel_sale" as never, {
+        p_sale_id: quote.converted_sale_id,
+        p_user_id: user.id,
+        p_reason: `Sipariş reddedildi: ${reason || "Ürün temin edilemedi"}`
+      } as never);
+    } catch (e) {
+      console.warn("cancel_sale warning on rejectDealerOrder:", e);
+    }
+  }
+
+  // 2. Sipariş durumunu 'rejected' yap ve notu ekle
+  const rejectNote = `[Sipariş Reddedildi: ${reason || "Ürün/Stok temin edilemedi"}]`;
+  const updatedNotes = quote.notes ? `${quote.notes} | ${rejectNote}` : rejectNote;
+
+  const { error: quoteErr } = await (service.from("quotes") as any)
+    .update({
+      status: "rejected",
+      converted_sale_id: null,
+      notes: updatedNotes,
+      updated_at: new Date().toISOString(),
+      updated_by: user.id,
+    })
+    .eq("id", orderId);
+
+  if (quoteErr) throw new Error("Sipariş reddedilemedi: " + quoteErr.message);
+
+  revalidatePath("/bayi-siparisleri");
+  revalidatePath(`/bayi-siparisleri/${orderId}`);
+  revalidatePath("/bayi-siparis");
+  revalidatePath("/satislar");
+  revalidatePath("/dashboard");
+  revalidatePath("/stok");
+
+  return { success: true };
+}
+
+/**
+ * Bayi siparişini tamamen siler.
+ * Varsa bağlı satışı temizler ve stokları geri yükler.
+ */
+export async function deleteDealerOrder(orderId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Oturum açmanız gerekiyor.");
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const role = (profile as any)?.role || "staff";
+  if (!["admin", "muhasebe1"].includes(role)) {
+    throw new Error("Yetkiniz bulunmuyor! Yalnızca yöneticiler sipariş silebilir.");
+  }
+
+  const service = await createServiceClient();
+
+  const { data: quoteData } = await service
+    .from("quotes")
+    .select("id, converted_sale_id")
+    .eq("id", orderId)
+    .single();
+
+  const quote = quoteData as any;
+
+  // 1. Bağlı satış varsa satışı iptal et ve temizle
+  if (quote?.converted_sale_id) {
+    try {
+      await service.rpc("cancel_sale" as never, {
+        p_sale_id: quote.converted_sale_id,
+        p_user_id: user.id,
+        p_reason: "Bayi siparişi silindiği için satış iptal edildi"
+      } as never);
+      await (service.from("sales") as any).update({ source_quote_id: null }).eq("id", quote.converted_sale_id);
+    } catch (e) {
+      console.warn("Sale cleanup warning on deleteDealerOrder:", e);
+    }
+  }
+
+  // 2. Kalemleri sil
+  try {
+    await service.from("quote_items").delete().eq("quote_id", orderId);
+  } catch {}
+
+  // 3. Siparişi sil
+  const { error: delErr } = await service.from("quotes").delete().eq("id", orderId);
+  if (delErr) {
+    console.warn("Hard delete failed, falling back to soft delete:", delErr.message);
+    await (service.from("quotes") as any).update({
+      deleted_at: new Date().toISOString(),
+      status: "cancelled",
+      converted_sale_id: null,
+      notes: "Sipariş silindi"
+    }).eq("id", orderId);
+  }
+
+  revalidatePath("/bayi-siparisleri");
+  revalidatePath("/bayi-siparis");
+  revalidatePath("/satislar");
+  revalidatePath("/dashboard");
+  revalidatePath("/stok");
+
+  return { success: true };
+}
+
+/**
+ * Reddedilmiş veya iptal edilmiş siparişi yeniden onaya sunar (sent durumuna getirir).
+ */
+export async function reopenDealerOrder(orderId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Oturum açmanız gerekiyor.");
+
+  const service = await createServiceClient();
+
+  const { error } = await (service.from("quotes") as any)
+    .update({
+      status: "sent",
+      converted_sale_id: null,
+      updated_at: new Date().toISOString(),
+      updated_by: user.id,
+    })
+    .eq("id", orderId);
+
+  if (error) throw new Error("Sipariş durumu güncellenemedi: " + error.message);
+
+  revalidatePath("/bayi-siparisleri");
+  revalidatePath(`/bayi-siparisleri/${orderId}`);
+  revalidatePath("/bayi-siparis");
+  revalidatePath("/dashboard");
+
+  return { success: true };
+}
