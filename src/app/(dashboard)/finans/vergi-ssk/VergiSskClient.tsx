@@ -12,6 +12,8 @@ import {
   Calendar,
   Building2,
   Filter,
+  Check,
+  ChevronRight,
 } from "lucide-react";
 import { InteractiveTable } from "@/components/ui/InteractiveTable";
 import {
@@ -55,6 +57,22 @@ export function VergiSskClient({ initialRecords, customColumns }: VergiSskClient
     notes: "",
   });
 
+  function openAddModal(preselectedType?: string) {
+    const typeToUse =
+      preselectedType || (selectedType !== "all" ? selectedType : "KDV");
+
+    setFormData({
+      period: new Date().toISOString().slice(0, 7),
+      tax_type: typeToUse,
+      accrual_date: new Date().toISOString().split("T")[0],
+      due_date: new Date(Date.now() + 15 * 86400000).toISOString().split("T")[0],
+      amount: 0,
+      status: "Ödenmedi",
+      notes: "",
+    });
+    setIsModalOpen(true);
+  }
+
   const filteredRecords = records.filter((r) => {
     if (selectedType !== "all" && r.tax_type !== selectedType) return false;
     if (selectedStatus === "odenen" && r.status !== "Ödendi") return false;
@@ -76,15 +94,8 @@ export function VergiSskClient({ initialRecords, customColumns }: VergiSskClient
     if (res.success && res.data) {
       setRecords((prev) => [res.data, ...prev.filter((r) => r.id !== res.data.id)]);
       setIsModalOpen(false);
-      setFormData({
-        period: new Date().toISOString().slice(0, 7),
-        tax_type: "KDV",
-        accrual_date: new Date().toISOString().split("T")[0],
-        due_date: new Date(Date.now() + 15 * 86400000).toISOString().split("T")[0],
-        amount: 0,
-        status: "Ödenmedi",
-        notes: "",
-      });
+      // Automatically switch to the added tax type so the user sees it immediately
+      setSelectedType(res.data.tax_type);
     } else {
       alert(res.error || "Vergi/SSK kaydı kaydedilemedi");
     }
@@ -133,11 +144,13 @@ export function VergiSskClient({ initialRecords, customColumns }: VergiSskClient
 
           <button
             type="button"
-            onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-4 py-2 rounded-xl text-xs transition shadow-xs"
+            onClick={() => openAddModal()}
+            className="inline-flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-4 py-2 rounded-xl text-xs transition shadow-xs"
           >
             <Plus size={16} />
-            <span>+ Yeni Vergi / SSK Girişi</span>
+            <span>
+              {selectedType !== "all" ? `${selectedType} Ekle` : "Yeni Vergi / SSK Girişi"}
+            </span>
           </button>
         </div>
       </div>
@@ -184,64 +197,97 @@ export function VergiSskClient({ initialRecords, customColumns }: VergiSskClient
         </div>
       </div>
 
-      {/* Filtre Barı */}
-      <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 rounded-xl border border-border">
-        <div className="flex flex-wrap items-center gap-1.5">
-          <span className="text-xs text-slate-400 font-semibold mr-1 flex items-center gap-1">
-            <Filter size={13} /> Tür:
-          </span>
+      {/* Kategori & Tür Sekmeleri (Açık ve Anlaşılır Sekme Çubuğu) */}
+      <div className="bg-white p-3 rounded-2xl border border-border shadow-xs space-y-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-700">
+            <Filter size={14} className="text-brand-gold" />
+            <span>Beyanname & Vergi Türüne Göre Filtrele:</span>
+          </div>
+
+          {/* Durum Filtresi */}
+          <div className="flex items-center gap-1.5 bg-slate-50 p-1 rounded-xl border border-slate-200">
+            <button
+              type="button"
+              onClick={() => setSelectedStatus("all")}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                selectedStatus === "all" ? "bg-white text-slate-900 shadow-2xs font-bold" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Tümü
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedStatus("bekleyen")}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                selectedStatus === "bekleyen" ? "bg-amber-100 text-amber-900 font-bold" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Ödenmeyenler
+            </button>
+            <button
+              type="button"
+              onClick={() => setSelectedStatus("odenen")}
+              className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                selectedStatus === "odenen" ? "bg-emerald-100 text-emerald-900 font-bold" : "text-slate-500 hover:text-slate-800"
+              }`}
+            >
+              Ödenenler
+            </button>
+          </div>
+        </div>
+
+        {/* Sekme Butonları (Her butonun yanında o türdeki kayıt adedi rozeti yer alır) */}
+        <div className="flex flex-wrap items-center gap-1.5 pt-1 border-t border-slate-100">
           <button
             type="button"
             onClick={() => setSelectedType("all")}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-              selectedType === "all" ? "bg-brand-navy text-white" : "text-slate-600 hover:bg-slate-100"
+            className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
+              selectedType === "all"
+                ? "bg-brand-navy text-white border-brand-navy shadow-xs"
+                : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
             }`}
           >
-            Tümü
-          </button>
-          {TAX_TYPES.slice(0, 6).map((type) => (
-            <button
-              key={type}
-              type="button"
-              onClick={() => setSelectedType(type)}
-              className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold transition ${
-                selectedType === type ? "bg-brand-navy text-white" : "text-slate-600 hover:bg-slate-100"
+            <span>Tümü</span>
+            <span
+              className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                selectedType === "all" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
               }`}
             >
-              {type}
-            </button>
-          ))}
-        </div>
+              {records.length}
+            </span>
+          </button>
 
-        <div className="flex items-center gap-1.5">
-          <span className="text-xs text-slate-400 font-semibold mr-1">Durum:</span>
-          <button
-            type="button"
-            onClick={() => setSelectedStatus("all")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
-              selectedStatus === "all" ? "bg-slate-200 text-slate-800" : "text-slate-500 hover:bg-slate-50"
-            }`}
-          >
-            Tümü
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedStatus("bekleyen")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
-              selectedStatus === "bekleyen" ? "bg-amber-100 text-amber-800" : "text-slate-500 hover:bg-slate-50"
-            }`}
-          >
-            Ödenmeyenler
-          </button>
-          <button
-            type="button"
-            onClick={() => setSelectedStatus("odenen")}
-            className={`px-2.5 py-1 rounded-lg text-xs font-semibold ${
-              selectedStatus === "odenen" ? "bg-emerald-100 text-emerald-800" : "text-slate-500 hover:bg-slate-50"
-            }`}
-          >
-            Ödenenler
-          </button>
+          {TAX_TYPES.map((type) => {
+            const count = records.filter((r) => r.tax_type === type).length;
+            const isSelected = selectedType === type;
+
+            return (
+              <button
+                key={type}
+                type="button"
+                onClick={() => setSelectedType(type)}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-semibold transition border ${
+                  isSelected
+                    ? "bg-brand-navy text-white border-brand-navy font-bold shadow-xs"
+                    : "bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100"
+                }`}
+              >
+                <span>{type}</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                    isSelected
+                      ? "bg-brand-gold text-brand-navy"
+                      : count > 0
+                      ? "bg-emerald-100 text-emerald-800"
+                      : "bg-slate-200 text-slate-600"
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -249,11 +295,36 @@ export function VergiSskClient({ initialRecords, customColumns }: VergiSskClient
       <div className="bg-white rounded-2xl border border-border shadow-xs overflow-hidden">
         {filteredRecords.length === 0 ? (
           <div className="p-12 text-center text-slate-400">
-            <FileSpreadsheet size={40} className="mx-auto mb-2 text-slate-300" />
-            <p className="font-semibold text-slate-600">Vergi veya SSK kaydı bulunamadı</p>
-            <p className="text-xs text-slate-400 mt-1">
-              Sağ üstteki "+ Yeni Vergi / SSK Girişi" butonuna tıklayarak ilk tahakkuk kaydını ekleyebilirsiniz.
+            <FileSpreadsheet size={44} className="mx-auto mb-2 text-slate-300" />
+            <p className="font-bold text-slate-700 text-sm">
+              {selectedType !== "all"
+                ? `Henüz kayıtlı "${selectedType}" kaydı bulunmuyor`
+                : "Kayıtlı vergi veya SSK kaydı bulunamadı"}
             </p>
+            <p className="text-xs text-slate-400 mt-1 max-w-md mx-auto">
+              {selectedType !== "all"
+                ? `Bu kategoriye ait tahakkuk eklemek için aşağıdaki butona basabilirsiniz.`
+                : `Sağ üstteki "Yeni Vergi / SSK Girişi" butonuna tıklayarak ilk tahakkuk kaydını ekleyebilirsiniz.`}
+            </p>
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={() => openAddModal(selectedType !== "all" ? selectedType : "KDV")}
+                className="inline-flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs"
+              >
+                <Plus size={14} />
+                <span>{selectedType !== "all" ? `+ ${selectedType} Ekle` : "+ Yeni Kayıt Ekle"}</span>
+              </button>
+              {selectedType !== "all" && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedType("all")}
+                  className="px-3 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-100 rounded-xl transition"
+                >
+                  Tüm Kayıtları Göster ({records.length})
+                </button>
+              )}
+            </div>
           </div>
         ) : (
           <InteractiveTable tableId="tax-records-main-table">
@@ -287,7 +358,7 @@ export function VergiSskClient({ initialRecords, customColumns }: VergiSskClient
                         {r.period}
                       </td>
                       <td className="py-3 px-4 font-bold text-slate-800">
-                        <span className="px-2 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-800">
+                        <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-slate-100 text-slate-800 border border-slate-200">
                           {r.tax_type}
                         </span>
                       </td>
@@ -357,7 +428,7 @@ export function VergiSskClient({ initialRecords, customColumns }: VergiSskClient
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6 border border-border animate-in fade-in zoom-in duration-150 my-8">
             <h3 className="text-base font-black text-slate-900 flex items-center gap-2 pb-3 border-b border-border">
               <FileSpreadsheet size={20} className="text-brand-gold" />
-              Vergi veya SSK Girişi Ekle
+              {formData.tax_type ? `${formData.tax_type} Girişi Yap` : "Vergi / SSK Girişi Ekle"}
             </h3>
 
             <form onSubmit={handleSave} className="mt-4 space-y-4">
@@ -377,7 +448,7 @@ export function VergiSskClient({ initialRecords, customColumns }: VergiSskClient
                   <select
                     value={formData.tax_type}
                     onChange={(e) => setFormData({ ...formData, tax_type: e.target.value })}
-                    className="w-full px-3 py-2 text-xs border border-border rounded-xl focus:outline-hidden focus:ring-2 focus:ring-brand-gold/40 bg-white"
+                    className="w-full px-3 py-2 text-xs border border-border rounded-xl focus:outline-hidden focus:ring-2 focus:ring-brand-gold/40 bg-white font-bold"
                   >
                     {TAX_TYPES.map((t) => (
                       <option key={t} value={t}>

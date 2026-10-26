@@ -285,10 +285,10 @@ export function BankalarClient({
             <button
               type="button"
               onClick={() => setIsLoanModalOpen(true)}
-              className="inline-flex items-center gap-2 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-4 py-2 rounded-xl text-xs transition shadow-xs"
+              className="inline-flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-4 py-2 rounded-xl text-xs transition shadow-xs"
             >
               <Plus size={16} />
-              <span>+ Yeni Kredi Ekle</span>
+              <span>Yeni Kredi Ekle</span>
             </button>
           ) : (
             <button
@@ -300,10 +300,10 @@ export function BankalarClient({
                 }));
                 setIsAccountModalOpen(true);
               }}
-              className="inline-flex items-center gap-2 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-4 py-2 rounded-xl text-xs transition shadow-xs"
+              className="inline-flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-4 py-2 rounded-xl text-xs transition shadow-xs"
             >
               <Plus size={16} />
-              <span>{activeTab === "kartlar" ? "+ Kredi Kartı Ekle" : "+ Banka Hesabı Ekle"}</span>
+              <span>{activeTab === "kartlar" ? "Kredi Kartı Ekle" : "Banka Hesabı Ekle"}</span>
             </button>
           )}
         </div>

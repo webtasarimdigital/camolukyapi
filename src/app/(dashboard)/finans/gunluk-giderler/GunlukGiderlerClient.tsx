@@ -96,6 +96,7 @@ export function GunlukGiderlerClient({
         ...prev.filter((item) => item.id !== res.data.id),
       ]);
       setIsModalOpen(false);
+      setFilterSource("all");
       setFormData({
         expense_date: new Date().toISOString().split("T")[0],
         category: "Ofis & Mutfak",
@@ -156,10 +157,10 @@ export function GunlukGiderlerClient({
           <button
             type="button"
             onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-4 py-2 rounded-xl text-xs transition shadow-xs"
+            className="inline-flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-4 py-2 rounded-xl text-xs transition shadow-xs"
           >
             <Plus size={16} />
-            <span>+ Gider Ekle</span>
+            <span>Gider Ekle</span>
           </button>
         </div>
       </div>

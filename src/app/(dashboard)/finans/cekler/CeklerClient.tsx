@@ -65,12 +65,23 @@ export function CeklerClient({ initialChecks, customColumns }: CeklerClientProps
     .filter((c) => c.status === "Ödendi" || c.status === "Tahsil Edildi")
     .reduce((sum, c) => sum + Number(c.amount || 0), 0);
 
+  function openModal(defaultType?: "verilen" | "alinan") {
+    setFormData((prev: any) => ({
+      ...prev,
+      type: defaultType || (filterType !== "all" ? filterType : "verilen"),
+    }));
+    setIsModalOpen(true);
+  }
+
   async function handleSave(e: React.FormEvent) {
     e.preventDefault();
     const res = await saveCheck(formData);
     if (res.success && res.data) {
       setChecks((prev) => [res.data, ...prev.filter((c) => c.id !== res.data.id)]);
       setIsModalOpen(false);
+      if (res.data.type) {
+        setFilterType(res.data.type);
+      }
       setFormData({
         type: "verilen",
         check_date: new Date().toISOString().split("T")[0],
@@ -131,11 +142,11 @@ export function CeklerClient({ initialChecks, customColumns }: CeklerClientProps
 
           <button
             type="button"
-            onClick={() => setIsModalOpen(true)}
-            className="inline-flex items-center gap-2 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-4 py-2 rounded-xl text-xs transition shadow-xs"
+            onClick={() => openModal()}
+            className="inline-flex items-center gap-1.5 bg-brand-gold hover:bg-brand-gold-light text-brand-navy font-bold px-4 py-2 rounded-xl text-xs transition shadow-xs"
           >
             <Plus size={16} />
-            <span>+ Yeni Çek Girişi</span>
+            <span>Yeni Çek Girişi</span>
           </button>
         </div>
       </div>

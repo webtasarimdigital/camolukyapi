@@ -68,7 +68,7 @@ export function CustomColumnButton({
         title="Tabloya yeni özel sütun ekle"
       >
         <Plus size={14} className="text-brand-gold" />
-        <span>+ Sütun Ekle</span>
+        <span>Sütun Ekle</span>
       </button>
 
       {isOpen && (
