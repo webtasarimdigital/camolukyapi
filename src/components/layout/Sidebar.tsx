@@ -32,6 +32,9 @@ import {
   Globe,
   ShoppingBag,
   Store,
+  Landmark,
+  Receipt,
+  Coins,
 } from "lucide-react";
 
 import { type UserRole } from "@/lib/auth/role-constants";
@@ -170,21 +173,47 @@ const navItems: NavItem[] = [
     allowedRoles: ["admin", "muhasebe1"],
   },
   {
-    href: "/finans",
+    id: "finans",
     label: "Finans & Analiz",
     icon: Wallet,
     allowedRoles: ["admin"],
+    subItems: [
+      {
+        href: "/finans",
+        label: "Genel Finans Özeti",
+        icon: BarChart3,
+      },
+      {
+        href: "/kiralar",
+        label: "Kiralar (Gelir/Gider)",
+        icon: Building2,
+      },
+      {
+        href: "/finans/bankalar",
+        label: "Bankalar & Krediler",
+        icon: Landmark,
+      },
+      {
+        href: "/finans/cekler",
+        label: "Çekler",
+        icon: Receipt,
+      },
+      {
+        href: "/finans/vergi-ssk",
+        label: "Vergi ve SSK",
+        icon: FileSpreadsheet,
+      },
+      {
+        href: "/finans/gunluk-giderler",
+        label: "Günlük Giderler",
+        icon: Coins,
+      },
+    ],
   },
   {
     href: "/ortak-cari",
     label: "Ortak Finans (Cari)",
     icon: Handshake,
-    allowedRoles: ["admin"],
-  },
-  {
-    href: "/kiralar",
-    label: "Kiralar (Gelir/Gider)",
-    icon: Building2,
     allowedRoles: ["admin"],
   },
   {
@@ -227,10 +256,13 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
 
   const isTeklifPath = pathname.startsWith("/teklif");
   const isSatisPath = pathname.startsWith("/satis");
+  const isFinansPath =
+    pathname.startsWith("/finans") || pathname.startsWith("/kiralar");
 
   const [openDropdowns, setOpenDropdowns] = useState<Record<string, boolean>>({
     teklif: isTeklifPath,
     satis: isSatisPath,
+    finans: isFinansPath,
   });
 
   useEffect(() => {
@@ -240,7 +272,10 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
     if (isSatisPath) {
       setOpenDropdowns((prev) => ({ ...prev, satis: true }));
     }
-  }, [pathname, isTeklifPath, isSatisPath]);
+    if (isFinansPath) {
+      setOpenDropdowns((prev) => ({ ...prev, finans: true }));
+    }
+  }, [pathname, isTeklifPath, isSatisPath, isFinansPath]);
 
   function toggleDropdown(key: string) {
     setOpenDropdowns((prev) => ({

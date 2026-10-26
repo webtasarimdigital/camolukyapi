@@ -18,6 +18,7 @@ import {
   CheckCircle2,
   User,
   Clock,
+  Landmark,
 } from "lucide-react";
 
 export default async function FinansPage() {
@@ -189,22 +190,40 @@ export default async function FinansPage() {
             Ciro, tahsilat, ödeme yöntemleri analitiği ve vadeli alacak/borç dengesi
           </p>
         </div>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <Link
-            href="/odemeler"
-            className="bg-amber-500 hover:bg-amber-600 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+            href="/finans/bankalar"
+            className="bg-brand-navy hover:bg-brand-navy-2 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5"
           >
-            <Clock size={14} /> Ödeme & Vadeler
+            <Landmark size={14} className="text-brand-gold" /> Bankalar & Krediler
+          </Link>
+          <Link
+            href="/finans/cekler"
+            className="bg-amber-500 hover:bg-amber-600 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+          >
+            <Receipt size={14} /> Çekler
+          </Link>
+          <Link
+            href="/finans/vergi-ssk"
+            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+          >
+            <FileCheck2 size={14} /> Vergi & SSK
+          </Link>
+          <Link
+            href="/finans/gunluk-giderler"
+            className="bg-rose-600 hover:bg-rose-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+          >
+            <Coins size={14} /> Günlük Giderler
           </Link>
           <Link
             href="/kiralar"
-            className="bg-purple-600 hover:bg-purple-700 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+            className="bg-purple-600 hover:bg-purple-700 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5"
           >
-            <Building2 size={14} /> Kira Gelir/Gider
+            <Building2 size={14} /> Kiralar
           </Link>
           <Link
             href="/ortak-cari"
-            className="bg-brand-navy hover:bg-brand-navy-2 text-white px-3.5 py-2 rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5"
+            className="bg-slate-700 hover:bg-slate-800 text-white px-3 py-1.5 rounded-xl text-xs font-bold transition shadow-xs flex items-center gap-1.5"
           >
             Ortak Finans (Cari)
           </Link>
