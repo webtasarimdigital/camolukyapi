@@ -35,6 +35,7 @@ import {
   Landmark,
   Receipt,
   Coins,
+  Paintbrush,
 } from "lucide-react";
 
 import { type UserRole } from "@/lib/auth/role-constants";
@@ -57,6 +58,14 @@ interface NavItem {
 }
 
 const navItems: NavItem[] = [
+  // Çamlıca Fırça Özel Sayfa (Sol En Üstte)
+  {
+    href: "/camlica-firca",
+    label: "Çamlıca Fırça",
+    icon: Paintbrush,
+    badge: "Özel",
+    allowedRoles: ["admin", "muhasebe1"],
+  },
   // Tali Bayi Özel Sipariş Menüsü (En Üstte)
   {
     href: "/bayi-siparis/yeni",

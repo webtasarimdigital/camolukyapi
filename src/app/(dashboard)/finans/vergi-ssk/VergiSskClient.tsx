@@ -21,6 +21,7 @@ import {
   CustomColumnCell,
 } from "@/components/ui/CustomColumnManager";
 import { CustomColumn } from "@/lib/data/custom-columns-actions";
+import { MonthFilter } from "@/components/ui/MonthFilter";
 import { saveTaxRecord, deleteTaxRecord, toggleTaxRecordStatus } from "./actions";
 
 interface VergiSskClientProps {
@@ -43,6 +44,8 @@ const TAX_TYPES = [
 export function VergiSskClient({ initialRecords, customColumns }: VergiSskClientProps) {
   const [records, setRecords] = useState(initialRecords);
   const [cols, setCols] = useState(customColumns);
+  const currentYM = new Date().toISOString().slice(0, 7);
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentYM);
   const [selectedType, setSelectedType] = useState<string>("all");
   const [selectedStatus, setSelectedStatus] = useState<string>("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -62,7 +65,7 @@ export function VergiSskClient({ initialRecords, customColumns }: VergiSskClient
       preselectedType || (selectedType !== "all" ? selectedType : "KDV");
 
     setFormData({
-      period: new Date().toISOString().slice(0, 7),
+      period: selectedMonth !== "all" ? selectedMonth : new Date().toISOString().slice(0, 7),
       tax_type: typeToUse,
       accrual_date: new Date().toISOString().split("T")[0],
       due_date: new Date(Date.now() + 15 * 86400000).toISOString().split("T")[0],
@@ -73,18 +76,24 @@ export function VergiSskClient({ initialRecords, customColumns }: VergiSskClient
     setIsModalOpen(true);
   }
 
-  const filteredRecords = records.filter((r) => {
+  // Ay Filtresi
+  const monthFilteredRecords = records.filter((r) => {
+    if (selectedMonth === "all") return true;
+    return r.period === selectedMonth || (r.due_date || "").startsWith(selectedMonth);
+  });
+
+  const filteredRecords = monthFilteredRecords.filter((r) => {
     if (selectedType !== "all" && r.tax_type !== selectedType) return false;
     if (selectedStatus === "odenen" && r.status !== "Ödendi") return false;
     if (selectedStatus === "bekleyen" && r.status === "Ödendi") return false;
     return true;
   });
 
-  const totalAmount = records.reduce((sum, r) => sum + Number(r.amount || 0), 0);
-  const pendingAmount = records
+  const totalAmount = monthFilteredRecords.reduce((sum, r) => sum + Number(r.amount || 0), 0);
+  const pendingAmount = monthFilteredRecords
     .filter((r) => r.status !== "Ödendi")
     .reduce((sum, r) => sum + Number(r.amount || 0), 0);
-  const paidAmount = records
+  const paidAmount = monthFilteredRecords
     .filter((r) => r.status === "Ödendi")
     .reduce((sum, r) => sum + Number(r.amount || 0), 0);
 
@@ -133,7 +142,12 @@ export function VergiSskClient({ initialRecords, customColumns }: VergiSskClient
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <MonthFilter
+            selectedMonth={selectedMonth}
+            onChange={setSelectedMonth}
+          />
+
           <CustomColumnButton
             tableId="tax_records"
             revalidateUrl="/finans/vergi-ssk"

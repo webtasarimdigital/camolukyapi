@@ -26,6 +26,7 @@ import {
   CustomColumnCell,
 } from "@/components/ui/CustomColumnManager";
 import { CustomColumn } from "@/lib/data/custom-columns-actions";
+import { MonthFilter } from "@/components/ui/MonthFilter";
 import {
   saveBankAccount,
   deleteBankAccount,
@@ -52,6 +53,8 @@ export function BankalarClient({
   const [activeTab, setActiveTab] = useState<"krediler" | "kartlar" | "hesaplar">("krediler");
   const [accounts, setAccounts] = useState(initialAccounts);
   const [loans, setLoans] = useState(initialLoans);
+  const currentYM = new Date().toISOString().slice(0, 7);
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentYM);
   const [expandedLoanId, setExpandedLoanId] = useState<string | null>(
     initialLoans[0]?.id || null
   );
@@ -142,6 +145,19 @@ export function BankalarClient({
   const totalBankBalance = regularAccounts
     .filter((a) => a.account_type === "vadesiz")
     .reduce((sum, a) => sum + (Number(a.balance) || 0), 0);
+
+  // Ay bazında taksit toplamları
+  const monthInstallments = allInstallments.filter((i) =>
+    selectedMonth === "all" ? true : (i.due_date || "").startsWith(selectedMonth)
+  );
+  const monthInstallmentsTotal = monthInstallments.reduce(
+    (sum, i) => sum + Number(i.amount || 0),
+    0
+  );
+  const monthInstallmentsPaid = monthInstallments
+    .filter((i) => i.status === "Ödendi")
+    .reduce((sum, i) => sum + Number(i.amount || 0), 0);
+  const monthInstallmentsPending = monthInstallmentsTotal - monthInstallmentsPaid;
 
   async function handleSaveAccount(e: React.FormEvent) {
     e.preventDefault();
@@ -280,7 +296,12 @@ export function BankalarClient({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <MonthFilter
+            selectedMonth={selectedMonth}
+            onChange={setSelectedMonth}
+          />
+
           {activeTab === "krediler" ? (
             <button
               type="button"
@@ -310,7 +331,7 @@ export function BankalarClient({
       </div>
 
       {/* KPI Kartları */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white p-4 rounded-xl border border-border shadow-xs">
           <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
             <Coins size={14} className="text-emerald-600" />
@@ -347,6 +368,19 @@ export function BankalarClient({
           </p>
           <span className="text-[11px] text-slate-400 mt-1 block">
             {loans.length} Aktif Taksitli Kredi
+          </span>
+        </div>
+
+        <div className="bg-white p-4 rounded-xl border border-border shadow-xs">
+          <span className="text-xs text-slate-500 font-medium flex items-center gap-1.5">
+            <Calendar size={14} className="text-blue-600" />
+            {selectedMonth === "all" ? "Tüm Taksitler" : "Bu Ay Vadesi Gelen Taksitler"}
+          </span>
+          <p className="text-2xl font-black text-blue-600 mt-1">
+            {formatCurrency(monthInstallmentsPending)}
+          </p>
+          <span className="text-[11px] text-slate-400 mt-1 block">
+            {monthInstallments.filter((i) => i.status !== "Ödendi").length} Bekleyen / {monthInstallments.length} Toplam
           </span>
         </div>
       </div>

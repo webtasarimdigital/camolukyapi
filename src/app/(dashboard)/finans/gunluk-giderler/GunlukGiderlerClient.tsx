@@ -22,6 +22,7 @@ import {
   CustomColumnCell,
 } from "@/components/ui/CustomColumnManager";
 import { CustomColumn } from "@/lib/data/custom-columns-actions";
+import { MonthFilter } from "@/components/ui/MonthFilter";
 import {
   saveDailyExpense,
   deleteDailyExpense,
@@ -51,6 +52,8 @@ export function GunlukGiderlerClient({
 }: GunlukGiderlerClientProps) {
   const [expenses, setExpenses] = useState(initialExpenses);
   const [cols, setCols] = useState(customColumns);
+  const currentYM = new Date().toISOString().slice(0, 7);
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentYM);
   const [filterSource, setFilterSource] = useState<"all" | "manual" | "fuel" | "advance">("all");
   const [filterStatus, setFilterStatus] = useState<"all" | "odenen" | "bekleyen">("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -65,8 +68,14 @@ export function GunlukGiderlerClient({
     notes: "",
   });
 
-  // Filtered List
-  const filtered = expenses.filter((e) => {
+  // Ay bazında filtreleme
+  const monthFilteredExpenses = expenses.filter((e) => {
+    if (selectedMonth === "all") return true;
+    return (e.expense_date || "").startsWith(selectedMonth);
+  });
+
+  // Nihai filtrelenmiş liste
+  const filtered = monthFilteredExpenses.filter((e) => {
     if (filterSource === "manual" && e.source_type !== "manual") return false;
     if (filterSource === "fuel" && e.source_type !== "vehicle_fuel") return false;
     if (filterSource === "advance" && e.source_type !== "employee_advance") return false;
@@ -75,15 +84,15 @@ export function GunlukGiderlerClient({
     return true;
   });
 
-  // Total Volumes (Fuel & Advance dynamically increase total as requested!)
-  const totalExpense = expenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
-  const fuelExpense = expenses
+  // Toplam Tutarlar (Seçili aya göre hesaplanır)
+  const totalExpense = monthFilteredExpenses.reduce((sum, e) => sum + Number(e.amount || 0), 0);
+  const fuelExpense = monthFilteredExpenses
     .filter((e) => e.source_type === "vehicle_fuel")
     .reduce((sum, e) => sum + Number(e.amount || 0), 0);
-  const advanceExpense = expenses
+  const advanceExpense = monthFilteredExpenses
     .filter((e) => e.source_type === "employee_advance")
     .reduce((sum, e) => sum + Number(e.amount || 0), 0);
-  const manualExpense = expenses
+  const manualExpense = monthFilteredExpenses
     .filter((e) => e.source_type === "manual")
     .reduce((sum, e) => sum + Number(e.amount || 0), 0);
 
@@ -145,7 +154,12 @@ export function GunlukGiderlerClient({
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <MonthFilter
+            selectedMonth={selectedMonth}
+            onChange={setSelectedMonth}
+          />
+
           <CustomColumnButton
             tableId="daily_expenses"
             revalidateUrl="/finans/gunluk-giderler"

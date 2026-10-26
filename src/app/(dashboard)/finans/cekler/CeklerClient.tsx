@@ -21,6 +21,7 @@ import {
   CustomColumnCell,
 } from "@/components/ui/CustomColumnManager";
 import { CustomColumn } from "@/lib/data/custom-columns-actions";
+import { MonthFilter } from "@/components/ui/MonthFilter";
 import { saveCheck, deleteCheck, toggleCheckStatus } from "./actions";
 
 interface CeklerClientProps {
@@ -31,6 +32,8 @@ interface CeklerClientProps {
 export function CeklerClient({ initialChecks, customColumns }: CeklerClientProps) {
   const [checks, setChecks] = useState(initialChecks);
   const [cols, setCols] = useState(customColumns);
+  const currentYM = new Date().toISOString().slice(0, 7);
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentYM);
   const [filterType, setFilterType] = useState<"all" | "verilen" | "alinan">("all");
   const [filterStatus, setFilterStatus] = useState<"all" | "bekleyen" | "odenen">("all");
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -49,19 +52,25 @@ export function CeklerClient({ initialChecks, customColumns }: CeklerClientProps
     notes: "",
   });
 
-  // KPI Calculations
-  const filteredChecks = checks.filter((c) => {
+  // Ay Filtresi
+  const monthFilteredChecks = checks.filter((c) => {
+    if (selectedMonth === "all") return true;
+    return (c.due_date || "").startsWith(selectedMonth);
+  });
+
+  // Nihai Tablo Filtresi
+  const filteredChecks = monthFilteredChecks.filter((c) => {
     if (filterType !== "all" && c.type !== filterType) return false;
     if (filterStatus === "bekleyen" && (c.status === "Ödendi" || c.status === "Tahsil Edildi")) return false;
     if (filterStatus === "odenen" && c.status !== "Ödendi" && c.status !== "Tahsil Edildi") return false;
     return true;
   });
 
-  const totalVolume = checks.reduce((sum, c) => sum + Number(c.amount || 0), 0);
-  const pendingVolume = checks
+  const totalVolume = monthFilteredChecks.reduce((sum, c) => sum + Number(c.amount || 0), 0);
+  const pendingVolume = monthFilteredChecks
     .filter((c) => c.status !== "Ödendi" && c.status !== "Tahsil Edildi")
     .reduce((sum, c) => sum + Number(c.amount || 0), 0);
-  const paidVolume = checks
+  const paidVolume = monthFilteredChecks
     .filter((c) => c.status === "Ödendi" || c.status === "Tahsil Edildi")
     .reduce((sum, c) => sum + Number(c.amount || 0), 0);
 
@@ -131,7 +140,12 @@ export function CeklerClient({ initialChecks, customColumns }: CeklerClientProps
           </p>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <MonthFilter
+            selectedMonth={selectedMonth}
+            onChange={setSelectedMonth}
+          />
+
           <CustomColumnButton
             tableId="checks"
             revalidateUrl="/finans/cekler"
