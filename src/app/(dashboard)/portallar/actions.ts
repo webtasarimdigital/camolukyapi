@@ -1,12 +1,13 @@
 "use server";
 
-import { createClient } from "@/lib/supabase/server";
+import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
 import type { CompanyPortal, TaliBayiOption } from "./types";
 
 async function getCompanyAndUser() {
   const supabase = await createClient();
+  const service = await createServiceClient();
   const {
     data: { user },
   } = await supabase.auth.getUser();
@@ -16,7 +17,7 @@ async function getCompanyAndUser() {
   let userRole = "staff";
 
   if (user) {
-    const { data: profile } = (await supabase
+    const { data: profile } = (await service
       .from("profiles")
       .select("company_id, full_name, role")
       .eq("id", user.id)
@@ -34,7 +35,7 @@ async function getCompanyAndUser() {
   const cookieRole = cookieStore.get("app_active_role")?.value;
   if (userRole === "admin" && cookieRole) userRole = cookieRole;
 
-  return { supabase, user, companyId, userName, userRole };
+  return { supabase, service, user, companyId, userName, userRole };
 }
 
 /**
@@ -42,8 +43,8 @@ async function getCompanyAndUser() {
  */
 export async function getTaliBayiler(): Promise<TaliBayiOption[]> {
   try {
-    const { supabase, companyId } = await getCompanyAndUser();
-    const { data, error } = await supabase
+    const { service, companyId } = await getCompanyAndUser();
+    const { data, error } = await service
       .from("profiles")
       .select("id, full_name, role, is_active")
       .eq("company_id", companyId)
@@ -76,8 +77,8 @@ export async function getTaliBayiler(): Promise<TaliBayiOption[]> {
  */
 export async function getPortals(): Promise<CompanyPortal[]> {
   try {
-    const { supabase, user, companyId, userRole } = await getCompanyAndUser();
-    const { data, error } = await (supabase.from("portals") as any)
+    const { service, user, companyId, userRole } = await getCompanyAndUser();
+    const { data, error } = await (service.from("portals") as any)
       .select("*")
       .order("created_at", { ascending: true });
 
@@ -123,7 +124,7 @@ export async function getPortals(): Promise<CompanyPortal[]> {
         },
       ];
 
-      const { data: seeded } = await (supabase.from("portals") as any)
+      const { data: seeded } = await (service.from("portals") as any)
         .insert(initialPortals)
         .select();
 
@@ -131,7 +132,7 @@ export async function getPortals(): Promise<CompanyPortal[]> {
     }
 
     // camlica_firca_rows üzerinden her portal için yetkili tali bayileri çek
-    const { data: permRows } = await (supabase
+    const { data: permRows } = await (service
       .from("camlica_firca_rows") as any)
       .select("row_data")
       .eq("company_id", companyId)
@@ -177,12 +178,12 @@ export async function updatePortalBayiPermissions(
   allowed_bayi_ids: string[]
 ) {
   try {
-    const { supabase, companyId, userRole } = await getCompanyAndUser();
+    const { service, companyId, userRole } = await getCompanyAndUser();
     if (!["admin", "muhasebe1"].includes(userRole)) {
       return { success: false, error: "Yetkiniz bulunmuyor! Yalnızca yöneticiler yetki verebilir." };
     }
 
-    const { data: existing } = await (supabase.from("camlica_firca_rows") as any)
+    const { data: existing } = await (service.from("camlica_firca_rows") as any)
       .select("id")
       .eq("company_id", companyId)
       .eq("row_data->>_module", "portal_bayi_access")
@@ -197,13 +198,13 @@ export async function updatePortalBayiPermissions(
     };
 
     if (existing && existing.length > 0) {
-      const { error } = await (supabase.from("camlica_firca_rows") as any)
+      const { error } = await (service.from("camlica_firca_rows") as any)
         .update({ row_data: payload })
         .eq("id", existing[0].id);
 
       if (error) throw new Error(error.message);
     } else {
-      const { error } = await (supabase.from("camlica_firca_rows") as any)
+      const { error } = await (service.from("camlica_firca_rows") as any)
         .insert({
           company_id: companyId,
           row_data: payload,
@@ -231,7 +232,7 @@ export async function savePortal(input: {
   allowed_bayi_ids?: string[];
 }) {
   try {
-    const { supabase, companyId, userName, userRole } = await getCompanyAndUser();
+    const { service, companyId, userName, userRole } = await getCompanyAndUser();
     if (["tali_bayi", "bayi", "depo", "sofor"].includes(userRole)) {
       return { success: false, error: "Yetkiniz bulunmuyor! Yalnızca görüntüleme yetkiniz bulunmaktadır." };
     }
@@ -240,7 +241,7 @@ export async function savePortal(input: {
     let portalRecord: CompanyPortal;
 
     if (input.id) {
-      const { data, error } = await (supabase.from("portals") as any)
+      const { data, error } = await (service.from("portals") as any)
         .update({
           title: input.title.trim(),
           category: input.category,
@@ -256,7 +257,7 @@ export async function savePortal(input: {
       if (error) throw new Error(error.message);
       portalRecord = data as CompanyPortal;
     } else {
-      const { data, error } = await (supabase.from("portals") as any)
+      const { data, error } = await (service.from("portals") as any)
         .insert({
           company_id: companyId,
           title: input.title.trim(),
@@ -296,18 +297,18 @@ export async function savePortal(input: {
 
 export async function deletePortal(id: string) {
   try {
-    const { supabase, companyId, userRole } = await getCompanyAndUser();
+    const { service, companyId, userRole } = await getCompanyAndUser();
     if (!["admin", "muhasebe1"].includes(userRole)) {
       return { success: false, error: "Yetkiniz bulunmuyor! Yalnızca yöneticiler portal silebilir." };
     }
 
     // 1. Portal tablosundan sil
-    const { error } = await (supabase.from("portals") as any).delete().eq("id", id);
+    const { error } = await (service.from("portals") as any).delete().eq("id", id);
     if (error) throw new Error(error.message);
 
     // 2. Yetki tablosundan sil
     try {
-      await (supabase
+      await (service
         .from("camlica_firca_rows") as any)
         .delete()
         .eq("company_id", companyId)
