@@ -32,10 +32,12 @@ export interface WarehouseDeliveryRecord {
   received_date?: string;
   received_by?: string;
   received_image_url?: string;
+  received_images?: string[];
   // Depodan Teslim Alınan (Çıkış)
   delivered_date?: string;
   delivered_by?: string;
   delivered_image_url?: string;
+  delivered_images?: string[];
   // Geriye dönük uyumluluk alanları
   delivery_date?: string;
   receipt_image_url?: string;
@@ -188,10 +190,12 @@ export async function getWarehousePageData(): Promise<{
         received_date: data.received_date || (isDepoya ? data.delivery_date : "") || "",
         received_by: data.received_by || (isDepoya ? data.delivered_by : "") || "",
         received_image_url: data.received_image_url || (isDepoya ? data.receipt_image_url : "") || "",
+        received_images: data.received_images || (data.received_image_url ? [data.received_image_url] : (isDepoya && data.receipt_image_url ? [data.receipt_image_url] : [])),
         // Depodan Teslim Alınan
         delivered_date: data.delivered_date || (!isDepoya && data.delivery_date ? data.delivery_date : "") || "",
         delivered_by: data.delivered_by || (!isDepoya && data.delivered_by ? data.delivered_by : "") || "",
         delivered_image_url: data.delivered_image_url || (!isDepoya && data.receipt_image_url ? data.receipt_image_url : "") || "",
+        delivered_images: data.delivered_images || (data.delivered_image_url ? [data.delivered_image_url] : (!isDepoya && data.receipt_image_url ? [data.receipt_image_url] : [])),
         // Geriye dönük uyumluluk
         delivery_date: data.delivery_date || data.received_date || data.delivered_date || r.created_at?.slice(0, 10) || "",
         delivered_by_legacy: data.delivered_by || "",
@@ -327,10 +331,12 @@ export async function saveDeliveryRecord(record: {
   received_date?: string;
   received_by?: string;
   received_image_url?: string;
+  received_images?: string[];
   // Depodan Teslim Alınan
   delivered_date?: string;
   delivered_by?: string;
   delivered_image_url?: string;
+  delivered_images?: string[];
   // Geriye dönük uyumluluk alanları
   delivery_date?: string;
   delivered_by_legacy?: string;
@@ -364,11 +370,13 @@ export async function saveDeliveryRecord(record: {
       // Depoya Teslim Edilen
       received_date: record.received_date !== undefined ? record.received_date : (prevData.received_date || ""),
       received_by: record.received_by !== undefined ? record.received_by : (prevData.received_by || ""),
-      received_image_url: record.received_image_url !== undefined ? record.received_image_url : (prevData.received_image_url || ""),
+      received_image_url: (record.received_images && record.received_images.length > 0) ? record.received_images[0] : (record.received_image_url !== undefined ? record.received_image_url : (prevData.received_image_url || "")),
+      received_images: record.received_images !== undefined ? record.received_images : (prevData.received_images || (prevData.received_image_url ? [prevData.received_image_url] : [])),
       // Depodan Teslim Alınan
       delivered_date: record.delivered_date !== undefined ? record.delivered_date : (prevData.delivered_date || ""),
       delivered_by: record.delivered_by !== undefined ? record.delivered_by : (prevData.delivered_by || ""),
-      delivered_image_url: record.delivered_image_url !== undefined ? record.delivered_image_url : (prevData.delivered_image_url || ""),
+      delivered_image_url: (record.delivered_images && record.delivered_images.length > 0) ? record.delivered_images[0] : (record.delivered_image_url !== undefined ? record.delivered_image_url : (prevData.delivered_image_url || "")),
+      delivered_images: record.delivered_images !== undefined ? record.delivered_images : (prevData.delivered_images || (prevData.delivered_image_url ? [prevData.delivered_image_url] : [])),
       // Geriye uyumluluk
       delivery_date: record.received_date || record.delivered_date || record.delivery_date || prevData.delivery_date || "",
       receipt_image_url: record.received_image_url || record.delivered_image_url || record.receipt_image_url || prevData.receipt_image_url || "",
@@ -558,3 +566,105 @@ export async function updateWarehouseCell(
     return { success: false, error: err.message };
   }
 }
+
+export async function quickAddPhotoToDelivery(
+  recordId: string,
+  target: "received" | "delivered",
+  photoUrl: string,
+  userName?: string
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const companyId = await getCompanyId();
+    const service: any = await createServiceClient();
+
+    const { data: existing } = await service
+      .from("camlica_firca_rows")
+      .select("row_data")
+      .eq("company_id", companyId)
+      .eq("id", recordId)
+      .single();
+
+    if (!existing?.row_data) throw new Error("Kayıt bulunamadı.");
+
+    const rowData = { ...existing.row_data };
+    const today = new Date().toISOString().slice(0, 10);
+
+    if (target === "received") {
+      const curImages = rowData.received_images || (rowData.received_image_url ? [rowData.received_image_url] : []);
+      const newImages = [...curImages, photoUrl];
+      rowData.received_images = newImages;
+      rowData.received_image_url = newImages[0];
+      if (!rowData.received_date) rowData.received_date = today;
+      if (!rowData.received_by && userName) rowData.received_by = userName;
+    } else {
+      const curImages = rowData.delivered_images || (rowData.delivered_image_url ? [rowData.delivered_image_url] : []);
+      const newImages = [...curImages, photoUrl];
+      rowData.delivered_images = newImages;
+      rowData.delivered_image_url = newImages[0];
+      if (!rowData.delivered_date) rowData.delivered_date = today;
+      if (!rowData.delivered_by && userName) rowData.delivered_by = userName;
+    }
+
+    const { data, error } = await service
+      .from("camlica_firca_rows")
+      .update({
+        row_data: rowData,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("company_id", companyId)
+      .eq("id", recordId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    revalidatePath("/depo-takip");
+    return { success: true, data };
+  } catch (err: any) {
+    console.error("quickAddPhotoToDelivery error:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function quickAddPhotoToBroken(
+  recordId: string,
+  photoUrl: string
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const companyId = await getCompanyId();
+    const service: any = await createServiceClient();
+
+    const { data: existing } = await service
+      .from("camlica_firca_rows")
+      .select("row_data")
+      .eq("company_id", companyId)
+      .eq("id", recordId)
+      .single();
+
+    if (!existing?.row_data) throw new Error("Kayıt bulunamadı.");
+
+    const rowData = { ...existing.row_data };
+    const curImages = rowData.images || (rowData.image_url ? [rowData.image_url] : []);
+    const newImages = [...curImages, photoUrl];
+    rowData.images = newImages;
+    rowData.image_url = newImages[0];
+
+    const { data, error } = await service
+      .from("camlica_firca_rows")
+      .update({
+        row_data: rowData,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("company_id", companyId)
+      .eq("id", recordId)
+      .select()
+      .single();
+
+    if (error) throw error;
+    revalidatePath("/depo-takip");
+    return { success: true, data };
+  } catch (err: any) {
+    console.error("quickAddPhotoToBroken error:", err);
+    return { success: false, error: err.message };
+  }
+}
+
