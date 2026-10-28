@@ -52,10 +52,28 @@ export default async function SevkiyatPage() {
     console.error("SevkiyatPage getVehicles error:", err);
   }
 
+  let customers: { id: string; name: string; phone: string | null; contact_name: string | null }[] = [];
+  try {
+    const supabase = await createClient();
+    const { data: custs } = await supabase
+      .from("customers")
+      .select("id, company_name, contact_name, phone")
+      .order("company_name", { ascending: true });
+    customers = (custs || []).map((c: any) => ({
+      id: c.id,
+      name: c.company_name || c.contact_name || "",
+      phone: c.phone || null,
+      contact_name: c.contact_name || null,
+    }));
+  } catch (err) {
+    console.error("SevkiyatPage getCustomers error:", err);
+  }
+
   return (
     <ShipmentClient
       initialShipments={shipments}
       initialVehicles={vehicles}
+      initialCustomers={customers}
       userRole={userRole}
       userName={userName}
     />

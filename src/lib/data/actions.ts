@@ -123,6 +123,12 @@ export async function actionSaveShipment(formData: FormData) {
     const m2 = formData.get("m2") !== null && formData.get("m2") !== "" ? parseFloat(formData.get("m2") as string) : (existingShipment?.m2 || 0);
     const pallet_count = formData.get("pallet_count") !== null && formData.get("pallet_count") !== "" ? parseFloat(formData.get("pallet_count") as string) : (existingShipment?.pallet_count || 0);
     const preparation_notes = (formData.get("preparation_notes") as string) ?? existingShipment?.preparation_notes ?? "";
+    const contact_phone = formData.get("contact_phone") !== null
+      ? ((formData.get("contact_phone") as string).trim() || null)
+      : (existingShipment?.contact_phone || null);
+    const contact_name = formData.get("contact_name") !== null
+      ? ((formData.get("contact_name") as string).trim() || null)
+      : (existingShipment?.contact_name || null);
     const status = (formData.get("status") as Shipment["status"]) || existingShipment?.status || "Depoya Gitti";
 
     const shipment_date = (formData.get("shipment_date") as string) || existingShipment?.shipment_date || new Date().toISOString().split("T")[0];
@@ -151,6 +157,8 @@ export async function actionSaveShipment(formData: FormData) {
       m2,
       pallet_count,
       preparation_notes,
+      contact_phone,
+      contact_name,
       status,
       shipment_date,
       shipment_time,

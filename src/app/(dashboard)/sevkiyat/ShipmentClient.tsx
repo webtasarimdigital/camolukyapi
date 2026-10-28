@@ -32,11 +32,14 @@ import {
   Eye,
   CalendarDays,
   CheckCircle,
+  Phone,
+  MessageSquare,
 } from "lucide-react";
 
 interface Props {
   initialShipments: Shipment[];
   initialVehicles?: Vehicle[];
+  initialCustomers?: { id: string; name: string; phone: string | null; contact_name: string | null }[];
   userRole: string;
   userName: string;
 }
@@ -46,11 +49,13 @@ type ShipmentTab = "all" | "today" | "upcoming" | "delivered" | "otobil";
 export function ShipmentClient({
   initialShipments,
   initialVehicles = [],
+  initialCustomers = [],
   userRole = "staff",
   userName = "Kullanıcı",
 }: Props) {
   const [shipments, setShipments] = useState<Shipment[]>(initialShipments);
   const [vehicles] = useState<Vehicle[]>(initialVehicles);
+  const [customers] = useState(initialCustomers);
   const [search, setSearch] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [officialFilter, setOfficialFilter] = useState<string>("all");
@@ -65,6 +70,9 @@ export function ShipmentClient({
   const [selectedVehiclePlate, setSelectedVehiclePlate] = useState<string>("");
   const [driverNameInput, setDriverNameInput] = useState<string>("");
   const [modalDestination, setModalDestination] = useState<string>("");
+  const [modalCustomerName, setModalCustomerName] = useState<string>("");
+  const [modalContactPhone, setModalContactPhone] = useState<string>("");
+  const [modalContactName, setModalContactName] = useState<string>("");
   const [photoUploading, setPhotoUploading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -99,6 +107,8 @@ export function ShipmentClient({
       const matchQ =
         !q ||
         s.customer_name.toLowerCase().includes(q) ||
+        (s.contact_name && s.contact_name.toLowerCase().includes(q)) ||
+        (s.contact_phone && s.contact_phone.toLowerCase().includes(q)) ||
         s.seller.toLowerCase().includes(q) ||
         s.receipt_no.toLowerCase().includes(q) ||
         s.destination.toLowerCase().includes(q) ||
@@ -152,6 +162,23 @@ export function ShipmentClient({
   const countSevkiyatta = shipments.filter((s) => s.status === "Sevkiyata Çıktı").length;
   const countTeslim = shipments.filter((s) => s.status === "Teslim Edildi").length;
 
+  function handleCustomerChange(name: string) {
+    setModalCustomerName(name);
+    const trimmed = name.trim().toLowerCase();
+    if (!trimmed) return;
+    const found = customers.find(
+      (c) => c.name.toLowerCase().trim() === trimmed || (c.contact_name && c.contact_name.toLowerCase().trim() === trimmed)
+    );
+    if (found) {
+      if (!modalContactPhone && found.phone) {
+        setModalContactPhone(found.phone);
+      }
+      if (!modalContactName && found.contact_name && found.contact_name !== found.name) {
+        setModalContactName(found.contact_name);
+      }
+    }
+  }
+
   function handleOpenNew() {
     if (!canCreate) {
       toast.error("Yetkiniz bulunmuyor! Yeni sevkiyat kaydı ekleme yetkiniz yoktur.");
@@ -162,6 +189,9 @@ export function ShipmentClient({
     setSelectedVehiclePlate("");
     setDriverNameInput("");
     setModalDestination("");
+    setModalCustomerName("");
+    setModalContactPhone("");
+    setModalContactName("");
     setIsModalOpen(true);
   }
 
@@ -171,6 +201,9 @@ export function ShipmentClient({
     setSelectedVehiclePlate(item.vehicle_plate || "");
     setDriverNameInput(item.driver_name || "");
     setModalDestination(item.destination || "");
+    setModalCustomerName(item.customer_name || "");
+    setModalContactPhone(item.contact_phone || "");
+    setModalContactName(item.contact_name || "");
     setIsModalOpen(true);
   }
 
@@ -286,6 +319,9 @@ export function ShipmentClient({
     formData.set("photos", JSON.stringify(modalPhotos));
     if (selectedVehiclePlate) formData.set("vehicle_plate", selectedVehiclePlate);
     if (driverNameInput) formData.set("driver_name", driverNameInput);
+    if (modalCustomerName) formData.set("customer_name", modalCustomerName);
+    formData.set("contact_phone", modalContactPhone);
+    formData.set("contact_name", modalContactName);
 
     startTransition(async () => {
       try {
@@ -667,7 +703,38 @@ export function ShipmentClient({
                             {item.receipt_no || "-"}
                           </td>
                           <td className="py-3 px-4 font-bold text-text">
-                            {item.customer_name}
+                            <div>{item.customer_name}</div>
+                            {(item.contact_name || item.contact_phone) && (
+                              <div className="mt-1 flex flex-col gap-0.5 font-normal">
+                                {item.contact_name && (
+                                  <span className="text-[11px] text-text-muted flex items-center gap-1">
+                                    <User size={11} className="text-brand-navy shrink-0" />
+                                    <span className="font-medium text-text">{item.contact_name}</span>
+                                  </span>
+                                )}
+                                {item.contact_phone && (
+                                  <div className="flex items-center gap-1.5 mt-0.5">
+                                    <a
+                                      href={`tel:${item.contact_phone.replace(/\s+/g, '')}`}
+                                      className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-700 hover:text-emerald-900 font-semibold hover:underline"
+                                      title="Telefonla Ara"
+                                    >
+                                      <Phone size={11} className="shrink-0" />
+                                      <span>{item.contact_phone}</span>
+                                    </a>
+                                    <a
+                                      href={`https://wa.me/${item.contact_phone.replace(/\D/g, '').replace(/^0/, '90')}`}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center justify-center p-0.5 rounded bg-green-100 hover:bg-green-200 text-green-700 transition"
+                                      title="WhatsApp Mesajı"
+                                    >
+                                      <MessageSquare size={11} />
+                                    </a>
+                                  </div>
+                                )}
+                              </div>
+                            )}
                           </td>
                           <td className="py-3 px-4 text-text-muted">
                             {item.seller || "-"}
@@ -854,6 +921,44 @@ export function ShipmentClient({
                         ) : null}
                       </div>
 
+                      {/* İrtibat & Telefon (Şoför Kolay Görsün & Tek Tıkla Arasın) */}
+                      {(item.contact_phone || item.contact_name) ? (
+                        <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-lg p-2.5 flex items-center justify-between gap-2 shadow-xs">
+                          <div className="min-w-0 flex-1">
+                            <div className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide flex items-center gap-1">
+                              <User size={11} className="text-emerald-700 shrink-0" />
+                              <span className="truncate">{item.contact_name || "İrtibat Yetkilisi"}</span>
+                            </div>
+                            {item.contact_phone && (
+                              <div className="text-xs font-bold text-emerald-950 font-mono mt-0.5">
+                                {item.contact_phone}
+                              </div>
+                            )}
+                          </div>
+                          {item.contact_phone && (
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <a
+                                href={`tel:${item.contact_phone.replace(/\s+/g, '')}`}
+                                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm transition"
+                                title="Telefonla Ara"
+                              >
+                                <Phone size={13} />
+                                <span>Ara</span>
+                              </a>
+                              <a
+                                href={`https://wa.me/${item.contact_phone.replace(/\D/g, '').replace(/^0/, '90')}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="inline-flex items-center justify-center bg-green-500 hover:bg-green-600 active:scale-95 text-white p-2 rounded-lg shadow-sm transition"
+                                title="WhatsApp ile Yaz"
+                              >
+                                <MessageSquare size={14} />
+                              </a>
+                            </div>
+                          )}
+                        </div>
+                      ) : null}
+
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 border-t border-border/50">
                         <div className="flex items-center gap-2">
                           {item.vehicle_plate && (
@@ -1019,8 +1124,10 @@ export function ShipmentClient({
                     type="text"
                     required
                     name="customer_name"
+                    list="customer-suggestions"
                     readOnly={isDriverOrDepo || isDealer}
-                    defaultValue={editingShipment?.customer_name || ""}
+                    value={modalCustomerName}
+                    onChange={(e) => handleCustomerChange(e.target.value)}
                     placeholder="Örn: Yılmaz İnşaat Ltd."
                     className={`w-full border border-border rounded-lg px-3 py-2 outline-none font-semibold ${
                       isDriverOrDepo || isDealer
@@ -1028,6 +1135,11 @@ export function ShipmentClient({
                         : "bg-surface focus:bg-white focus:border-brand-navy"
                     }`}
                   />
+                  <datalist id="customer-suggestions">
+                    {customers.map((c) => (
+                      <option key={c.id} value={c.name} />
+                    ))}
+                  </datalist>
                 </div>
                 <div>
                   <label className="block font-semibold text-text mb-1">Satıcı / Temsilci</label>
@@ -1170,6 +1282,64 @@ export function ShipmentClient({
                       : "bg-surface focus:bg-white focus:border-brand-navy"
                   }`}
                 />
+              </div>
+
+              {/* Teslimat İrtibat & Telefon Bilgileri */}
+              <div className="bg-emerald-50/70 p-3 rounded-xl border border-emerald-200/80 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-bold text-emerald-900 uppercase flex items-center gap-1.5">
+                    <Phone size={13} className="text-emerald-700" />
+                    Teslimat İrtibat & Telefon Bilgileri
+                  </span>
+                  <span className="text-[10px] text-emerald-700 font-medium hidden sm:inline">Şoförün teslimatta arayacağı yetkili</span>
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block font-semibold text-text mb-1 flex items-center gap-1 text-[11px]">
+                      <User size={12} className="text-emerald-800" />
+                      İrtibat Kişisi / Şantiye Yetkilisi
+                    </label>
+                    <input
+                      type="text"
+                      name="contact_name"
+                      readOnly={isDealer}
+                      value={modalContactName}
+                      onChange={(e) => setModalContactName(e.target.value)}
+                      placeholder="Örn: Ahmet Usta / Mehmet Bey"
+                      className={`w-full border border-border rounded-lg px-3 py-2 outline-none text-xs ${
+                        isDealer ? "bg-slate-100 cursor-default" : "bg-white focus:border-brand-navy"
+                      }`}
+                    />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-text mb-1 flex items-center gap-1 text-[11px]">
+                      <Phone size={12} className="text-emerald-800" />
+                      İrtibat Telefon Numarası
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="tel"
+                        name="contact_phone"
+                        readOnly={isDealer}
+                        value={modalContactPhone}
+                        onChange={(e) => setModalContactPhone(e.target.value)}
+                        placeholder="Örn: 0532 123 45 67"
+                        className={`w-full border border-border rounded-lg pl-3 pr-8 py-2 outline-none font-mono text-xs ${
+                          isDealer ? "bg-slate-100 cursor-default" : "bg-white focus:border-brand-navy"
+                        }`}
+                      />
+                      {modalContactPhone && (
+                        <a
+                          href={`tel:${modalContactPhone.replace(/\s+/g, '')}`}
+                          className="absolute right-2.5 top-2 text-emerald-600 hover:text-emerald-800 transition"
+                          title="Telefonu Test Et / Ara"
+                        >
+                          <Phone size={14} />
+                        </a>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">

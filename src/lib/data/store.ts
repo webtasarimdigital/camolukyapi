@@ -35,6 +35,61 @@ const memFallback: Record<string, any[]> = {
   rents: [],
 };
 
+// ──────────────────── SEVKİYAT İRTİBAT YARDIMCILARI ────────────────────
+export function parseShipmentContact(preparationNotes: string | null | undefined): {
+  contact_phone: string | null;
+  contact_name: string | null;
+  clean_notes: string;
+} {
+  if (!preparationNotes) return { contact_phone: null, contact_name: null, clean_notes: "" };
+
+  const contactRegex = /\[(?:(?:İrtibat|Tel|Telefon):\s*([^|\]]*?))?(?:\s*\|\s*(?:Kişi|Yetkili):\s*([^\]]*?))?\]/i;
+  const match = preparationNotes.match(contactRegex);
+
+  if (match && (match[1] || match[2])) {
+    const contact_phone = match[1]?.trim() || null;
+    const contact_name = match[2]?.trim() || null;
+    const clean_notes = preparationNotes.replace(contactRegex, "").trim();
+    return { contact_phone, contact_name, clean_notes };
+  }
+
+  const altRegex = /\[(?:Kişi|Yetkili):\s*([^|\]]*?)(?:\s*\|\s*(?:İrtibat|Tel|Telefon):\s*([^\]]*?))?\]/i;
+  const altMatch = preparationNotes.match(altRegex);
+  if (altMatch && (altMatch[1] || altMatch[2])) {
+    const contact_name = altMatch[1]?.trim() || null;
+    const contact_phone = altMatch[2]?.trim() || null;
+    const clean_notes = preparationNotes.replace(altRegex, "").trim();
+    return { contact_phone, contact_name, clean_notes };
+  }
+
+  const phoneRegex = /(?:\+?90\s*|0)?5\d{2}[\s\.-]?\d{3}[\s\.-]?\d{2}[\s\.-]?\d{2}/;
+  const phoneMatch = preparationNotes.match(phoneRegex);
+  if (phoneMatch) {
+    return {
+      contact_phone: phoneMatch[0].trim(),
+      contact_name: null,
+      clean_notes: preparationNotes,
+    };
+  }
+
+  return { contact_phone: null, contact_name: null, clean_notes: preparationNotes };
+}
+
+export function formatShipmentNotes(
+  notes: string | null | undefined,
+  contact_phone: string | null | undefined,
+  contact_name: string | null | undefined
+): string {
+  const { clean_notes } = parseShipmentContact(notes || "");
+  const phone = contact_phone?.trim();
+  const name = contact_name?.trim();
+
+  if (!phone && !name) return clean_notes;
+
+  const tag = `[İrtibat: ${phone || ""} | Kişi: ${name || ""}]`;
+  return clean_notes ? `${tag} ${clean_notes}` : tag;
+}
+
 // ──────────────────── SEVKİYAT ────────────────────
 export async function getShipments(): Promise<Shipment[]> {
   try {
@@ -47,8 +102,38 @@ export async function getShipments(): Promise<Shipment[]> {
       console.error("getShipments error:", error);
       return memFallback.shipments as Shipment[];
     }
-    memFallback.shipments = data || [];
-    return (data || []) as Shipment[];
+
+    // Müşteriler tablosundan eşleştirme desteği
+    let custMap: Record<string, { phone: string | null; contact_name: string | null }> = {};
+    try {
+      const { data: custs } = await supabase
+        .from("customers")
+        .select("company_name, contact_name, phone");
+      if (custs) {
+        for (const c of custs) {
+          if (c.company_name) {
+            custMap[c.company_name.toLowerCase().trim()] = { phone: c.phone, contact_name: c.contact_name };
+          }
+          if (c.contact_name) {
+            custMap[c.contact_name.toLowerCase().trim()] = { phone: c.phone, contact_name: c.contact_name };
+          }
+        }
+      }
+    } catch {}
+
+    const mapped = (data || []).map((row: any) => {
+      const parsed = parseShipmentContact(row.preparation_notes);
+      const custMatch = custMap[row.customer_name?.toLowerCase().trim()];
+      return {
+        ...row,
+        preparation_notes: parsed.clean_notes,
+        contact_phone: parsed.contact_phone || custMatch?.phone || null,
+        contact_name: parsed.contact_name || (custMatch?.contact_name !== row.customer_name ? custMatch?.contact_name : null) || null,
+      } as Shipment;
+    });
+
+    memFallback.shipments = mapped;
+    return mapped;
   } catch (err) {
     console.error("getShipments catch:", err);
     return memFallback.shipments as Shipment[];
@@ -60,6 +145,11 @@ export async function saveShipment(
 ): Promise<Shipment> {
   const now = new Date().toISOString();
   const shipmentDate = data.shipment_date || now.split("T")[0];
+  const combinedNotes = formatShipmentNotes(
+    data.preparation_notes,
+    data.contact_phone,
+    data.contact_name
+  );
 
   if (data.id) {
     const { data: updated, error } = await supabase
@@ -72,7 +162,7 @@ export async function saveShipment(
         is_official: data.is_official,
         m2: data.m2,
         pallet_count: data.pallet_count,
-        preparation_notes: data.preparation_notes,
+        preparation_notes: combinedNotes,
         status: data.status,
         shipment_date: shipmentDate,
         shipment_time: data.shipment_time || null,
@@ -86,7 +176,13 @@ export async function saveShipment(
       .single();
 
     if (!error && updated) {
-      return updated as Shipment;
+      const parsed = parseShipmentContact(updated.preparation_notes);
+      return {
+        ...updated,
+        preparation_notes: parsed.clean_notes,
+        contact_phone: parsed.contact_phone || data.contact_phone || null,
+        contact_name: parsed.contact_name || data.contact_name || null,
+      } as Shipment;
     }
   }
 
@@ -100,7 +196,7 @@ export async function saveShipment(
       is_official: data.is_official,
       m2: data.m2,
       pallet_count: data.pallet_count,
-      preparation_notes: data.preparation_notes,
+      preparation_notes: combinedNotes,
       status: data.status,
       shipment_date: shipmentDate,
       shipment_time: data.shipment_time || null,
@@ -117,7 +213,13 @@ export async function saveShipment(
   if (error || !inserted) {
     throw new Error(error?.message || "Sevkiyat kaydedilemedi");
   }
-  return inserted as Shipment;
+  const parsed = parseShipmentContact(inserted.preparation_notes);
+  return {
+    ...inserted,
+    preparation_notes: parsed.clean_notes,
+    contact_phone: parsed.contact_phone || data.contact_phone || null,
+    contact_name: parsed.contact_name || data.contact_name || null,
+  } as Shipment;
 }
 
 export async function updateShipmentStatus(
@@ -135,11 +237,17 @@ export async function updateShipmentStatus(
       .select()
       .single();
 
-    if (error) {
+    if (error || !data) {
       console.error("updateShipmentStatus error:", error);
       return null;
     }
-    return data as Shipment;
+    const parsed = parseShipmentContact(data.preparation_notes);
+    return {
+      ...data,
+      preparation_notes: parsed.clean_notes,
+      contact_phone: parsed.contact_phone,
+      contact_name: parsed.contact_name,
+    } as Shipment;
   } catch (err) {
     console.error("updateShipmentStatus catch:", err);
     return null;

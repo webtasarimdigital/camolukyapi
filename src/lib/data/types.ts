@@ -8,6 +8,8 @@ export interface Shipment {
   m2: number;
   pallet_count: number;
   preparation_notes: string;
+  contact_phone?: string | null;
+  contact_name?: string | null;
   status: "Depoya Gitti" | "Sevkiyata Çıktı" | "Teslim Edildi";
   shipment_date?: string;
   shipment_time?: string | null;
