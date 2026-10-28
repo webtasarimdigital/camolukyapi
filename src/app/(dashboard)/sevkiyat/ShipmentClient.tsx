@@ -88,6 +88,28 @@ export function ShipmentClient({
 
   const todayStr = useMemo(() => new Date().toISOString().split("T")[0], []);
 
+  // Müşteriler Hızlı Eşleştirme Haritası
+  const customersMap = useMemo(() => {
+    const map = new Map<string, { phone: string | null; contact_name: string | null }>();
+    for (const c of customers) {
+      if (c.name) map.set(c.name.toLowerCase().trim(), { phone: c.phone, contact_name: c.contact_name });
+      if (c.contact_name) map.set(c.contact_name.toLowerCase().trim(), { phone: c.phone, contact_name: c.contact_name });
+    }
+    return map;
+  }, [customers]);
+
+  const getShipmentPhone = (item: Shipment): string | null => {
+    if (item.contact_phone) return item.contact_phone;
+    const match = item.customer_name ? customersMap.get(item.customer_name.toLowerCase().trim()) : undefined;
+    return match?.phone || null;
+  };
+
+  const getShipmentContactName = (item: Shipment): string | null => {
+    if (item.contact_name) return item.contact_name;
+    const match = item.customer_name ? customersMap.get(item.customer_name.toLowerCase().trim()) : undefined;
+    return match?.contact_name || null;
+  };
+
   // Filter logic
   const filtered = useMemo(() => {
     return shipments.filter((s) => {
@@ -104,11 +126,13 @@ export function ShipmentClient({
 
       // Metin Arama
       const q = search.toLowerCase();
+      const sPhone = getShipmentPhone(s);
+      const sContact = getShipmentContactName(s);
       const matchQ =
         !q ||
         s.customer_name.toLowerCase().includes(q) ||
-        (s.contact_name && s.contact_name.toLowerCase().includes(q)) ||
-        (s.contact_phone && s.contact_phone.toLowerCase().includes(q)) ||
+        (sContact && sContact.toLowerCase().includes(q)) ||
+        (sPhone && sPhone.toLowerCase().includes(q)) ||
         s.seller.toLowerCase().includes(q) ||
         s.receipt_no.toLowerCase().includes(q) ||
         s.destination.toLowerCase().includes(q) ||
@@ -137,6 +161,7 @@ export function ShipmentClient({
     vehicleFilter,
     startDateFilter,
     endDateFilter,
+    customersMap,
   ]);
 
   // Tab sayıları
@@ -202,8 +227,8 @@ export function ShipmentClient({
     setDriverNameInput(item.driver_name || "");
     setModalDestination(item.destination || "");
     setModalCustomerName(item.customer_name || "");
-    setModalContactPhone(item.contact_phone || "");
-    setModalContactName(item.contact_name || "");
+    setModalContactPhone(getShipmentPhone(item) || "");
+    setModalContactName(getShipmentContactName(item) || "");
     setIsModalOpen(true);
   }
 
@@ -671,7 +696,7 @@ export function ShipmentClient({
                     <th className="py-3 px-4">Fiş No</th>
                     <th className="py-3 px-4">Müşteri Adı</th>
                     <th className="py-3 px-4">Satıcı</th>
-                    <th className="py-3 px-4">Sevk Yeri</th>
+                    <th className="py-3 px-4">Sevk Yeri / Adres</th>
                     <th className="py-3 px-4">Araç & Şoför</th>
                     <th className="py-3 px-4 text-center">Tip</th>
                     <th className="py-3 px-4 text-center">m² / Palet</th>
@@ -690,6 +715,8 @@ export function ShipmentClient({
                   ) : (
                     filtered.map((item) => {
                       const photoCount = Array.isArray(item.photos) ? item.photos.length : 0;
+                      const phone = getShipmentPhone(item);
+                      const contactName = getShipmentContactName(item);
 
                       return (
                         <tr key={item.id} className="hover:bg-surface/50 transition">
@@ -704,57 +731,62 @@ export function ShipmentClient({
                           </td>
                           <td className="py-3 px-4 font-bold text-text">
                             <div>{item.customer_name}</div>
-                            {(item.contact_name || item.contact_phone) && (
-                              <div className="mt-1 flex flex-col gap-0.5 font-normal">
-                                {item.contact_name && (
-                                  <span className="text-[11px] text-text-muted flex items-center gap-1">
-                                    <User size={11} className="text-brand-navy shrink-0" />
-                                    <span className="font-medium text-text">{item.contact_name}</span>
-                                  </span>
-                                )}
-                                {item.contact_phone && (
-                                  <div className="flex items-center gap-1.5 mt-0.5">
-                                    <a
-                                      href={`tel:${item.contact_phone.replace(/\s+/g, '')}`}
-                                      className="inline-flex items-center gap-1 text-[11px] font-mono text-emerald-700 hover:text-emerald-900 font-semibold hover:underline"
-                                      title="Telefonla Ara"
-                                    >
-                                      <Phone size={11} className="shrink-0" />
-                                      <span>{item.contact_phone}</span>
-                                    </a>
-                                    <a
-                                      href={`https://wa.me/${item.contact_phone.replace(/\D/g, '').replace(/^0/, '90')}`}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center justify-center p-0.5 rounded bg-green-100 hover:bg-green-200 text-green-700 transition"
-                                      title="WhatsApp Mesajı"
-                                    >
-                                      <MessageSquare size={11} />
-                                    </a>
-                                  </div>
-                                )}
+                            {contactName && (
+                              <div className="mt-0.5 text-[11px] text-text-muted flex items-center gap-1 font-normal">
+                                <User size={11} className="text-brand-navy shrink-0" />
+                                <span className="font-medium text-text">{contactName}</span>
                               </div>
                             )}
                           </td>
                           <td className="py-3 px-4 text-text-muted">
                             {item.seller || "-"}
                           </td>
-                          <td className="py-3 px-4 max-w-[200px]">
-                            {item.destination ? (
-                              <a
-                                href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.destination)}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="group flex items-center gap-1.5 text-text-muted hover:text-brand-navy hover:underline transition truncate"
-                                title={`${item.destination} (Google Haritalar'da Aç)`}
-                              >
-                                <MapPin size={13} className="text-brand-navy shrink-0 group-hover:scale-125 transition-transform" />
-                                <span className="truncate group-hover:text-brand-navy font-medium">{item.destination}</span>
-                                <ExternalLink size={10} className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-brand-navy" />
-                              </a>
-                            ) : (
-                              <span className="text-text-muted">-</span>
-                            )}
+                          <td className="py-3 px-4 min-w-[210px] max-w-[280px]">
+                            <div className="space-y-1">
+                              {item.destination ? (
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.destination)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="group flex items-center gap-1.5 text-text hover:text-brand-navy hover:underline transition"
+                                  title={`${item.destination} (Google Haritalar'da Aç)`}
+                                >
+                                  <MapPin size={13} className="text-brand-navy shrink-0 group-hover:scale-125 transition-transform" />
+                                  <span className="truncate group-hover:text-brand-navy font-medium text-xs">{item.destination}</span>
+                                  <ExternalLink size={10} className="shrink-0 opacity-0 group-hover:opacity-100 transition-opacity text-brand-navy" />
+                                </a>
+                              ) : (
+                                <span className="text-text-muted text-xs italic">-</span>
+                              )}
+
+                              {/* Adresin Yanında / Altında Telefon Numarası */}
+                              {phone && (
+                                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                                  <a
+                                    href={`tel:${phone.replace(/\s+/g, '')}`}
+                                    className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200/80 transition shadow-2xs"
+                                    title="Telefonla Ara"
+                                  >
+                                    <Phone size={10} className="shrink-0 text-emerald-600" />
+                                    <span>{phone}</span>
+                                  </a>
+                                  <a
+                                    href={`https://wa.me/${phone.replace(/\D/g, '').replace(/^0/, '90')}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center justify-center p-1 rounded bg-green-100 hover:bg-green-200 text-green-700 transition"
+                                    title="WhatsApp Mesajı Gönder"
+                                  >
+                                    <MessageSquare size={10} />
+                                  </a>
+                                  {contactName && (
+                                    <span className="text-[10px] text-text-muted truncate max-w-[100px]" title={contactName}>
+                                      ({contactName})
+                                    </span>
+                                  )}
+                                </div>
+                              )}
+                            </div>
                           </td>
                           <td className="py-3 px-4">
                             {item.vehicle_plate ? (
@@ -906,58 +938,83 @@ export function ShipmentClient({
 
                       <div>
                         <h4 className="font-bold text-sm text-text">{item.customer_name}</h4>
-                        {item.destination ? (
-                          <a
-                            href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.destination)}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-text-muted hover:text-brand-navy hover:underline flex items-center gap-1 mt-0.5 group"
-                            title={`${item.destination} (Google Haritalar'da Aç)`}
-                          >
-                            <MapPin size={12} className="text-brand-navy shrink-0 group-hover:scale-125 transition-transform" />
-                            <span className="truncate group-hover:text-brand-navy font-medium">{item.destination}</span>
-                            <ExternalLink size={10} className="shrink-0 opacity-60 group-hover:opacity-100 text-brand-navy" />
-                          </a>
-                        ) : null}
+                        {(() => {
+                          const phone = getShipmentPhone(item);
+                          return (
+                            <div className="flex items-center gap-2 flex-wrap mt-1">
+                              {item.destination ? (
+                                <a
+                                  href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(item.destination)}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-text-muted hover:text-brand-navy hover:underline flex items-center gap-1 group truncate max-w-[220px]"
+                                  title={`${item.destination} (Google Haritalar'da Aç)`}
+                                >
+                                  <MapPin size={12} className="text-brand-navy shrink-0 group-hover:scale-125 transition-transform" />
+                                  <span className="truncate group-hover:text-brand-navy font-medium">{item.destination}</span>
+                                  <ExternalLink size={10} className="shrink-0 opacity-60 group-hover:opacity-100 text-brand-navy" />
+                                </a>
+                              ) : null}
+
+                              {/* Adresin Yanında Telefon Rozeti */}
+                              {phone && (
+                                <a
+                                  href={`tel:${phone.replace(/\s+/g, '')}`}
+                                  className="inline-flex items-center gap-1 text-[11px] font-mono font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 px-1.5 py-0.5 rounded border border-emerald-200"
+                                  title="Telefonla Ara"
+                                >
+                                  <Phone size={10} className="text-emerald-600" />
+                                  <span>{phone}</span>
+                                </a>
+                              )}
+                            </div>
+                          );
+                        })()}
                       </div>
 
                       {/* İrtibat & Telefon (Şoför Kolay Görsün & Tek Tıkla Arasın) */}
-                      {(item.contact_phone || item.contact_name) ? (
-                        <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-lg p-2.5 flex items-center justify-between gap-2 shadow-xs">
-                          <div className="min-w-0 flex-1">
-                            <div className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide flex items-center gap-1">
-                              <User size={11} className="text-emerald-700 shrink-0" />
-                              <span className="truncate">{item.contact_name || "İrtibat Yetkilisi"}</span>
+                      {(() => {
+                        const phone = getShipmentPhone(item);
+                        const contactName = getShipmentContactName(item);
+                        if (!phone && !contactName) return null;
+
+                        return (
+                          <div className="bg-emerald-50/80 border border-emerald-200/80 rounded-lg p-2.5 flex items-center justify-between gap-2 shadow-xs">
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[10px] font-bold text-emerald-800 uppercase tracking-wide flex items-center gap-1">
+                                <User size={11} className="text-emerald-700 shrink-0" />
+                                <span className="truncate">{contactName || "İrtibat Yetkilisi"}</span>
+                              </div>
+                              {phone && (
+                                <div className="text-xs font-bold text-emerald-950 font-mono mt-0.5">
+                                  {phone}
+                                </div>
+                              )}
                             </div>
-                            {item.contact_phone && (
-                              <div className="text-xs font-bold text-emerald-950 font-mono mt-0.5">
-                                {item.contact_phone}
+                            {phone && (
+                              <div className="flex items-center gap-1.5 shrink-0">
+                                <a
+                                  href={`tel:${phone.replace(/\s+/g, '')}`}
+                                  className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm transition"
+                                  title="Telefonla Ara"
+                                >
+                                  <Phone size={13} />
+                                  <span>Ara</span>
+                                </a>
+                                <a
+                                  href={`https://wa.me/${phone.replace(/\D/g, '').replace(/^0/, '90')}`}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="inline-flex items-center justify-center bg-green-500 hover:bg-green-600 active:scale-95 text-white p-2 rounded-lg shadow-sm transition"
+                                  title="WhatsApp ile Yaz"
+                                >
+                                  <MessageSquare size={14} />
+                                </a>
                               </div>
                             )}
                           </div>
-                          {item.contact_phone && (
-                            <div className="flex items-center gap-1.5 shrink-0">
-                              <a
-                                href={`tel:${item.contact_phone.replace(/\s+/g, '')}`}
-                                className="inline-flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:scale-95 text-white font-bold text-xs px-3 py-1.5 rounded-lg shadow-sm transition"
-                                title="Telefonla Ara"
-                              >
-                                <Phone size={13} />
-                                <span>Ara</span>
-                              </a>
-                              <a
-                                href={`https://wa.me/${item.contact_phone.replace(/\D/g, '').replace(/^0/, '90')}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center justify-center bg-green-500 hover:bg-green-600 active:scale-95 text-white p-2 rounded-lg shadow-sm transition"
-                                title="WhatsApp ile Yaz"
-                              >
-                                <MessageSquare size={14} />
-                              </a>
-                            </div>
-                          )}
-                        </div>
-                      ) : null}
+                        );
+                      })()}
 
                       <div className="flex flex-wrap items-center justify-between gap-2 text-xs pt-1 border-t border-border/50">
                         <div className="flex items-center gap-2">
