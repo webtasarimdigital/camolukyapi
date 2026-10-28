@@ -21,7 +21,7 @@ const ROLE_CONFIG: Record<string, { label: string; desc: string; badge: string }
   },
   depo: {
     label: "Depo Sorumlusu",
-    desc: "Yalnızca Sevkiyat ve Yükleme modülü erişimi (Salt okunur)",
+    desc: "Depo Takip (Teslimat, Giriş/Çıkış, Kırıklar) ve Sevkiyat & Yükleme",
     badge: "bg-orange-100 text-orange-800 border-orange-200",
   },
   sofor: {
@@ -84,8 +84,8 @@ const DEFAULT_ACCOUNTS: AccountInfo[] = [
     email: "depo@camolukyapi.com",
     pass: "camolukdepo0",
     badge: "bg-orange-100 text-orange-800 border-orange-200",
-    allowedSummary: "Yalnızca Sevkiyat & Yükleme (Görüntüleme)",
-    note: "Veri silme/ekleme yapamaz, sadece sevkiyatları görür.",
+    allowedSummary: "Depo Takip (Teslimat, Giriş/Çıkış, Kırıklar) & Sevkiyat",
+    note: "Girişte 'depo' veya açılan kullanıcı adı yazılabilir.",
   },
   {
     role: "sofor",
@@ -150,8 +150,8 @@ export default async function KullanicilarPage() {
     .eq("company_id", profile.company_id)
     .order("created_at", { ascending: true });
 
-  // Fetch auth users to get exact emails and plain passwords
-  let authUsersMap = new Map<string, { email: string; pass?: string }>();
+  // Fetch auth users to get exact emails, usernames and plain passwords
+  let authUsersMap = new Map<string, { email: string; pass?: string; username?: string }>();
   try {
     const serviceClient = await createServiceClient();
     const { data: authList } = await serviceClient.auth.admin.listUsers();
@@ -160,6 +160,7 @@ export default async function KullanicilarPage() {
         authUsersMap.set(u.id, {
           email: u.email || "",
           pass: u.user_metadata?.plain_password as string | undefined,
+          username: (u.user_metadata?.username as string | undefined) || (u.email ? u.email.split("@")[0] : undefined),
         });
       });
     }
@@ -191,7 +192,7 @@ export default async function KullanicilarPage() {
                 Ad Soyad
               </th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase">
-                E-posta
+                E-posta / Sistem Maili
               </th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase">
                 Giriş Kullanıcı Adı & Şifresi
@@ -231,7 +232,7 @@ export default async function KullanicilarPage() {
                 ].includes(email);
 
                 const displayPass = authInfo?.pass || (isSystemRoleAccount ? defaultCred?.pass : null);
-                const displayUser = isSystemRoleAccount ? defaultCred?.username : email.split("@")[0];
+                const displayUser = authInfo?.username || (isSystemRoleAccount ? defaultCred?.username : email.split("@")[0]);
                 const isSelf = p.id === userData.user.id;
                 const isProtected = email === "camoluk@camolukyapi.com";
                 return (
@@ -258,7 +259,7 @@ export default async function KullanicilarPage() {
                           </div>
                           <div className="flex items-center gap-1 text-[11px] text-text-muted">
                             <span>Giriş Adı:</span>
-                            <span className="font-mono font-semibold text-brand-navy bg-surface px-1.5 py-0.2 rounded border border-border">
+                            <span className="font-mono font-semibold text-brand-navy bg-surface px-1.5 py-0.2 rounded border border-border select-all">
                               {displayUser}
                             </span>
                           </div>
@@ -281,12 +282,25 @@ export default async function KullanicilarPage() {
                         {roleInfo.label}
                       </span>
                     </td>
-                    <td className="px-4 py-3 text-xs text-text-muted">
+                    <td className="px-4 py-3 text-xs text-text-muted max-w-xs">
                       {roleInfo.desc}
                     </td>
                     <td className="px-4 py-3">
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
-                        <CheckCircle2 size={12} /> {p.is_active ? "Aktif" : "Pasif"}
+                      <span
+                        className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold ${
+                          p.is_active
+                            ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
+                            : "bg-rose-50 text-rose-700 border border-rose-200"
+                        }`}
+                      >
+                        {p.is_active ? (
+                          <>
+                            <CheckCircle2 size={12} className="text-emerald-600" />
+                            <span>Aktif</span>
+                          </>
+                        ) : (
+                          <span>Pasif</span>
+                        )}
                       </span>
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -302,8 +316,8 @@ export default async function KullanicilarPage() {
               })
             ) : (
               <tr>
-                <td colSpan={7} className="px-4 py-6 text-center text-text-muted">
-                  Kayıtlı profil bulunamadı.
+                <td colSpan={7} className="px-4 py-8 text-center text-text-muted">
+                  Kayıtlı kullanıcı bulunamadı.
                 </td>
               </tr>
             )}

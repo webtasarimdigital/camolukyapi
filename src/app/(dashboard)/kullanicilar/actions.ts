@@ -3,6 +3,8 @@
 import { createClient, createServiceClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 
+import { slugifyUsername, usernameToAuthEmail } from "@/lib/auth/role-constants";
+
 export async function actionCreateUser(formData: FormData) {
   try {
     const supabase = await createClient();
@@ -24,23 +26,26 @@ export async function actionCreateUser(formData: FormData) {
       return { success: false, error: "Yalnızca Yöneticiler yeni kullanıcı oluşturabilir." };
     }
 
-    const fullName = (formData.get("full_name") as string)?.trim();
-    let email = (formData.get("email") as string)?.trim().toLowerCase();
+    const rawUsernameOrEmail = (
+      (formData.get("email") as string) || (formData.get("username") as string)
+    )?.trim();
+    const fullNameInput = (formData.get("full_name") as string)?.trim();
     const password = (formData.get("password") as string)?.trim();
-    const role = (formData.get("role") as string)?.trim() || "staff";
+    let role = (formData.get("role") as string)?.trim() || "depo";
+    if (role === "depocu") role = "depo";
 
-    if (!fullName) {
-      return { success: false, error: "Lütfen ad soyad giriniz." };
+    if (!rawUsernameOrEmail) {
+      return { success: false, error: "Lütfen kullanıcı adını giriniz (örn: sırrı)." };
     }
-    if (!email) {
-      return { success: false, error: "Lütfen e-posta veya kullanıcı adı giriniz." };
-    }
-    if (!email.includes("@")) {
-      email = `${email}@camolukyapi.com`;
-    }
+    const fullName = fullNameInput || rawUsernameOrEmail;
+
     if (!password || password.length < 6) {
-      return { success: false, error: "Şifre en az 6 karakter olmalıdır." };
+      return { success: false, error: "Şifre en az 6 karakter olmalıdır (örn: sırrı123)." };
     }
+
+    // Türkçe karakterleri ve geçersiz sembolleri temizleyip Supabase Auth e-postasına dönüştür
+    const email = usernameToAuthEmail(rawUsernameOrEmail);
+    const cleanSlug = slugifyUsername(rawUsernameOrEmail);
 
     const serviceClient = await createServiceClient();
 
@@ -49,11 +54,26 @@ export async function actionCreateUser(formData: FormData) {
       email,
       password,
       email_confirm: true,
-      user_metadata: { full_name: fullName, plain_password: password },
+      user_metadata: {
+        full_name: fullName,
+        username: rawUsernameOrEmail,
+        slug_username: cleanSlug,
+        plain_password: password,
+      },
     });
 
     if (authError || !authData.user) {
-      return { success: false, error: authError?.message || "Kullanıcı oluşturulamadı." };
+      const msg = authError?.message || "";
+      if (
+        msg.toLowerCase().includes("already registered") ||
+        msg.toLowerCase().includes("already exists")
+      ) {
+        return {
+          success: false,
+          error: `"${rawUsernameOrEmail}" kullanıcı adı (${email}) zaten sistemde kayıtlı. Lütfen farklı bir kullanıcı adı seçiniz veya mevcut kullanıcının şifresini güncelleyiniz.`,
+        };
+      }
+      return { success: false, error: msg || "Kullanıcı oluşturulamadı." };
     }
 
     // 2. profiles tablosuna rol ve şirket bilgisiyle kaydet
@@ -77,7 +97,7 @@ export async function actionCreateUser(formData: FormData) {
 
     return {
       success: true,
-      message: `"${fullName}" kullanıcısı (${email}) başarıyla oluşturuldu.`,
+      message: `"${fullName}" kullanıcısı başarıyla oluşturuldu! (Kullanıcı Adı: ${rawUsernameOrEmail}, Şifre: ${password})`,
     };
   } catch (err: any) {
     console.error("actionCreateUser catch error:", err);

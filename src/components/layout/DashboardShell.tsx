@@ -18,9 +18,14 @@ interface DashboardShellProps {
 function isRouteAllowed(role: UserRole, pathname: string): boolean {
   if (role === "admin") return true;
 
-  // Depocu ve Şoför YALNIZCA /sevkiyat sayfasına erişebilir
-  if (role === "depo" || role === "sofor") {
-    return pathname.startsWith("/sevkiyat");
+  // Şoför YALNIZCA /sevkiyat ve /otobil-gps sayfasına erişebilir (Depo Takip kapalı)
+  if (role === "sofor") {
+    return pathname.startsWith("/sevkiyat") || pathname.startsWith("/otobil-gps");
+  }
+
+  // Depocu: /depo-takip ve /sevkiyat sayfalarına tam erişebilir
+  if (role === "depo") {
+    return pathname.startsWith("/depo-takip") || pathname.startsWith("/sevkiyat");
   }
 
   // Tali Bayi: Ürünler / Stok, Şirket Portalları ve Bayi Sipariş
@@ -34,7 +39,7 @@ function isRouteAllowed(role: UserRole, pathname: string): boolean {
     );
   }
 
-  // Satış Temsilcisi: Teklif, Satış, Sevkiyat, Müşteriler, Ürünler, Bayi Siparişleri
+  // Satış Temsilcisi: Teklif, Satış, Sevkiyat, Depo Takip, Müşteriler, Ürünler, Bayi Siparişleri
   if (role === "satis") {
     return (
       pathname.startsWith("/teklif") ||
@@ -43,6 +48,7 @@ function isRouteAllowed(role: UserRole, pathname: string): boolean {
       pathname.startsWith("/satislar") ||
       pathname.startsWith("/bayi-siparisleri") ||
       pathname.startsWith("/sevkiyat") ||
+      pathname.startsWith("/depo-takip") ||
       pathname.startsWith("/musteriler") ||
       pathname.startsWith("/urunler") ||
       pathname.startsWith("/stok") ||
@@ -77,7 +83,10 @@ export function DashboardShell({
 
   let defaultRoute = "/dashboard";
   let defaultRouteLabel = "Dashboard'a Dön";
-  if (roleKey === "depo" || roleKey === "sofor") {
+  if (roleKey === "depo") {
+    defaultRoute = "/depo-takip";
+    defaultRouteLabel = "Depo Takip Modülüne Git";
+  } else if (roleKey === "sofor") {
     defaultRoute = "/sevkiyat";
     defaultRouteLabel = "Sevkiyat ve Yükleme Modülüne Git";
   } else if (roleKey === "tali_bayi" || (roleKey as string) === "bayi") {

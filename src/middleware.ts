@@ -53,7 +53,9 @@ export async function middleware(request: NextRequest) {
   if (user && pathname === "/login") {
     const role = request.cookies.get("app_active_role")?.value;
     const url = request.nextUrl.clone();
-    if (role === "depo" || role === "sofor") {
+    if (role === "depo") {
+      url.pathname = "/depo-takip";
+    } else if (role === "sofor") {
       url.pathname = "/sevkiyat";
     } else if (role === "tali_bayi" || role === "bayi") {
       url.pathname = "/bayi-siparis/yeni";
@@ -68,8 +70,18 @@ export async function middleware(request: NextRequest) {
   // Rol bazlı sayfa koruması (Sunucu seviyesinde anında yönlendirme)
   if (user && !pathname.startsWith("/api") && !pathname.startsWith("/auth")) {
     const role = request.cookies.get("app_active_role")?.value;
-    if (role === "depo" || role === "sofor") {
-      if (!pathname.startsWith("/sevkiyat") && pathname !== "/login") {
+    if (role === "depo") {
+      // Depo Sorumlusu: Depo Takip ve Sevkiyat modüllerine erişebilir
+      const isAllowedDepo = pathname.startsWith("/depo-takip") || pathname.startsWith("/sevkiyat");
+      if (!isAllowedDepo && pathname !== "/login") {
+        const url = request.nextUrl.clone();
+        url.pathname = "/depo-takip";
+        return NextResponse.redirect(url);
+      }
+    } else if (role === "sofor") {
+      // Şoför: Sevkiyat ve Otobil GPS modüllerine erişebilir (Depo Takip kapalı)
+      const isAllowedSofor = pathname.startsWith("/sevkiyat") || pathname.startsWith("/otobil-gps");
+      if (!isAllowedSofor && pathname !== "/login") {
         const url = request.nextUrl.clone();
         url.pathname = "/sevkiyat";
         return NextResponse.redirect(url);
@@ -90,6 +102,7 @@ export async function middleware(request: NextRequest) {
         "/satislar",
         "/bayi-siparisleri",
         "/sevkiyat",
+        "/depo-takip",
         "/musteriler",
         "/urunler",
         "/stok",

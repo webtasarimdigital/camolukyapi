@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { createClient } from "@/lib/supabase/client";
 import { setActiveUserRole } from "@/lib/auth/role";
-import { type UserRole } from "@/lib/auth/role-constants";
+import { type UserRole, usernameToAuthEmail, slugifyUsername } from "@/lib/auth/role-constants";
 import { toast } from "sonner";
 import { Lock, User, Loader2 } from "lucide-react";
 
@@ -22,12 +22,12 @@ export default function LoginPage() {
 
     let inputVal = username.trim().toLowerCase();
     
-    // Kullanıcı adını normalize et
+    // Özel sistem hesap takma adları
     if (inputVal === "şoför" || inputVal === "sofor") {
       inputVal = "sofor";
     } else if (inputVal === "satış" || inputVal === "satis") {
       inputVal = "satis";
-    } else if (inputVal === "depo") {
+    } else if (inputVal === "depo" || inputVal === "depocu") {
       inputVal = "depo";
     } else if (inputVal === "bayi" || inputVal === "tali_bayi" || inputVal === "talibayi") {
       inputVal = "bayi";
@@ -35,15 +35,22 @@ export default function LoginPage() {
       inputVal = "camoluk";
     }
 
-    const email = inputVal.includes("@") ? inputVal : `${inputVal}@camolukyapi.com`;
+    const email = usernameToAuthEmail(inputVal);
 
     // 1. Girilen şifre ile dene
     let res = await supabase.auth.signInWithPassword({ email, password });
 
-    // 2. Başarısız olursa ve Türkçe karakter farkı varsa alternatif şifre ile dene
+    // 2. Başarısız olursa ve alternatif e-posta veya şifre formatı varsa dene
     if (res.error) {
       let altPassword = password;
-      if (altPassword.includes("ş") || altPassword.includes("ö") || altPassword.includes("ı") || altPassword.includes("ç") || altPassword.includes("ğ") || altPassword.includes("ü")) {
+      if (
+        altPassword.includes("ş") ||
+        altPassword.includes("ö") ||
+        altPassword.includes("ı") ||
+        altPassword.includes("ç") ||
+        altPassword.includes("ğ") ||
+        altPassword.includes("ü")
+      ) {
         altPassword = altPassword
           .replace(/ş/g, "s")
           .replace(/ö/g, "o")
@@ -77,7 +84,7 @@ export default function LoginPage() {
       .single();
 
     const profile = profileData as { role?: string; full_name?: string } | null;
-    const actualRole = (profile?.role as UserRole) || "admin";
+    const actualRole = (profile?.role as UserRole) || "depo";
     const actualName = profile?.full_name || undefined;
 
     await setActiveUserRole(actualRole, actualName);
@@ -87,7 +94,9 @@ export default function LoginPage() {
     });
 
     // Role göre yetkili ana sayfaya yönlendir
-    if (actualRole === "depo" || actualRole === "sofor") {
+    if (actualRole === "depo") {
+      router.push("/depo-takip");
+    } else if (actualRole === "sofor") {
       router.push("/sevkiyat");
     } else if (actualRole === "tali_bayi" || (actualRole as string) === "bayi") {
       router.push("/bayi-siparis/yeni");

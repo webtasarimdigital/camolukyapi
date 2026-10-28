@@ -66,27 +66,30 @@ export default function NewUserModal({ companyId }: { companyId: string }) {
 
         <form onSubmit={handleSubmit} className="space-y-3.5 text-xs">
           <div>
-            <label className="block font-semibold text-text mb-1">Ad Soyad *</label>
+            <label className="block font-semibold text-text mb-1">
+              Ad Soyad <span className="text-text-muted font-normal">(İsteğe bağlı)</span>
+            </label>
             <input
               type="text"
               name="full_name"
-              required
-              placeholder="Örn: Hasan Çelik"
+              placeholder="Örn: Sırrı Usta (Boş bırakırsanız kullanıcı adı atanır)"
               className="w-full border border-border rounded-xl px-3 py-2 text-xs bg-surface outline-none focus:border-brand-navy focus:bg-white transition"
             />
           </div>
 
           <div>
-            <label className="block font-semibold text-text mb-1">Kullanıcı Adı veya E-Posta *</label>
+            <label className="block font-semibold text-text mb-1">
+              Kullanıcı Adı * <span className="text-emerald-700 font-medium">(Mail gerekmez)</span>
+            </label>
             <input
               type="text"
               name="email"
               required
-              placeholder="Örn: hasan veya hasan@camolukyapi.com"
+              placeholder="Örn: sırrı veya mehmet"
               className="w-full border border-border rounded-xl px-3 py-2 text-xs bg-surface outline-none focus:border-brand-navy focus:bg-white transition font-mono"
             />
             <p className="text-[10px] text-text-muted mt-0.5">
-              Yalnızca isim yazarsanız otomatik olarak <b>@camolukyapi.com</b> eklenecektir.
+              Mail adresi girmenize gerek yoktur. Sadece kullanıcı adı yazmanız yeterlidir (örn: <b>sırrı</b>).
             </p>
           </div>
 
@@ -97,7 +100,7 @@ export default function NewUserModal({ companyId }: { companyId: string }) {
               name="password"
               required
               minLength={6}
-              placeholder="En az 6 karakter"
+              placeholder="Örn: sırrı123 (En az 6 karakter)"
               className="w-full border border-border rounded-xl px-3 py-2 text-xs bg-surface outline-none focus:border-brand-navy focus:bg-white transition font-mono"
             />
           </div>
@@ -107,15 +110,15 @@ export default function NewUserModal({ companyId }: { companyId: string }) {
             <select
               name="role"
               required
-              defaultValue="staff"
+              defaultValue="depo"
               className="w-full border border-border rounded-xl px-3 py-2 text-xs bg-surface outline-none focus:border-brand-navy focus:bg-white transition font-medium"
             >
-              <option value="muhasebe1">Muhasebe 1 (Genel Muhasebe, Teklif, Satış, Ödemeler)</option>
-              <option value="satis">Satış Temsilcisi (Teklif, Satış, Sevkiyat, Müşteriler)</option>
-              <option value="depo">Depo Sorumlusu (Yalnızca Sevkiyat & Yükleme)</option>
-              <option value="sofor">Şoför (Yalnızca Sevkiyat & Yükleme)</option>
-              <option value="tali_bayi">Tali Bayi (Yalnızca Ürünler / Stok & Portallar)</option>
-              <option value="admin">Yönetici / Admin (Tam Yetkili)</option>
+              <option value="depo">📦 Depo Sorumlusu (Depo Takip ve Sevkiyat & Yükleme)</option>
+              <option value="muhasebe1">💼 Muhasebe 1 (Genel Muhasebe, Teklif, Satış, Ödemeler)</option>
+              <option value="satis">💼 Satış Temsilcisi (Teklif, Satış, Sevkiyat, Depo Takip, Müşteriler)</option>
+              <option value="sofor">🚚 Şoför (Yalnızca Sevkiyat & Yükleme)</option>
+              <option value="tali_bayi">🏪 Tali Bayi (Yalnızca Ürünler / Stok & Portallar)</option>
+              <option value="admin">👑 Yönetici / Admin (Tam Yetkili)</option>
             </select>
           </div>
 

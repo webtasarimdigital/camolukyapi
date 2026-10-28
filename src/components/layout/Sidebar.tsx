@@ -306,7 +306,9 @@ export function Sidebar({ userRole = "admin", onCloseMobile }: SidebarProps) {
   );
 
   const homeHref =
-    roleKey === "depo" || roleKey === "sofor"
+    roleKey === "depo"
+      ? "/depo-takip"
+      : roleKey === "sofor"
       ? "/sevkiyat"
       : roleKey === "satis"
       ? "/teklifler"
