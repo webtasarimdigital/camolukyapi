@@ -1,4 +1,4 @@
-import { getPortals } from "./actions";
+import { getPortals, getTaliBayiler } from "./actions";
 import { PortalClient } from "./PortalClient";
 import { createClient } from "@/lib/supabase/server";
 import { cookies } from "next/headers";
@@ -36,10 +36,12 @@ export default async function PortallarPage() {
   }
 
   const portals = await getPortals();
+  const taliBayiler = await getTaliBayiler();
 
   return (
     <PortalClient
       initialPortals={portals}
+      taliBayiler={taliBayiler}
       userRole={userRole}
       userName={userName}
     />

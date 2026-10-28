@@ -10,4 +10,12 @@ export interface CompanyPortal {
   created_by_name?: string;
   created_at?: string;
   updated_at?: string;
+  allowed_bayi_ids?: string[];
+}
+
+export interface TaliBayiOption {
+  id: string;
+  full_name: string;
+  role: string;
+  is_active?: boolean;
 }

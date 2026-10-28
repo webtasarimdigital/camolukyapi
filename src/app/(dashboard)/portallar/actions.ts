@@ -3,7 +3,7 @@
 import { createClient } from "@/lib/supabase/server";
 import { revalidatePath } from "next/cache";
 import { cookies } from "next/headers";
-import type { CompanyPortal } from "./types";
+import type { CompanyPortal, TaliBayiOption } from "./types";
 
 async function getCompanyAndUser() {
   const supabase = await createClient();
@@ -37,9 +37,46 @@ async function getCompanyAndUser() {
   return { supabase, user, companyId, userName, userRole };
 }
 
-export async function getPortals(): Promise<CompanyPortal[]> {
+/**
+ * Sistemdeki aktif tali bayileri çeker (Admin paneli yetkilendirme seçimi için)
+ */
+export async function getTaliBayiler(): Promise<TaliBayiOption[]> {
   try {
     const { supabase, companyId } = await getCompanyAndUser();
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("id, full_name, role, is_active")
+      .eq("company_id", companyId)
+      .in("role", ["tali_bayi", "bayi"])
+      .eq("is_active", true)
+      .order("full_name", { ascending: true });
+
+    if (error) {
+      console.error("getTaliBayiler error:", error);
+      return [];
+    }
+
+    return (data || []).map((b: any) => ({
+      id: b.id,
+      full_name: b.full_name || "Tali Bayi",
+      role: b.role,
+      is_active: b.is_active,
+    }));
+  } catch (err) {
+    console.error("getTaliBayiler catch:", err);
+    return [];
+  }
+}
+
+/**
+ * Şirket portallarını çeker.
+ * Tali bayiler için sunucu tarafında filtre uygulanır:
+ * Yalnızca kendi kullanıcı ID'si 'allowed_bayi_ids' listesinde olan portallar döner.
+ * Yeni tali bayiler için varsayılan olarak tüm portallar KAPALIDIR.
+ */
+export async function getPortals(): Promise<CompanyPortal[]> {
+  try {
+    const { supabase, user, companyId, userRole } = await getCompanyAndUser();
     const { data, error } = await (supabase.from("portals") as any)
       .select("*")
       .order("created_at", { ascending: true });
@@ -49,8 +86,10 @@ export async function getPortals(): Promise<CompanyPortal[]> {
       return [];
     }
 
+    let portalList: CompanyPortal[] = (data || []) as CompanyPortal[];
+
     // Tablo boş ise başlangıç portallarını otomatik ekle
-    if (!data || data.length === 0) {
+    if (portalList.length === 0) {
       const initialPortals = [
         {
           company_id: companyId,
@@ -88,13 +127,96 @@ export async function getPortals(): Promise<CompanyPortal[]> {
         .insert(initialPortals)
         .select();
 
-      return (seeded || []) as CompanyPortal[];
+      portalList = (seeded || []) as CompanyPortal[];
     }
 
-    return (data || []) as CompanyPortal[];
+    // camlica_firca_rows üzerinden her portal için yetkili tali bayileri çek
+    const { data: permRows } = await (supabase
+      .from("camlica_firca_rows") as any)
+      .select("row_data")
+      .eq("company_id", companyId)
+      .eq("row_data->>_module", "portal_bayi_access");
+
+    const permMap = new Map<string, string[]>();
+    (permRows || []).forEach((row: any) => {
+      const pId = row.row_data?.portal_id;
+      const bayiIds = Array.isArray(row.row_data?.allowed_bayi_ids)
+        ? row.row_data.allowed_bayi_ids
+        : [];
+      if (pId) {
+        permMap.set(pId, bayiIds);
+      }
+    });
+
+    const enrichedPortals = portalList.map((p) => ({
+      ...p,
+      allowed_bayi_ids: permMap.get(p.id) || [],
+    }));
+
+    // GÜVENLİK FİLTRESİ: Tali bayiler sadece yetki verilmiş portalları görebilir!
+    if (["tali_bayi", "bayi"].includes(userRole)) {
+      const userId = user?.id;
+      if (!userId) return [];
+      return enrichedPortals.filter(
+        (p) => Array.isArray(p.allowed_bayi_ids) && p.allowed_bayi_ids.includes(userId)
+      );
+    }
+
+    return enrichedPortals;
   } catch (err) {
     console.error("getPortals catch:", err);
     return [];
+  }
+}
+
+/**
+ * Bir portal için yetkili tali bayileri günceller
+ */
+export async function updatePortalBayiPermissions(
+  portalId: string,
+  allowed_bayi_ids: string[]
+) {
+  try {
+    const { supabase, companyId, userRole } = await getCompanyAndUser();
+    if (!["admin", "muhasebe1"].includes(userRole)) {
+      return { success: false, error: "Yetkiniz bulunmuyor! Yalnızca yöneticiler yetki verebilir." };
+    }
+
+    const { data: existing } = await (supabase.from("camlica_firca_rows") as any)
+      .select("id")
+      .eq("company_id", companyId)
+      .eq("row_data->>_module", "portal_bayi_access")
+      .eq("row_data->>portal_id", portalId);
+
+    const now = new Date().toISOString();
+    const payload = {
+      _module: "portal_bayi_access",
+      portal_id: portalId,
+      allowed_bayi_ids: Array.isArray(allowed_bayi_ids) ? allowed_bayi_ids : [],
+      updated_at: now,
+    };
+
+    if (existing && existing.length > 0) {
+      const { error } = await (supabase.from("camlica_firca_rows") as any)
+        .update({ row_data: payload })
+        .eq("id", existing[0].id);
+
+      if (error) throw new Error(error.message);
+    } else {
+      const { error } = await (supabase.from("camlica_firca_rows") as any)
+        .insert({
+          company_id: companyId,
+          row_data: payload,
+        });
+
+      if (error) throw new Error(error.message);
+    }
+
+    revalidatePath("/portallar");
+    return { success: true };
+  } catch (err: any) {
+    console.error("updatePortalBayiPermissions error:", err);
+    return { success: false, error: err?.message || "Yetkiler kaydedilemedi." };
   }
 }
 
@@ -106,6 +228,7 @@ export async function savePortal(input: {
   username?: string;
   password?: string;
   notes?: string;
+  allowed_bayi_ids?: string[];
 }) {
   try {
     const { supabase, companyId, userName, userRole } = await getCompanyAndUser();
@@ -113,6 +236,8 @@ export async function savePortal(input: {
       return { success: false, error: "Yetkiniz bulunmuyor! Yalnızca görüntüleme yetkiniz bulunmaktadır." };
     }
     const now = new Date().toISOString();
+
+    let portalRecord: CompanyPortal;
 
     if (input.id) {
       const { data, error } = await (supabase.from("portals") as any)
@@ -129,8 +254,7 @@ export async function savePortal(input: {
         .single();
 
       if (error) throw new Error(error.message);
-      revalidatePath("/portallar");
-      return { success: true, portal: data as CompanyPortal };
+      portalRecord = data as CompanyPortal;
     } else {
       const { data, error } = await (supabase.from("portals") as any)
         .insert({
@@ -148,9 +272,22 @@ export async function savePortal(input: {
         .single();
 
       if (error) throw new Error(error.message);
-      revalidatePath("/portallar");
-      return { success: true, portal: data as CompanyPortal };
+      portalRecord = data as CompanyPortal;
     }
+
+    // Yetkili tali bayileri kaydet (varsa)
+    if (input.allowed_bayi_ids !== undefined) {
+      await updatePortalBayiPermissions(portalRecord.id, input.allowed_bayi_ids);
+    }
+
+    revalidatePath("/portallar");
+    return {
+      success: true,
+      portal: {
+        ...portalRecord,
+        allowed_bayi_ids: input.allowed_bayi_ids || [],
+      },
+    };
   } catch (err: any) {
     console.error("savePortal error:", err);
     return { success: false, error: err?.message || "Portal kaydedilemedi." };
@@ -159,12 +296,25 @@ export async function savePortal(input: {
 
 export async function deletePortal(id: string) {
   try {
-    const { supabase, userRole } = await getCompanyAndUser();
+    const { supabase, companyId, userRole } = await getCompanyAndUser();
     if (!["admin", "muhasebe1"].includes(userRole)) {
       return { success: false, error: "Yetkiniz bulunmuyor! Yalnızca yöneticiler portal silebilir." };
     }
+
+    // 1. Portal tablosundan sil
     const { error } = await (supabase.from("portals") as any).delete().eq("id", id);
     if (error) throw new Error(error.message);
+
+    // 2. Yetki tablosundan sil
+    try {
+      await (supabase
+        .from("camlica_firca_rows") as any)
+        .delete()
+        .eq("company_id", companyId)
+        .eq("row_data->>_module", "portal_bayi_access")
+        .eq("row_data->>portal_id", id);
+    } catch {}
+
     revalidatePath("/portallar");
     return { success: true };
   } catch (err: any) {
