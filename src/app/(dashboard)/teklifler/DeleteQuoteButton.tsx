@@ -22,7 +22,11 @@ export function DeleteQuoteButton({ quoteId, quoteCode, redirectTo, variant = "i
     startTransition(async () => {
       try {
         await deleteQuote(quoteId);
-        toast.success(quoteCode ? `TKF-${quoteCode} teklifi silindi.` : "Teklif başarıyla silindi.");
+        toast.success(
+          quoteCode
+            ? `TKF-${quoteCode} teklifi Son Silinenler'e taşındı.`
+            : "Teklif Son Silinenler klasörüne taşındı."
+        );
         setIsOpen(false);
         if (redirectTo) {
           router.push(redirectTo);
@@ -43,7 +47,7 @@ export function DeleteQuoteButton({ quoteId, quoteCode, redirectTo, variant = "i
           type="button"
           onClick={() => setIsOpen(true)}
           disabled={isPending}
-          title="Teklifi Sil"
+          title="Son Silinenler'e Taşı"
           className="p-1.5 text-text-muted hover:text-rose-600 hover:bg-rose-50 rounded-lg border border-border hover:border-rose-200 transition"
         >
           {isPending ? <Loader2 size={14} className="animate-spin text-rose-500" /> : <Trash2 size={14} />}
@@ -68,15 +72,23 @@ export function DeleteQuoteButton({ quoteId, quoteCode, redirectTo, variant = "i
               <div className="w-10 h-10 rounded-xl bg-rose-100 flex items-center justify-center">
                 <Trash2 size={20} />
               </div>
-              <h3 className="font-bold text-base text-text">Teklifi Sil</h3>
+              <div>
+                <h3 className="font-bold text-base text-text">Son Silinenlere Taşı</h3>
+                <p className="text-xs text-text-muted">iPhone Çöp Kutusu Mantığı</p>
+              </div>
             </div>
             <p className="text-sm text-text-muted">
               {quoteCode ? (
                 <>
-                  <strong className="text-text">TKF-{quoteCode}</strong> numaralı teklifi silmek istediğinize emin misiniz?
+                  <strong className="text-text">TKF-{quoteCode}</strong> numaralı teklif{" "}
+                  <strong className="text-rose-600">Son Silinenler</strong> klasörüne taşınacaktır.
+                  Dilediğiniz zaman Son Silinenler sekmesinden tek tıkla geri kurtarabilirsiniz.
                 </>
               ) : (
-                "Bu teklifi silmek istediğinize emin misiniz?"
+                <>
+                  Bu teklif <strong className="text-rose-600">Son Silinenler</strong> klasörüne taşınacaktır.
+                  Dilediğiniz zaman Son Silinenler sekmesinden tek tıkla geri kurtarabilirsiniz.
+                </>
               )}
             </p>
             <div className="flex justify-end gap-2 pt-2">
@@ -95,7 +107,7 @@ export function DeleteQuoteButton({ quoteId, quoteCode, redirectTo, variant = "i
                 className="px-4 py-2 text-xs font-bold bg-rose-600 hover:bg-rose-700 text-white rounded-xl shadow-xs transition flex items-center gap-1.5"
               >
                 {isPending && <Loader2 size={13} className="animate-spin" />}
-                Evet, Sil
+                Son Silinenlere Taşı
               </button>
             </div>
           </div>

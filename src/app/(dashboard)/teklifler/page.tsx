@@ -7,6 +7,7 @@ import { QuickQuoteSearch } from "./QuickQuoteSearch";
 import { DeleteQuoteButton } from "./DeleteQuoteButton";
 import { getUploadedQuotes } from "./uploaded-quotes-actions";
 import { UploadedQuotesClient } from "./UploadedQuotesClient";
+import { TrashQuotesClient } from "./TrashQuotesClient";
 import { InteractiveTable } from "@/components/ui/InteractiveTable";
 import {
   FileText,
@@ -18,6 +19,7 @@ import {
   CheckCircle2,
   Plus,
   Upload,
+  Trash2,
 } from "lucide-react";
 
 export default async function TekliflerPage({
@@ -67,6 +69,14 @@ export default async function TekliflerPage({
     .filter((q) => q.status === "converted_to_sale")
     .reduce((acc, q) => acc + (Number(q.grand_total || q.total_amount) || 0), 0);
 
+  // Son silinen tekliflerin sayısı (iPhone Çöp Kutusu)
+  const { count: deletedQuotesCount } = await supabase
+    .from("quotes")
+    .select("id", { count: "exact", head: true })
+    .eq("company_id", profile.company_id)
+    .or("delivery_terms.is.null,delivery_terms.neq.BAYI_SIPARISI")
+    .not("deleted_at", "is", null);
+
   // Tablo sorgusu (Bayi siparişleri hariç normal teklifler)
   let query = supabase
     .from("quotes")
@@ -91,6 +101,19 @@ export default async function TekliflerPage({
   const quotes = quotesData as any[] | null;
 
   const uploadedQuotes = await getUploadedQuotes();
+
+  // Eğer Son Silinenler sekmesiyse, silinmiş teklifleri çek
+  let trashQuotes: any[] = [];
+  if (tab === "trash") {
+    const { data: trashData } = await supabase
+      .from("quotes")
+      .select("*, customer:customers(company_name, contact_name)")
+      .eq("company_id", profile.company_id)
+      .or("delivery_terms.is.null,delivery_terms.neq.BAYI_SIPARISI")
+      .not("deleted_at", "is", null)
+      .order("deleted_at", { ascending: false });
+    trashQuotes = (trashData || []) as any[];
+  }
 
   const { data: profilesData } = await supabase
     .from("profiles")
@@ -138,12 +161,12 @@ export default async function TekliflerPage({
         </div>
       </div>
 
-      {/* SEKME GEZİNTİSİ (Madde 2) */}
-      <div className="flex items-center gap-2 border-b border-border pb-2">
+      {/* SEKME GEZİNTİSİ */}
+      <div className="flex items-center gap-2 border-b border-border pb-2 overflow-x-auto">
         <Link
           href="/teklifler"
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition ${
-            tab !== "pdf"
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+            !tab
               ? "bg-brand-navy text-white shadow-xs"
               : "bg-surface hover:bg-surface/80 text-text border border-border"
           }`}
@@ -154,7 +177,7 @@ export default async function TekliflerPage({
 
         <Link
           href="/teklifler?tab=pdf"
-          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition ${
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
             tab === "pdf"
               ? "bg-brand-navy text-white shadow-xs"
               : "bg-surface hover:bg-surface/80 text-text border border-border"
@@ -163,9 +186,37 @@ export default async function TekliflerPage({
           <Upload size={14} />
           PDF Teklif Arşivi ({uploadedQuotes.length})
         </Link>
+
+        <Link
+          href="/teklifler?tab=trash"
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition whitespace-nowrap ${
+            tab === "trash"
+              ? "bg-rose-700 text-white shadow-xs"
+              : "bg-surface hover:bg-rose-50 text-text border border-border hover:border-rose-200"
+          }`}
+        >
+          <Trash2 size={14} className={tab === "trash" ? "text-white" : "text-rose-600"} />
+          Son Silinenler
+          {(deletedQuotesCount ?? 0) > 0 && (
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-black ${
+                tab === "trash"
+                  ? "bg-white text-rose-700"
+                  : "bg-rose-100 text-rose-700 border border-rose-200"
+              }`}
+            >
+              {deletedQuotesCount}
+            </span>
+          )}
+        </Link>
       </div>
 
-      {tab === "pdf" ? (
+      {tab === "trash" ? (
+        <TrashQuotesClient
+          deletedQuotes={trashQuotes}
+          canManage={canDeleteQuote}
+        />
+      ) : tab === "pdf" ? (
         <UploadedQuotesClient initialQuotes={uploadedQuotes} />
       ) : (
         <>

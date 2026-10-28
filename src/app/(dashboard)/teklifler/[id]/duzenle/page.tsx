@@ -21,8 +21,8 @@ export default async function EditQuotePage({
   if (!quoteData) redirect("/teklifler");
 
   const quote = quoteData as any;
-  if (quote.status === "converted_to_sale") {
-    // Satışa dönmüş teklif düzenlenemez
+  if (quote.status === "converted_to_sale" || quote.deleted_at) {
+    // Satışa dönmüş veya silinmiş teklif düzenlenemez
     redirect(`/teklifler/${id}`);
   }
 

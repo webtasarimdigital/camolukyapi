@@ -186,23 +186,169 @@ export async function deleteQuote(quoteId: string) {
 
   const service = await createServiceClient();
 
-  // 1. Unlink any sales referencing this quote
+  // Soft delete: quote_items'ları silmiyoruz ki geri kurtarılabilsin (iPhone Çöp Kutusu mantığı)
+  const { error } = await (service.from("quotes") as any)
+    .update({
+      deleted_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", quoteId);
+
+  if (error) {
+    throw new Error("Teklif son silinenlere taşınırken hata oluştu: " + error.message);
+  }
+
+  revalidatePath("/teklifler");
+  revalidatePath(`/teklifler/${quoteId}`);
+  return { success: true };
+}
+
+/**
+ * Son Silinenlerdeki teklifi geri kurtarma (Restore)
+ */
+export async function restoreQuote(quoteId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Oturum bulunamadı. Lütfen giriş yapın.");
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const role = (profile as any)?.role || "staff";
+  if (!["admin", "muhasebe1"].includes(role)) {
+    throw new Error("Yetkiniz bulunmuyor! Yalnızca muhasebe ve yöneticiler teklif kurtarabilir.");
+  }
+
+  const service = await createServiceClient();
+
+  const { error } = await (service.from("quotes") as any)
+    .update({
+      deleted_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", quoteId);
+
+  if (error) {
+    throw new Error("Teklif kurtarılırken hata oluştu: " + error.message);
+  }
+
+  revalidatePath("/teklifler");
+  revalidatePath(`/teklifler/${quoteId}`);
+  return { success: true };
+}
+
+/**
+ * Teklifi kalıcı olarak sistemden ve veritabanından silme (Permanent Delete)
+ */
+export async function permanentDeleteQuote(quoteId: string) {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Oturum bulunamadı. Lütfen giriş yapın.");
+
+  const { data: profile } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+  const role = (profile as any)?.role || "staff";
+  if (!["admin", "muhasebe1"].includes(role)) {
+    throw new Error("Yetkiniz bulunmuyor! Yalnızca muhasebe ve yöneticiler kalıcı silme yapabilir.");
+  }
+
+  const service = await createServiceClient();
+
+  // 1. Satış bağlantısı varsa kaldır
   try {
     await (service.from("sales") as any).update({ quote_id: null }).eq("quote_id", quoteId);
-  } catch {}
+  } catch (e) {
+    console.warn("Unlink sales warning:", e);
+  }
 
-  // 2. Delete quote items first
+  // 2. Teklif kalemlerini sil
   try {
     await service.from("quote_items").delete().eq("quote_id", quoteId);
-  } catch {}
+  } catch (e) {
+    console.warn("Delete items warning:", e);
+  }
 
-  // 3. Try hard delete on quotes
+  // 3. Teklifi kalıcı sil
   const { error } = await service.from("quotes").delete().eq("id", quoteId);
   if (error) {
-    console.warn("Hard delete failed, falling back to soft delete:", error.message);
-    await (service.from("quotes") as any).update({ deleted_at: new Date().toISOString() }).eq("id", quoteId);
+    throw new Error("Teklif kalıcı olarak silinirken hata: " + error.message);
   }
 
   revalidatePath("/teklifler");
   return { success: true };
+}
+
+/**
+ * Son silinenlerdeki TÜM teklifleri geri kurtarma
+ */
+export async function restoreAllQuotes() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Oturum bulunamadı. Lütfen giriş yapın.");
+
+  const { data: profile } = await supabase.from("profiles").select("company_id, role").eq("id", user.id).single();
+  const role = (profile as any)?.role || "staff";
+  if (!["admin", "muhasebe1"].includes(role)) {
+    throw new Error("Yetkiniz bulunmuyor! Yalnızca muhasebe ve yöneticiler bu işlemi yapabilir.");
+  }
+  const companyId = (profile as any)?.company_id;
+  if (!companyId) throw new Error("Şirket kaydı bulunamadı.");
+
+  const service = await createServiceClient();
+
+  const { error } = await (service.from("quotes") as any)
+    .update({
+      deleted_at: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("company_id", companyId)
+    .not("deleted_at", "is", null);
+
+  if (error) {
+    throw new Error("Teklifler kurtarılırken hata oluştu: " + error.message);
+  }
+
+  revalidatePath("/teklifler");
+  return { success: true };
+}
+
+/**
+ * Çöp kutusunu tamamen boşaltma (Tüm silinenleri kalıcı sil)
+ */
+export async function emptyTrashQuotes() {
+  const supabase = await createClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("Oturum bulunamadı. Lütfen giriş yapın.");
+
+  const { data: profile } = await supabase.from("profiles").select("company_id, role").eq("id", user.id).single();
+  const role = (profile as any)?.role || "staff";
+  if (!["admin", "muhasebe1"].includes(role)) {
+    throw new Error("Yetkiniz bulunmuyor! Yalnızca muhasebe ve yöneticiler bu işlemi yapabilir.");
+  }
+  const companyId = (profile as any)?.company_id;
+  if (!companyId) throw new Error("Şirket kaydı bulunamadı.");
+
+  const service = await createServiceClient();
+
+  const { data: deletedQuotes } = await service
+    .from("quotes")
+    .select("id")
+    .eq("company_id", companyId)
+    .not("deleted_at", "is", null);
+
+  const ids = (deletedQuotes || []).map((q: any) => q.id);
+  if (ids.length === 0) return { success: true, count: 0 };
+
+  try {
+    await (service.from("sales") as any).update({ quote_id: null }).in("quote_id", ids);
+  } catch {}
+
+  try {
+    await service.from("quote_items").delete().in("quote_id", ids);
+  } catch {}
+
+  const { error } = await service.from("quotes").delete().in("id", ids);
+  if (error) {
+    throw new Error("Çöp kutusu boşaltılırken hata: " + error.message);
+  }
+
+  revalidatePath("/teklifler");
+  return { success: true, count: ids.length };
 }

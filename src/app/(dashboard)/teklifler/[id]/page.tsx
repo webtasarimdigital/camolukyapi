@@ -5,6 +5,7 @@ import { formatCurrency, formatDate } from "@/lib/formatters";
 import { redirect } from "next/navigation";
 import { ConvertQuoteButton } from "./ConvertQuoteButton";
 import { DeleteQuoteButton } from "../DeleteQuoteButton";
+import { DeletedQuoteBanner } from "./DeletedQuoteBanner";
 import { ArrowLeft, Printer, Edit3 } from "lucide-react";
 
 export default async function QuoteDetailPage({
@@ -34,6 +35,7 @@ export default async function QuoteDetailPage({
   const quote = quoteData as any;
   const items = quote.items || [];
   const isConverted = quote.status === "converted_to_sale";
+  const isDeleted = Boolean(quote.deleted_at);
 
   let creatorName = "Yetkili";
   if (quote.created_by) {
@@ -63,21 +65,38 @@ export default async function QuoteDetailPage({
 
   return (
     <div className="space-y-6">
+      {/* Son Silinenler Uyarısı & Geri Kurtarma Barı */}
+      {isDeleted && (
+        <DeletedQuoteBanner
+          quoteId={quote.id}
+          quoteCode={quote.quote_code}
+          deletedAt={quote.deleted_at}
+          canManage={canDeleteQuote}
+        />
+      )}
+
       {/* Üst Başlık ve Butonlar */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-4">
           <Link
-            href="/teklifler"
+            href={isDeleted ? "/teklifler?tab=trash" : "/teklifler"}
             className="p-2 rounded-lg hover:bg-white text-text-muted hover:text-text border border-border transition"
+            title={isDeleted ? "Son Silinenler Listesine Dön" : "Teklif Listesine Dön"}
           >
             <ArrowLeft size={18} />
           </Link>
           <div>
             <h1 className="text-xl font-bold text-text flex items-center gap-3">
               TKF-{quote.quote_code}
-              <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusInfo.cls}`}>
-                {statusInfo.label}
-              </span>
+              {isDeleted ? (
+                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-bold bg-rose-100 text-rose-700 border border-rose-200">
+                  🗑️ Son Silinenlerde
+                </span>
+              ) : (
+                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-semibold ${statusInfo.cls}`}>
+                  {statusInfo.label}
+                </span>
+              )}
             </h1>
             <p className="text-xs text-text-muted mt-0.5">
               Oluşturulma: {formatDate(quote.created_at)} • Temsilci: {creatorName || "Yetkili"}
@@ -86,7 +105,7 @@ export default async function QuoteDetailPage({
         </div>
 
         <div className="flex items-center gap-2.5">
-          {!isConverted && (
+          {!isConverted && !isDeleted && (
             <Link
               href={`/teklifler/${quote.id}/duzenle`}
               className="flex items-center gap-1.5 bg-white text-text px-4 py-2 rounded-lg text-sm font-semibold hover:bg-surface transition border border-border"
@@ -103,15 +122,19 @@ export default async function QuoteDetailPage({
             <Printer size={15} /> Yazdır / A4 Çıktı
           </Link>
 
-          <ConvertQuoteButton quoteId={quote.id} isConverted={isConverted} />
+          {!isDeleted && (
+            <>
+              <ConvertQuoteButton quoteId={quote.id} isConverted={isConverted} />
 
-          {canDeleteQuote && (
-            <DeleteQuoteButton 
-              quoteId={quote.id} 
-              quoteCode={quote.quote_code} 
-              redirectTo="/teklifler" 
-              variant="button" 
-            />
+              {canDeleteQuote && (
+                <DeleteQuoteButton 
+                  quoteId={quote.id} 
+                  quoteCode={quote.quote_code} 
+                  redirectTo="/teklifler" 
+                  variant="button" 
+                />
+              )}
+            </>
           )}
         </div>
       </div>
