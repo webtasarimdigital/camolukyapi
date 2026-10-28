@@ -101,12 +101,17 @@ export function DepoTakipClient({
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
   const [editingDelivery, setEditingDelivery] = useState<WarehouseDeliveryRecord | null>(null);
   const [deliveryForm, setDeliveryForm] = useState({
-    delivery_type: "depodan_teslim_alinan" as DeliveryType,
+    activeSection: "depoya_teslim_edilen" as DeliveryType,
     customer_id: "",
     customer_name: "",
-    delivery_date: new Date().toISOString().slice(0, 10),
+    // Depoya Teslim Edilen (Giriş)
+    received_date: new Date().toISOString().slice(0, 10),
+    received_by: userName || "Depo Sorumlusu",
+    received_image_url: "",
+    // Depodan Teslim Alınan (Çıkış)
+    delivered_date: new Date().toISOString().slice(0, 10),
     delivered_by: userName || "Depo Sorumlusu",
-    receipt_image_url: "",
+    delivered_image_url: "",
     notes: "",
     custom_fields: {} as Record<string, any>,
   });
@@ -149,32 +154,56 @@ export function DepoTakipClient({
   // -------------------------------------------------------------
   const filteredDeliveryRecords = useMemo(() => {
     let list = deliveryRecords;
-    if (deliveryFilter !== "all") {
-      list = list.filter((r) => r.delivery_type === deliveryFilter);
+    if (deliveryFilter === "depoya_teslim_edilen") {
+      list = list.filter(
+        (r) => r.received_image_url || r.received_date || r.delivery_type === "depoya_teslim_edilen"
+      );
+    } else if (deliveryFilter === "depodan_teslim_alinan") {
+      list = list.filter(
+        (r) => r.delivered_image_url || r.delivered_date || r.delivery_type === "depodan_teslim_alinan"
+      );
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter((r) => {
-        const inCust = r.customer_name.toLowerCase().includes(q);
-        const inDelivered = r.delivered_by.toLowerCase().includes(q);
-        const inDate = r.delivery_date.includes(q);
+        const inCust = r.customer_name?.toLowerCase().includes(q);
+        const inDeliveredBy = r.delivered_by?.toLowerCase().includes(q);
+        const inReceivedBy = r.received_by?.toLowerCase().includes(q);
+        const inDeliveredDate = r.delivered_date?.includes(q);
+        const inReceivedDate = r.received_date?.includes(q);
+        const inLegacyDate = r.delivery_date?.includes(q);
         const inNotes = r.notes?.toLowerCase().includes(q);
         const inCustom = Object.values(r.custom_fields || {}).some((v) =>
           String(v).toLowerCase().includes(q)
         );
-        return inCust || inDelivered || inDate || inNotes || inCustom;
+        return (
+          inCust ||
+          inDeliveredBy ||
+          inReceivedBy ||
+          inDeliveredDate ||
+          inReceivedDate ||
+          inLegacyDate ||
+          inNotes ||
+          inCustom
+        );
       });
     }
     return list;
   }, [deliveryRecords, deliveryFilter, searchQuery]);
 
-  // Sayaçlar
-  const alinanCount = useMemo(
-    () => deliveryRecords.filter((r) => r.delivery_type === "depodan_teslim_alinan").length,
+  // Sayaçlar (Depoya Teslim Edilen önce, Depodan Teslim Alınan sonra)
+  const edilenCount = useMemo(
+    () =>
+      deliveryRecords.filter(
+        (r) => r.received_image_url || r.received_date || r.delivery_type === "depoya_teslim_edilen"
+      ).length,
     [deliveryRecords]
   );
-  const edilenCount = useMemo(
-    () => deliveryRecords.filter((r) => r.delivery_type === "depoya_teslim_edilen").length,
+  const alinanCount = useMemo(
+    () =>
+      deliveryRecords.filter(
+        (r) => r.delivered_image_url || r.delivered_date || r.delivery_type === "depodan_teslim_alinan"
+      ).length,
     [deliveryRecords]
   );
 
@@ -199,14 +228,22 @@ export function DepoTakipClient({
     }
   };
 
-  const handleDeliveryImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleDeliveryImageUpload = async (
+    e: React.ChangeEvent<HTMLInputElement>,
+    target: "received" | "delivered"
+  ) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadingDeliveryImg(true);
     try {
-      const res = await uploadToStorage("shipment-photos", file, "depo-teslimat");
+      const folder = target === "received" ? "depo-teslim-edilen" : "depo-teslim-alinan";
+      const res = await uploadToStorage("shipment-photos", file, folder);
       if (res.success && res.url) {
-        setDeliveryForm((prev) => ({ ...prev, receipt_image_url: res.url! }));
+        if (target === "received") {
+          setDeliveryForm((prev) => ({ ...prev, received_image_url: res.url! }));
+        } else {
+          setDeliveryForm((prev) => ({ ...prev, delivered_image_url: res.url! }));
+        }
       } else {
         alert("Görsel yüklenemedi: " + (res.error || "Bilinmeyen hata"));
       }
@@ -339,13 +376,17 @@ export function DepoTakipClient({
   const openNewDeliveryModal = (defaultType?: DeliveryType) => {
     setEditingDelivery(null);
     setCustomerSearch("");
+    const today = new Date().toISOString().slice(0, 10);
     setDeliveryForm({
-      delivery_type: defaultType || "depodan_teslim_alinan",
+      activeSection: defaultType || "depoya_teslim_edilen",
       customer_id: "",
       customer_name: "",
-      delivery_date: new Date().toISOString().slice(0, 10),
+      received_date: today,
+      received_by: userName || "Depo Sorumlusu",
+      received_image_url: "",
+      delivered_date: today,
       delivered_by: userName || "Depo Sorumlusu",
-      receipt_image_url: "",
+      delivered_image_url: "",
       notes: "",
       custom_fields: {},
     });
@@ -355,13 +396,43 @@ export function DepoTakipClient({
   const openEditDeliveryModal = (r: WarehouseDeliveryRecord) => {
     setEditingDelivery(r);
     setCustomerSearch(r.customer_name);
+    const today = new Date().toISOString().slice(0, 10);
+    const isEdilen = !!(
+      r.received_image_url ||
+      r.received_date ||
+      r.delivery_type === "depoya_teslim_edilen"
+    );
+
     setDeliveryForm({
-      delivery_type: r.delivery_type,
+      activeSection: isEdilen ? "depoya_teslim_edilen" : "depodan_teslim_alinan",
       customer_id: r.customer_id || "",
       customer_name: r.customer_name,
-      delivery_date: r.delivery_date,
-      delivered_by: r.delivered_by || userName || "Depo Sorumlusu",
-      receipt_image_url: r.receipt_image_url || "",
+      received_date:
+        r.received_date ||
+        (r.delivery_type === "depoya_teslim_edilen" ? r.delivery_date : "") ||
+        today,
+      received_by:
+        r.received_by ||
+        (r.delivery_type === "depoya_teslim_edilen" ? r.delivered_by : "") ||
+        userName ||
+        "Depo Sorumlusu",
+      received_image_url:
+        r.received_image_url ||
+        (r.delivery_type === "depoya_teslim_edilen" ? r.receipt_image_url : "") ||
+        "",
+      delivered_date:
+        r.delivered_date ||
+        (r.delivery_type === "depodan_teslim_alinan" ? r.delivery_date : "") ||
+        today,
+      delivered_by:
+        r.delivered_by ||
+        (r.delivery_type === "depodan_teslim_alinan" ? r.delivered_by : "") ||
+        userName ||
+        "Depo Sorumlusu",
+      delivered_image_url:
+        r.delivered_image_url ||
+        (r.delivery_type === "depodan_teslim_alinan" ? r.receipt_image_url : "") ||
+        "",
       notes: r.notes || "",
       custom_fields: { ...(r.custom_fields || {}) },
     });
@@ -377,12 +448,15 @@ export function DepoTakipClient({
     startTransition(async () => {
       const res = await saveDeliveryRecord({
         id: editingDelivery?.id,
-        delivery_type: deliveryForm.delivery_type,
+        delivery_type: deliveryForm.activeSection,
         customer_id: deliveryForm.customer_id || undefined,
         customer_name: deliveryForm.customer_name,
-        delivery_date: deliveryForm.delivery_date,
+        received_date: deliveryForm.received_date,
+        received_by: deliveryForm.received_by,
+        received_image_url: deliveryForm.received_image_url,
+        delivered_date: deliveryForm.delivered_date,
         delivered_by: deliveryForm.delivered_by,
-        receipt_image_url: deliveryForm.receipt_image_url,
+        delivered_image_url: deliveryForm.delivered_image_url,
         notes: deliveryForm.notes,
         custom_fields: deliveryForm.custom_fields,
       });
@@ -394,12 +468,21 @@ export function DepoTakipClient({
               r.id === editingDelivery.id
                 ? {
                     ...r,
-                    delivery_type: deliveryForm.delivery_type,
+                    delivery_type: deliveryForm.activeSection,
                     customer_id: deliveryForm.customer_id || undefined,
                     customer_name: deliveryForm.customer_name,
-                    delivery_date: deliveryForm.delivery_date,
+                    received_date: deliveryForm.received_date,
+                    received_by: deliveryForm.received_by,
+                    received_image_url: deliveryForm.received_image_url,
+                    delivered_date: deliveryForm.delivered_date,
                     delivered_by: deliveryForm.delivered_by,
-                    receipt_image_url: deliveryForm.receipt_image_url,
+                    delivered_image_url: deliveryForm.delivered_image_url,
+                    delivery_date:
+                      deliveryForm.received_date || deliveryForm.delivered_date || r.delivery_date,
+                    receipt_image_url:
+                      deliveryForm.received_image_url ||
+                      deliveryForm.delivered_image_url ||
+                      r.receipt_image_url,
                     notes: deliveryForm.notes,
                     custom_fields: deliveryForm.custom_fields,
                   }
@@ -409,12 +492,17 @@ export function DepoTakipClient({
         } else if (res.data) {
           const newRow: WarehouseDeliveryRecord = {
             id: res.data.id,
-            delivery_type: deliveryForm.delivery_type,
+            delivery_type: deliveryForm.activeSection,
             customer_id: deliveryForm.customer_id || undefined,
             customer_name: deliveryForm.customer_name,
-            delivery_date: deliveryForm.delivery_date,
+            received_date: deliveryForm.received_date,
+            received_by: deliveryForm.received_by,
+            received_image_url: deliveryForm.received_image_url,
+            delivered_date: deliveryForm.delivered_date,
             delivered_by: deliveryForm.delivered_by,
-            receipt_image_url: deliveryForm.receipt_image_url,
+            delivered_image_url: deliveryForm.delivered_image_url,
+            delivery_date: deliveryForm.received_date || deliveryForm.delivered_date,
+            receipt_image_url: deliveryForm.received_image_url || deliveryForm.delivered_image_url,
             notes: deliveryForm.notes,
             custom_fields: deliveryForm.custom_fields,
             created_at: new Date().toISOString(),
@@ -850,7 +938,7 @@ export function DepoTakipClient({
         {/* ========================================================= */}
         {activeTab === "teslimat" && (
           <div>
-            {/* Teslimat Türü Filtreleri (Depodan Alınan / Depoya Edilen) */}
+            {/* Teslimat Türü Filtreleri (Depoya Edilen / Depodan Alınan) */}
             <div className="flex flex-wrap items-center gap-2 mb-3">
               <button
                 type="button"
@@ -866,19 +954,6 @@ export function DepoTakipClient({
 
               <button
                 type="button"
-                onClick={() => setDeliveryFilter("depodan_teslim_alinan")}
-                className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all ${
-                  deliveryFilter === "depodan_teslim_alinan"
-                    ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
-                    : "bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50"
-                }`}
-              >
-                <ArrowUpRight className="w-3.5 h-3.5" />
-                <span>Depodan Teslim Alınan ({alinanCount})</span>
-              </button>
-
-              <button
-                type="button"
                 onClick={() => setDeliveryFilter("depoya_teslim_edilen")}
                 className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all ${
                   deliveryFilter === "depoya_teslim_edilen"
@@ -890,20 +965,33 @@ export function DepoTakipClient({
                 <span>Depoya Teslim Edilen ({edilenCount})</span>
               </button>
 
+              <button
+                type="button"
+                onClick={() => setDeliveryFilter("depodan_teslim_alinan")}
+                className={`flex items-center gap-1 px-3 py-1.5 text-xs font-semibold rounded-xl border transition-all ${
+                  deliveryFilter === "depodan_teslim_alinan"
+                    ? "bg-emerald-600 text-white border-emerald-600 shadow-sm"
+                    : "bg-white text-emerald-700 border-emerald-200 hover:bg-emerald-50"
+                }`}
+              >
+                <ArrowUpRight className="w-3.5 h-3.5" />
+                <span>Depodan Teslim Alınan ({alinanCount})</span>
+              </button>
+
               <div className="ml-auto hidden sm:flex items-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => openNewDeliveryModal("depodan_teslim_alinan")}
-                  className="px-2.5 py-1 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-lg"
-                >
-                  + Depodan Teslim Çıkışı
-                </button>
                 <button
                   type="button"
                   onClick={() => openNewDeliveryModal("depoya_teslim_edilen")}
                   className="px-2.5 py-1 text-xs font-semibold bg-sky-50 text-sky-700 border border-sky-200 hover:bg-sky-100 rounded-lg"
                 >
                   + Depoya Teslim Girişi
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openNewDeliveryModal("depodan_teslim_alinan")}
+                  className="px-2.5 py-1 text-xs font-semibold bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100 rounded-lg"
+                >
+                  + Depodan Teslim Çıkışı
                 </button>
               </div>
             </div>
@@ -939,7 +1027,7 @@ export function DepoTakipClient({
                   Henüz Depo Teslimat Kaydı Yok
                 </h3>
                 <p className="text-xs text-slate-500 max-w-md mx-auto mt-1 mb-4">
-                  Depodan müşteriye teslim alınan veya depoya teslim edilen fiş ve ürünleri anında
+                  Depoya teslim edilen veya depodan teslim alınan fiş ve ürünleri anında
                   kaydedebilirsiniz.
                 </p>
                 <button
@@ -957,11 +1045,20 @@ export function DepoTakipClient({
                   <table className="w-full text-left text-xs sm:text-sm">
                     <thead className="bg-slate-50 border-b border-slate-200 text-slate-500 uppercase text-[11px] font-bold tracking-wider">
                       <tr>
-                        <th className="px-3 sm:px-4 py-3">Fiş / Görsel</th>
-                        <th className="px-3 sm:px-4 py-3">İşlem Türü</th>
+                        <th className="px-3 sm:px-4 py-3 min-w-[200px]">
+                          <div className="flex items-center gap-1.5 text-sky-700 font-bold">
+                            <ArrowDownLeft className="w-3.5 h-3.5 text-sky-600" />
+                            <span>Depoya Teslim Görseli (Giriş)</span>
+                          </div>
+                        </th>
+                        <th className="px-3 sm:px-4 py-3 min-w-[200px]">
+                          <div className="flex items-center gap-1.5 text-emerald-700 font-bold">
+                            <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Depodan Teslim Görseli (Çıkış)</span>
+                          </div>
+                        </th>
                         <th className="px-3 sm:px-4 py-3">Müşteri / Cari</th>
-                        <th className="px-3 sm:px-4 py-3">Tarih</th>
-                        <th className="px-3 sm:px-4 py-3">Teslim Eden</th>
+                        <th className="px-3 sm:px-4 py-3">Notlar</th>
                         {/* Dinamik Sütun Başlıkları */}
                         {deliveryColumns.map((col) => (
                           <th key={col.id} className="px-3 sm:px-4 py-3">
@@ -973,84 +1070,136 @@ export function DepoTakipClient({
                     </thead>
                     <tbody className="divide-y divide-slate-100">
                       {filteredDeliveryRecords.map((item) => {
-                        const isAlinan = item.delivery_type === "depodan_teslim_alinan";
                         return (
                           <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
-                            {/* Fiş Görseli Thumbnail */}
+                            {/* 1. SÜTUN: DEPOYA TESLİM EDİLEN GÖRSELİ & BİLGİLERİ */}
                             <td className="px-3 sm:px-4 py-3">
-                              {item.receipt_image_url ? (
-                                <button
-                                  type="button"
-                                  onClick={() =>
-                                    setPreviewImage({
-                                      url: item.receipt_image_url!,
-                                      title: `${item.customer_name} — Teslimat Fişi`,
-                                    })
-                                  }
-                                  className="relative w-12 h-12 rounded-xl overflow-hidden border border-slate-200 bg-slate-100 hover:scale-105 transition-transform group"
-                                  title="Fişi Büyüt"
-                                >
-                                  <Image
-                                    src={item.receipt_image_url}
-                                    alt="Fiş"
-                                    fill
-                                    className="object-cover"
-                                  />
-                                  <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
-                                    <Eye className="w-3.5 h-3.5" />
+                              <div className="flex items-center gap-3">
+                                {item.received_image_url ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setPreviewImage({
+                                        url: item.received_image_url!,
+                                        title: `${item.customer_name} — Depoya Teslim Görseli`,
+                                      })
+                                    }
+                                    className="relative w-12 h-12 rounded-xl overflow-hidden border border-sky-200 bg-sky-50 hover:scale-105 transition-transform group shrink-0 shadow-sm"
+                                    title="Depoya Teslim Fişini Büyüt"
+                                  >
+                                    <Image
+                                      src={item.received_image_url}
+                                      alt="Depoya Teslim"
+                                      fill
+                                      className="object-cover"
+                                    />
+                                    <div className="absolute inset-0 bg-sky-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                      <Eye className="w-3.5 h-3.5" />
+                                    </div>
+                                  </button>
+                                ) : (
+                                  <div className="w-12 h-12 rounded-xl border border-dashed border-sky-200 bg-sky-50/40 flex items-center justify-center text-sky-300 shrink-0">
+                                    <FileText className="w-5 h-5" />
                                   </div>
-                                </button>
-                              ) : (
-                                <div className="w-12 h-12 rounded-xl border border-dashed border-slate-200 bg-slate-50 flex items-center justify-center text-slate-300">
-                                  <FileText className="w-5 h-5" />
+                                )}
+                                <div className="min-w-0">
+                                  {item.received_date || item.received_by ? (
+                                    <>
+                                      {item.received_date && (
+                                        <div className="flex items-center gap-1 text-slate-700 font-semibold text-xs whitespace-nowrap">
+                                          <Calendar className="w-3 h-3 text-sky-600 shrink-0" />
+                                          <span>{item.received_date}</span>
+                                        </div>
+                                      )}
+                                      {item.received_by && (
+                                        <div className="flex items-center gap-1 text-slate-500 text-[11px] mt-0.5 whitespace-nowrap">
+                                          <User className="w-3 h-3 text-slate-400 shrink-0" />
+                                          <span className="truncate max-w-[130px] font-medium">
+                                            {item.received_by}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span className="text-[11px] text-slate-400 italic">
+                                      — Giriş Yok
+                                    </span>
+                                  )}
                                 </div>
-                              )}
+                              </div>
                             </td>
 
-                            {/* İşlem Türü Rozeti */}
+                            {/* 2. SÜTUN: DEPODAN TESLİM ALINAN GÖRSELİ & BİLGİLERİ */}
                             <td className="px-3 sm:px-4 py-3">
-                              <span
-                                className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-xs font-bold ${
-                                  isAlinan
-                                    ? "bg-emerald-50 text-emerald-700 border border-emerald-200"
-                                    : "bg-sky-50 text-sky-700 border border-sky-200"
-                                }`}
-                              >
-                                {isAlinan ? (
-                                  <>
-                                    <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600" />
-                                    <span>Depodan Teslim Alınan</span>
-                                  </>
+                              <div className="flex items-center gap-3">
+                                {item.delivered_image_url ? (
+                                  <button
+                                    type="button"
+                                    onClick={() =>
+                                      setPreviewImage({
+                                        url: item.delivered_image_url!,
+                                        title: `${item.customer_name} — Depodan Teslim Görseli`,
+                                      })
+                                    }
+                                    className="relative w-12 h-12 rounded-xl overflow-hidden border border-emerald-200 bg-emerald-50 hover:scale-105 transition-transform group shrink-0 shadow-sm"
+                                    title="Depodan Teslim Fişini Büyüt"
+                                  >
+                                    <Image
+                                      src={item.delivered_image_url}
+                                      alt="Depodan Teslim"
+                                      fill
+                                      className="object-cover"
+                                    />
+                                    <div className="absolute inset-0 bg-emerald-950/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white">
+                                      <Eye className="w-3.5 h-3.5" />
+                                    </div>
+                                  </button>
                                 ) : (
-                                  <>
-                                    <ArrowDownLeft className="w-3.5 h-3.5 text-sky-600" />
-                                    <span>Depoya Teslim Edilen</span>
-                                  </>
+                                  <div className="w-12 h-12 rounded-xl border border-dashed border-emerald-200 bg-emerald-50/40 flex items-center justify-center text-emerald-300 shrink-0">
+                                    <FileText className="w-5 h-5" />
+                                  </div>
                                 )}
-                              </span>
+                                <div className="min-w-0">
+                                  {item.delivered_date || item.delivered_by ? (
+                                    <>
+                                      {item.delivered_date && (
+                                        <div className="flex items-center gap-1 text-slate-700 font-semibold text-xs whitespace-nowrap">
+                                          <Calendar className="w-3 h-3 text-emerald-600 shrink-0" />
+                                          <span>{item.delivered_date}</span>
+                                        </div>
+                                      )}
+                                      {item.delivered_by && (
+                                        <div className="flex items-center gap-1 text-slate-500 text-[11px] mt-0.5 whitespace-nowrap">
+                                          <User className="w-3 h-3 text-slate-400 shrink-0" />
+                                          <span className="truncate max-w-[130px] font-medium">
+                                            {item.delivered_by}
+                                          </span>
+                                        </div>
+                                      )}
+                                    </>
+                                  ) : (
+                                    <span className="text-[11px] text-slate-400 italic">
+                                      — Çıkış Yok
+                                    </span>
+                                  )}
+                                </div>
+                              </div>
                             </td>
 
                             {/* Müşteri / Cari Adı */}
                             <td className="px-3 sm:px-4 py-3">
                               <div className="font-bold text-slate-900">{item.customer_name}</div>
-                              {item.notes && (
-                                <div className="text-xs text-slate-500 mt-0.5 line-clamp-1">
+                            </td>
+
+                            {/* Notlar */}
+                            <td className="px-3 sm:px-4 py-3 text-slate-600 text-xs">
+                              {item.notes ? (
+                                <span className="line-clamp-2" title={item.notes}>
                                   {item.notes}
-                                </div>
+                                </span>
+                              ) : (
+                                <span className="text-slate-300">—</span>
                               )}
-                            </td>
-
-                            {/* Tarih */}
-                            <td className="px-3 sm:px-4 py-3 whitespace-nowrap text-slate-600 font-medium">
-                              {item.delivery_date}
-                            </td>
-
-                            {/* Teslim Eden */}
-                            <td className="px-3 sm:px-4 py-3 text-slate-700">
-                              <div className="flex items-center gap-1">
-                                <User className="w-3.5 h-3.5 text-slate-400" />
-                                <span>{item.delivered_by || "Depo"}</span>
-                              </div>
                             </td>
 
                             {/* Dinamik Sütun Hücreleri */}
@@ -1378,50 +1527,6 @@ export function DepoTakipClient({
 
             {/* Gövde */}
             <div className="p-4 sm:p-5 space-y-4">
-              {/* İŞLEM TÜRÜ: Depodan Teslim Alınan vs Depoya Teslim Edilen */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  Teslimat & Görsel Türü *
-                </label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDeliveryForm((prev) => ({
-                        ...prev,
-                        delivery_type: "depodan_teslim_alinan",
-                      }))
-                    }
-                    className={`flex items-center justify-center gap-1.5 p-3 rounded-xl border text-xs font-bold transition-all ${
-                      deliveryForm.delivery_type === "depodan_teslim_alinan"
-                        ? "bg-emerald-600 text-white border-emerald-600 shadow-md shadow-emerald-600/20"
-                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    <ArrowUpRight className="w-4 h-4 shrink-0" />
-                    <span>Depodan Teslim Alınan</span>
-                  </button>
-
-                  <button
-                    type="button"
-                    onClick={() =>
-                      setDeliveryForm((prev) => ({
-                        ...prev,
-                        delivery_type: "depoya_teslim_edilen",
-                      }))
-                    }
-                    className={`flex items-center justify-center gap-1.5 p-3 rounded-xl border text-xs font-bold transition-all ${
-                      deliveryForm.delivery_type === "depoya_teslim_edilen"
-                        ? "bg-sky-600 text-white border-sky-600 shadow-md shadow-sky-600/20"
-                        : "bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100"
-                    }`}
-                  >
-                    <ArrowDownLeft className="w-4 h-4 shrink-0" />
-                    <span>Depoya Teslim Edilen</span>
-                  </button>
-                </div>
-              </div>
-
               {/* MÜŞTERİ SEÇİMİ (Kendi Listemizden Seç veya Manuel Yaz) */}
               <div>
                 <div className="flex items-center justify-between mb-1.5">
@@ -1467,96 +1572,321 @@ export function DepoTakipClient({
                 )}
               </div>
 
-              {/* Tarih & Teslim Eden */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Teslim Tarihi
-                  </label>
-                  <input
-                    type="date"
-                    value={deliveryForm.delivery_date}
-                    onChange={(e) =>
-                      setDeliveryForm((prev) => ({ ...prev, delivery_date: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                    Teslim Eden / Alan
-                  </label>
-                  <input
-                    type="text"
-                    value={deliveryForm.delivered_by}
-                    onChange={(e) =>
-                      setDeliveryForm((prev) => ({ ...prev, delivered_by: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white"
-                  />
-                </div>
-              </div>
-
-              {/* GİDEN FİŞ / TESLİMAT GÖRSELİ */}
+              {/* İŞLEM BÖLÜMÜ SEÇİMİ: 1. DEPOYA TESLİM EDİLEN vs 2. DEPODAN TESLİM ALINAN (ÖNCE DEPOYA GELİYOR) */}
               <div>
                 <label className="block text-xs font-bold text-slate-700 mb-1.5">
-                  {deliveryForm.delivery_type === "depodan_teslim_alinan"
-                    ? "Depodan Teslim Alınan Fiş / Ürün Görseli"
-                    : "Depoya Teslim Edilen Fiş / Ürün Görseli"}
+                  İşlem & Görsel Alanı Seçiniz
                 </label>
-                {deliveryForm.receipt_image_url ? (
-                  <div className="relative w-full h-44 rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 group">
-                    <Image
-                      src={deliveryForm.receipt_image_url}
-                      alt="Fiş Görseli"
-                      fill
-                      className="object-cover"
-                    />
-                    <div className="absolute top-2 right-2">
-                      <button
-                        type="button"
-                        onClick={() =>
-                          setDeliveryForm((prev) => ({ ...prev, receipt_image_url: "" }))
+                <div className="grid grid-cols-2 gap-2 p-1 bg-slate-100 rounded-2xl">
+                  {/* 1. Depoya Teslim Edilen (Giriş) - SOL / İLK */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDeliveryForm((prev) => ({
+                        ...prev,
+                        activeSection: "depoya_teslim_edilen",
+                      }))
+                    }
+                    className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                      deliveryForm.activeSection === "depoya_teslim_edilen"
+                        ? "bg-sky-600 text-white shadow-md shadow-sky-600/30"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                    }`}
+                  >
+                    <ArrowDownLeft className="w-4 h-4 shrink-0" />
+                    <span>1. Depoya Teslim Edilen</span>
+                    {deliveryForm.received_image_url && (
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 ml-1"></span>
+                    )}
+                  </button>
+
+                  {/* 2. Depodan Teslim Alınan (Çıkış) - SAĞ / İKİNCİ */}
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setDeliveryForm((prev) => ({
+                        ...prev,
+                        activeSection: "depodan_teslim_alinan",
+                      }))
+                    }
+                    className={`flex items-center justify-center gap-1.5 py-2.5 px-3 rounded-xl text-xs font-bold transition-all ${
+                      deliveryForm.activeSection === "depodan_teslim_alinan"
+                        ? "bg-emerald-600 text-white shadow-md shadow-emerald-600/30"
+                        : "text-slate-600 hover:text-slate-900 hover:bg-slate-200/60"
+                    }`}
+                  >
+                    <ArrowUpRight className="w-4 h-4 shrink-0" />
+                    <span>2. Depodan Teslim Alınan</span>
+                    {deliveryForm.delivered_image_url && (
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 ml-1"></span>
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              {/* Her iki işlemin görsel ve durum özeti */}
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div
+                  onClick={() =>
+                    setDeliveryForm((prev) => ({ ...prev, activeSection: "depoya_teslim_edilen" }))
+                  }
+                  className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+                    deliveryForm.activeSection === "depoya_teslim_edilen"
+                      ? "bg-sky-50/80 border-sky-300 ring-1 ring-sky-300"
+                      : "bg-slate-50 border-slate-200 hover:bg-slate-100/60"
+                  }`}
+                >
+                  <div className="font-bold text-sky-900 flex items-center justify-between mb-1">
+                    <span className="flex items-center gap-1">
+                      <ArrowDownLeft className="w-3.5 h-3.5 text-sky-600" />
+                      Depoya Teslim
+                    </span>
+                    {deliveryForm.received_image_url && (
+                      <span className="text-[10px] text-emerald-600 font-bold">✓ Görsel Var</span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-slate-600 truncate">
+                    Kişi: {deliveryForm.received_by || "—"}
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    Tarih: {deliveryForm.received_date || "—"}
+                  </div>
+                </div>
+
+                <div
+                  onClick={() =>
+                    setDeliveryForm((prev) => ({ ...prev, activeSection: "depodan_teslim_alinan" }))
+                  }
+                  className={`p-2.5 rounded-xl border cursor-pointer transition-all ${
+                    deliveryForm.activeSection === "depodan_teslim_alinan"
+                      ? "bg-emerald-50/80 border-emerald-300 ring-1 ring-emerald-300"
+                      : "bg-slate-50 border-slate-200 hover:bg-slate-100/60"
+                  }`}
+                >
+                  <div className="font-bold text-emerald-900 flex items-center justify-between mb-1">
+                    <span className="flex items-center gap-1">
+                      <ArrowUpRight className="w-3.5 h-3.5 text-emerald-600" />
+                      Depodan Teslim
+                    </span>
+                    {deliveryForm.delivered_image_url && (
+                      <span className="text-[10px] text-emerald-600 font-bold">✓ Görsel Var</span>
+                    )}
+                  </div>
+                  <div className="text-[11px] text-slate-600 truncate">
+                    Kişi: {deliveryForm.delivered_by || "—"}
+                  </div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">
+                    Tarih: {deliveryForm.delivered_date || "—"}
+                  </div>
+                </div>
+              </div>
+
+              {/* SEÇİLEN ALANIN FORMU (BİRBİRİNİ EZMEZ, AYRI AYRI SAKLANIR) */}
+              {deliveryForm.activeSection === "depoya_teslim_edilen" ? (
+                /* 1. DEPOYA TESLİM EDİLEN ALANI (GİRİŞ) */
+                <div className="p-3.5 bg-sky-50/40 rounded-2xl border border-sky-100 space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-sky-900 flex items-center gap-1.5">
+                      <ArrowDownLeft className="w-4 h-4 text-sky-600" />
+                      Depoya Teslim Bilgileri (Giriş)
+                    </span>
+                    <span className="text-[11px] text-sky-600 font-medium">
+                      Depoya teslim alan/eden kişi doldurur
+                    </span>
+                  </div>
+
+                  {/* Tarih & Kişi */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Depoya Teslim Tarihi
+                      </label>
+                      <input
+                        type="date"
+                        value={deliveryForm.received_date}
+                        onChange={(e) =>
+                          setDeliveryForm((prev) => ({ ...prev, received_date: e.target.value }))
                         }
-                        className="p-1.5 bg-rose-600 text-white rounded-xl shadow-md hover:bg-rose-700"
-                        title="Görseli Kaldır"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                        className="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Teslim Alan / Eden Personel
+                      </label>
+                      <input
+                        type="text"
+                        value={deliveryForm.received_by}
+                        onChange={(e) =>
+                          setDeliveryForm((prev) => ({ ...prev, received_by: e.target.value }))
+                        }
+                        placeholder="Örn: Mehmet Usta"
+                        className="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-sky-500"
+                      />
                     </div>
                   </div>
-                ) : (
-                  <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-indigo-200 rounded-2xl bg-indigo-50/30 hover:bg-indigo-50 cursor-pointer transition-colors p-4 text-center">
-                    {uploadingDeliveryImg ? (
-                      <div className="flex flex-col items-center gap-2 text-indigo-600">
-                        <Loader2 className="w-7 h-7 animate-spin" />
-                        <span className="text-xs font-semibold">Görsel yükleniyor...</span>
+
+                  {/* Depoya Teslim Görseli */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Depoya Teslim Fiş / Ürün Görseli
+                    </label>
+                    {deliveryForm.received_image_url ? (
+                      <div className="relative w-full h-44 rounded-2xl overflow-hidden border border-sky-200 bg-white group">
+                        <Image
+                          src={deliveryForm.received_image_url}
+                          alt="Depoya Teslim Fiş"
+                          fill
+                          className="object-cover"
+                        />
+                        <div className="absolute top-2 right-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDeliveryForm((prev) => ({ ...prev, received_image_url: "" }))
+                            }
+                            className="p-1.5 bg-rose-600 text-white rounded-xl shadow-md hover:bg-rose-700"
+                            title="Görseli Kaldır"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
                       </div>
                     ) : (
-                      <>
-                        <div className="w-10 h-10 bg-white text-indigo-600 rounded-xl flex items-center justify-center shadow-sm mb-1.5">
-                          <Camera className="w-5 h-5" />
-                        </div>
-                        <span className="text-xs font-bold text-slate-800">
-                          Fiş Fotoğrafı Çek veya Seç
-                        </span>
-                        <span className="text-[11px] text-slate-400 mt-0.5">
-                          Teslim fişi, sevk irsaliyesi veya ürün fotoğrafı
-                        </span>
-                      </>
+                      <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-sky-300 rounded-2xl bg-white hover:bg-sky-50 cursor-pointer transition-colors p-4 text-center">
+                        {uploadingDeliveryImg ? (
+                          <div className="flex flex-col items-center gap-2 text-sky-600">
+                            <Loader2 className="w-7 h-7 animate-spin" />
+                            <span className="text-xs font-semibold">Görsel yükleniyor...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="w-10 h-10 bg-sky-100 text-sky-600 rounded-xl flex items-center justify-center shadow-sm mb-1.5">
+                              <Camera className="w-5 h-5" />
+                            </div>
+                            <span className="text-xs font-bold text-slate-800">
+                              Depoya Teslim Fiş / Ürün Görseli Yükle
+                            </span>
+                            <span className="text-[11px] text-slate-400 mt-0.5">
+                              Kameradan çekin veya galeriden seçin
+                            </span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) => handleDeliveryImageUpload(e, "received")}
+                          disabled={uploadingDeliveryImg}
+                          className="hidden"
+                        />
+                      </label>
                     )}
-                    <input
-                      type="file"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={handleDeliveryImageUpload}
-                      disabled={uploadingDeliveryImg}
-                      className="hidden"
-                    />
-                  </label>
-                )}
-              </div>
+                  </div>
+                </div>
+              ) : (
+                /* 2. DEPODAN TESLİM ALINAN ALANI (ÇIKIŞ) */
+                <div className="p-3.5 bg-emerald-50/40 rounded-2xl border border-emerald-100 space-y-3.5">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                      <ArrowUpRight className="w-4 h-4 text-emerald-600" />
+                      Depodan Teslim Bilgileri (Çıkış)
+                    </span>
+                    <span className="text-[11px] text-emerald-600 font-medium">
+                      Depodan teslim alan/çıkaran kişi doldurur
+                    </span>
+                  </div>
+
+                  {/* Tarih & Kişi */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Depodan Teslim Tarihi
+                      </label>
+                      <input
+                        type="date"
+                        value={deliveryForm.delivered_date}
+                        onChange={(e) =>
+                          setDeliveryForm((prev) => ({ ...prev, delivered_date: e.target.value }))
+                        }
+                        className="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-xs font-bold text-slate-700 mb-1">
+                        Teslim Eden / Alan Personel
+                      </label>
+                      <input
+                        type="text"
+                        value={deliveryForm.delivered_by}
+                        onChange={(e) =>
+                          setDeliveryForm((prev) => ({ ...prev, delivered_by: e.target.value }))
+                        }
+                        placeholder="Örn: Ali Sevkiyat"
+                        className="w-full px-3 py-2 text-xs sm:text-sm bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Depodan Teslim Görseli */}
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">
+                      Depodan Teslim Fiş / Sevk Görseli
+                    </label>
+                    {deliveryForm.delivered_image_url ? (
+                      <div className="relative w-full h-44 rounded-2xl overflow-hidden border border-emerald-200 bg-white group">
+                        <Image
+                          src={deliveryForm.delivered_image_url}
+                          alt="Depodan Teslim Fiş"
+                          fill
+                          className="object-cover"
+                        />
+                        <div className="absolute top-2 right-2">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setDeliveryForm((prev) => ({ ...prev, delivered_image_url: "" }))
+                            }
+                            className="p-1.5 bg-rose-600 text-white rounded-xl shadow-md hover:bg-rose-700"
+                            title="Görseli Kaldır"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <label className="flex flex-col items-center justify-center w-full h-36 border-2 border-dashed border-emerald-300 rounded-2xl bg-white hover:bg-emerald-50 cursor-pointer transition-colors p-4 text-center">
+                        {uploadingDeliveryImg ? (
+                          <div className="flex flex-col items-center gap-2 text-emerald-600">
+                            <Loader2 className="w-7 h-7 animate-spin" />
+                            <span className="text-xs font-semibold">Görsel yükleniyor...</span>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center shadow-sm mb-1.5">
+                              <Camera className="w-5 h-5" />
+                            </div>
+                            <span className="text-xs font-bold text-slate-800">
+                              Depodan Teslim Fiş / Sevk Görseli Yükle
+                            </span>
+                            <span className="text-[11px] text-slate-400 mt-0.5">
+                              Kameradan çekin veya galeriden seçin
+                            </span>
+                          </>
+                        )}
+                        <input
+                          type="file"
+                          accept="image/*"
+                          capture="environment"
+                          onChange={(e) => handleDeliveryImageUpload(e, "delivered")}
+                          disabled={uploadingDeliveryImg}
+                          className="hidden"
+                        />
+                      </label>
+                    )}
+                  </div>
+                </div>
+              )}
 
               {/* Notlar */}
               <div>

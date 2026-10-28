@@ -25,11 +25,19 @@ export type DeliveryType = "depodan_teslim_alinan" | "depoya_teslim_edilen";
 export interface WarehouseDeliveryRecord {
   id: string;
   company_id?: string;
-  delivery_type: DeliveryType;
+  delivery_type?: DeliveryType;
   customer_id?: string;
   customer_name: string;
-  delivery_date: string;
-  delivered_by: string;
+  // Depoya Teslim Edilen (Giriş)
+  received_date?: string;
+  received_by?: string;
+  received_image_url?: string;
+  // Depodan Teslim Alınan (Çıkış)
+  delivered_date?: string;
+  delivered_by?: string;
+  delivered_image_url?: string;
+  // Geriye dönük uyumluluk alanları
+  delivery_date?: string;
   receipt_image_url?: string;
   receipt_images?: string[];
   notes?: string;
@@ -169,15 +177,25 @@ export async function getWarehousePageData(): Promise<{
 
     const deliveryRecords: WarehouseDeliveryRecord[] = (deliveryRows || []).map((r: any) => {
       const data = r.row_data || {};
+      const isDepoya = data.delivery_type === "depoya_teslim_edilen";
       return {
         id: r.id,
         company_id: r.company_id,
-        delivery_type: (data.delivery_type as DeliveryType) || "depodan_teslim_alinan",
+        delivery_type: (data.delivery_type as DeliveryType) || (data.received_image_url || data.received_date ? "depoya_teslim_edilen" : "depodan_teslim_alinan"),
         customer_id: data.customer_id || undefined,
         customer_name: data.customer_name || "",
-        delivery_date: data.delivery_date || r.created_at?.slice(0, 10) || "",
-        delivered_by: data.delivered_by || "",
-        receipt_image_url: data.receipt_image_url || "",
+        // Depoya Teslim Edilen
+        received_date: data.received_date || (isDepoya ? data.delivery_date : "") || "",
+        received_by: data.received_by || (isDepoya ? data.delivered_by : "") || "",
+        received_image_url: data.received_image_url || (isDepoya ? data.receipt_image_url : "") || "",
+        // Depodan Teslim Alınan
+        delivered_date: data.delivered_date || (!isDepoya && data.delivery_date ? data.delivery_date : "") || "",
+        delivered_by: data.delivered_by || (!isDepoya && data.delivered_by ? data.delivered_by : "") || "",
+        delivered_image_url: data.delivered_image_url || (!isDepoya && data.receipt_image_url ? data.receipt_image_url : "") || "",
+        // Geriye dönük uyumluluk
+        delivery_date: data.delivery_date || data.received_date || data.delivered_date || r.created_at?.slice(0, 10) || "",
+        delivered_by_legacy: data.delivered_by || "",
+        receipt_image_url: data.receipt_image_url || data.received_image_url || data.delivered_image_url || "",
         receipt_images: data.receipt_images || (data.receipt_image_url ? [data.receipt_image_url] : []),
         notes: data.notes || "",
         custom_fields: data.custom_fields || {},
@@ -302,11 +320,20 @@ export async function deleteBrokenRecord(id: string): Promise<{ success: boolean
 // -------------------------------------------------------------
 export async function saveDeliveryRecord(record: {
   id?: string;
-  delivery_type: DeliveryType;
+  delivery_type?: DeliveryType;
   customer_id?: string;
   customer_name: string;
-  delivery_date: string;
-  delivered_by: string;
+  // Depoya Teslim Edilen
+  received_date?: string;
+  received_by?: string;
+  received_image_url?: string;
+  // Depodan Teslim Alınan
+  delivered_date?: string;
+  delivered_by?: string;
+  delivered_image_url?: string;
+  // Geriye dönük uyumluluk alanları
+  delivery_date?: string;
+  delivered_by_legacy?: string;
   receipt_image_url?: string;
   receipt_images?: string[];
   notes?: string;
@@ -316,17 +343,38 @@ export async function saveDeliveryRecord(record: {
     const companyId = await getCompanyId();
     const service: any = await createServiceClient();
 
+    let prevData: any = {};
+    if (record.id) {
+      const { data: existing } = await service
+        .from("camlica_firca_rows")
+        .select("row_data")
+        .eq("company_id", companyId)
+        .eq("id", record.id)
+        .single();
+      if (existing?.row_data) {
+        prevData = existing.row_data;
+      }
+    }
+
     const rowData = {
       _module: "depo_teslimi",
-      delivery_type: record.delivery_type || "depodan_teslim_alinan",
-      customer_id: record.customer_id || null,
-      customer_name: record.customer_name,
-      delivery_date: record.delivery_date,
-      delivered_by: record.delivered_by,
-      receipt_image_url: record.receipt_image_url || "",
-      receipt_images: record.receipt_images || (record.receipt_image_url ? [record.receipt_image_url] : []),
-      notes: record.notes || "",
-      custom_fields: record.custom_fields || {},
+      delivery_type: record.delivery_type || prevData.delivery_type || "depoya_teslim_edilen",
+      customer_id: record.customer_id !== undefined ? record.customer_id : (prevData.customer_id || null),
+      customer_name: record.customer_name || prevData.customer_name || "",
+      // Depoya Teslim Edilen
+      received_date: record.received_date !== undefined ? record.received_date : (prevData.received_date || ""),
+      received_by: record.received_by !== undefined ? record.received_by : (prevData.received_by || ""),
+      received_image_url: record.received_image_url !== undefined ? record.received_image_url : (prevData.received_image_url || ""),
+      // Depodan Teslim Alınan
+      delivered_date: record.delivered_date !== undefined ? record.delivered_date : (prevData.delivered_date || ""),
+      delivered_by: record.delivered_by !== undefined ? record.delivered_by : (prevData.delivered_by || ""),
+      delivered_image_url: record.delivered_image_url !== undefined ? record.delivered_image_url : (prevData.delivered_image_url || ""),
+      // Geriye uyumluluk
+      delivery_date: record.received_date || record.delivered_date || record.delivery_date || prevData.delivery_date || "",
+      receipt_image_url: record.received_image_url || record.delivered_image_url || record.receipt_image_url || prevData.receipt_image_url || "",
+      receipt_images: record.receipt_images || prevData.receipt_images || [],
+      notes: record.notes !== undefined ? record.notes : (prevData.notes || ""),
+      custom_fields: record.custom_fields || prevData.custom_fields || {},
     };
 
     if (record.id) {
