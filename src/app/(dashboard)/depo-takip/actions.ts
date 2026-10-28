@@ -10,6 +10,8 @@ export interface WarehouseBrokenRecord {
   images?: string[];
   reason: string;
   broken_date: string;
+  customer_id?: string;
+  customer_name?: string;
   product_name?: string;
   reported_by?: string;
   notes?: string;
@@ -144,6 +146,8 @@ export async function getWarehousePageData(): Promise<{
         images: data.images || (data.image_url ? [data.image_url] : []),
         reason: data.reason || "",
         broken_date: data.broken_date || r.created_at?.slice(0, 10) || "",
+        customer_id: data.customer_id || undefined,
+        customer_name: data.customer_name || "",
         product_name: data.product_name || "",
         reported_by: data.reported_by || "",
         notes: data.notes || "",
@@ -210,6 +214,8 @@ export async function saveBrokenRecord(record: {
   images?: string[];
   reason: string;
   broken_date: string;
+  customer_id?: string;
+  customer_name?: string;
   product_name?: string;
   reported_by?: string;
   notes?: string;
@@ -225,6 +231,8 @@ export async function saveBrokenRecord(record: {
       images: record.images || (record.image_url ? [record.image_url] : []),
       reason: record.reason,
       broken_date: record.broken_date,
+      customer_id: record.customer_id || null,
+      customer_name: record.customer_name || "",
       product_name: record.product_name || "",
       reported_by: record.reported_by || "",
       notes: record.notes || "",

@@ -83,10 +83,13 @@ export function DepoTakipClient({
   // Kırıklar Modalları
   const [isBrokenModalOpen, setIsBrokenModalOpen] = useState(false);
   const [editingBroken, setEditingBroken] = useState<WarehouseBrokenRecord | null>(null);
+  const [brokenCustomerSearch, setBrokenCustomerSearch] = useState("");
   const [brokenForm, setBrokenForm] = useState({
     image_url: "",
     reason: "",
     broken_date: new Date().toISOString().slice(0, 10),
+    customer_id: "",
+    customer_name: "",
     product_name: "",
     reported_by: userName || "Depo Sorumlusu",
     notes: "",
@@ -127,6 +130,7 @@ export function DepoTakipClient({
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter((r) => {
+        const inCust = r.customer_name?.toLowerCase().includes(q);
         const inReason = r.reason.toLowerCase().includes(q);
         const inProd = r.product_name?.toLowerCase().includes(q);
         const inReported = r.reported_by?.toLowerCase().includes(q);
@@ -134,7 +138,7 @@ export function DepoTakipClient({
         const inCustom = Object.values(r.custom_fields || {}).some((v) =>
           String(v).toLowerCase().includes(q)
         );
-        return inReason || inProd || inReported || inDate || inCustom;
+        return inCust || inReason || inProd || inReported || inDate || inCustom;
       });
     }
     return list;
@@ -218,10 +222,13 @@ export function DepoTakipClient({
   // -------------------------------------------------------------
   const openNewBrokenModal = () => {
     setEditingBroken(null);
+    setBrokenCustomerSearch("");
     setBrokenForm({
       image_url: "",
       reason: "",
       broken_date: new Date().toISOString().slice(0, 10),
+      customer_id: "",
+      customer_name: "",
       product_name: "",
       reported_by: userName || "Depo Sorumlusu",
       notes: "",
@@ -232,10 +239,13 @@ export function DepoTakipClient({
 
   const openEditBrokenModal = (r: WarehouseBrokenRecord) => {
     setEditingBroken(r);
+    setBrokenCustomerSearch(r.customer_name || "");
     setBrokenForm({
       image_url: r.image_url,
       reason: r.reason,
       broken_date: r.broken_date,
+      customer_id: r.customer_id || "",
+      customer_name: r.customer_name || "",
       product_name: r.product_name || "",
       reported_by: r.reported_by || userName || "Depo Sorumlusu",
       notes: r.notes || "",
@@ -260,6 +270,8 @@ export function DepoTakipClient({
         image_url: brokenForm.image_url,
         reason: brokenForm.reason,
         broken_date: brokenForm.broken_date,
+        customer_id: brokenForm.customer_id || undefined,
+        customer_name: brokenForm.customer_name || undefined,
         product_name: brokenForm.product_name,
         reported_by: brokenForm.reported_by,
         notes: brokenForm.notes,
@@ -276,6 +288,8 @@ export function DepoTakipClient({
                     image_url: brokenForm.image_url,
                     reason: brokenForm.reason,
                     broken_date: brokenForm.broken_date,
+                    customer_id: brokenForm.customer_id || undefined,
+                    customer_name: brokenForm.customer_name || "",
                     product_name: brokenForm.product_name,
                     reported_by: brokenForm.reported_by,
                     notes: brokenForm.notes,
@@ -290,6 +304,8 @@ export function DepoTakipClient({
             image_url: brokenForm.image_url,
             reason: brokenForm.reason,
             broken_date: brokenForm.broken_date,
+            customer_id: brokenForm.customer_id || undefined,
+            customer_name: brokenForm.customer_name || "",
             product_name: brokenForm.product_name,
             reported_by: brokenForm.reported_by,
             notes: brokenForm.notes,
@@ -471,7 +487,7 @@ export function DepoTakipClient({
     updateWarehouseCell(rowId, colKey, val);
   };
 
-  // Müşteri seçimi filtre listesi
+  // Müşteri seçimi filtre listesi (Teslimat için)
   const filteredCustomers = useMemo(() => {
     if (!customerSearch.trim()) return customers.slice(0, 30);
     const q = customerSearch.toLowerCase();
@@ -479,6 +495,15 @@ export function DepoTakipClient({
       .filter((c) => c.name.toLowerCase().includes(q) || c.phone?.includes(q))
       .slice(0, 30);
   }, [customers, customerSearch]);
+
+  // Müşteri seçimi filtre listesi (Kırıklar için)
+  const filteredBrokenCustomers = useMemo(() => {
+    if (!brokenCustomerSearch.trim()) return customers.slice(0, 30);
+    const q = brokenCustomerSearch.toLowerCase();
+    return customers
+      .filter((c) => c.name.toLowerCase().includes(q) || c.phone?.includes(q))
+      .slice(0, 30);
+  }, [customers, brokenCustomerSearch]);
 
   return (
     <div className="min-h-screen bg-slate-50/60 pb-20">
@@ -747,6 +772,12 @@ export function DepoTakipClient({
                     {/* Kart Gövdesi */}
                     <div className="p-3.5 sm:p-4 flex-1 flex flex-col justify-between">
                       <div>
+                        {item.customer_name && (
+                          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800 bg-slate-100 border border-slate-200/80 px-2.5 py-1 rounded-lg mb-2">
+                            <Building2 className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                            <span className="truncate">{item.customer_name}</span>
+                          </div>
+                        )}
                         {item.product_name && (
                           <div className="text-xs font-bold text-slate-900 mb-1">
                             {item.product_name}
@@ -1152,6 +1183,51 @@ export function DepoTakipClient({
                       className="hidden"
                     />
                   </label>
+                )}
+              </div>
+
+              {/* MÜŞTERİ SEÇİMİ (Listeden Seç veya Manuel Yaz) */}
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-bold text-slate-700">Müşteri / Firma (İsteğe Bağlı)</label>
+                  <span className="text-[11px] text-rose-600 font-medium">
+                    Listeden seçin veya manuel yazın
+                  </span>
+                </div>
+                <input
+                  type="text"
+                  placeholder="Müşteri adı arayın veya serbest yazınız..."
+                  value={brokenForm.customer_name}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setBrokenForm((prev) => ({ ...prev, customer_name: val, customer_id: "" }));
+                    setBrokenCustomerSearch(val);
+                  }}
+                  className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 focus:bg-white"
+                />
+
+                {/* Müşteri Öneri Açılır Listesi */}
+                {brokenCustomerSearch && filteredBrokenCustomers.length > 0 && (
+                  <div className="mt-1 max-h-36 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-lg divide-y divide-slate-100 z-20">
+                    {filteredBrokenCustomers.map((c) => (
+                      <button
+                        key={c.id}
+                        type="button"
+                        onClick={() => {
+                          setBrokenForm((prev) => ({
+                            ...prev,
+                            customer_id: c.id,
+                            customer_name: c.name,
+                          }));
+                          setBrokenCustomerSearch("");
+                        }}
+                        className="w-full text-left px-3 py-2 text-xs hover:bg-rose-50 transition-colors flex items-center justify-between"
+                      >
+                        <span className="font-semibold text-slate-800">{c.name}</span>
+                        {c.phone && <span className="text-[10px] text-slate-400">{c.phone}</span>}
+                      </button>
+                    ))}
+                  </div>
                 )}
               </div>
 
