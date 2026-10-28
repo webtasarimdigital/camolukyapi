@@ -110,17 +110,48 @@ export async function submitDealerOrder(input: SubmitDealerOrderInput): Promise<
     // Generate order code (MUST be <= 10 characters due to character(10) column constraint in DB!)
     // Format: BY26-0001 (9 chars)
     const yearShort = String(new Date().getFullYear()).slice(-2); // e.g. "26"
+    const prefix = `BY${yearShort}-`;
     let orderCode = "";
     try {
-      const { count } = await service
+      const { data: topOrders } = await service
         .from("quotes")
-        .select("*", { count: "exact", head: true })
-        .eq("delivery_terms", "BAYI_SIPARISI");
-      const seq = String((count || 0) + 1).padStart(4, "0");
-      orderCode = `BY${yearShort}-${seq}`;
+        .select("quote_code")
+        .eq("company_id", companyId)
+        .ilike("quote_code", `${prefix}%`)
+        .order("quote_code", { ascending: false })
+        .limit(20);
+
+      let maxSeq = 0;
+      if (topOrders && (topOrders as any[]).length > 0) {
+        for (const o of (topOrders as any[])) {
+          const trimmed = (o.quote_code || "").trim();
+          if (trimmed.startsWith(prefix)) {
+            const num = parseInt(trimmed.slice(prefix.length), 10);
+            if (!isNaN(num) && num > maxSeq) maxSeq = num;
+          }
+        }
+      }
+
+      let candidateSeq = maxSeq + 1;
+      orderCode = `${prefix}${String(candidateSeq).padStart(4, "0")}`;
+
+      // Collision check
+      let attempts = 0;
+      while (attempts < 50) {
+        const { data: existing } = await service
+          .from("quotes")
+          .select("id")
+          .eq("company_id", companyId)
+          .eq("quote_code", orderCode)
+          .maybeSingle();
+
+        if (!existing) break;
+        candidateSeq++;
+        orderCode = `${prefix}${String(candidateSeq).padStart(4, "0")}`;
+        attempts++;
+      }
     } catch {
-      const randSeq = Math.floor(1000 + Math.random() * 9000);
-      orderCode = `BY${yearShort}-${randSeq}`;
+      orderCode = `${prefix}${Math.floor(1000 + Math.random() * 9000)}`;
     }
 
     // Safety: Ensure strictly <= 10 chars

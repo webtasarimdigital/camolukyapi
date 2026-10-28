@@ -433,6 +433,12 @@ export function QuoteForm({
         notes,
         creatorName,
       });
+
+      if (!res.success || !res.quoteId) {
+        toast.error(res.error || "Teklif kaydedilemedi.");
+        return;
+      }
+
       toast.success("Teklif başarıyla kaydedildi!");
       if (print) {
         router.push(`/teklif-yazdir/${res.quoteId}?autoPrint=true`);
@@ -440,7 +446,7 @@ export function QuoteForm({
         router.push(`/teklifler/${res.quoteId}`);
       }
     } catch (err: any) {
-      toast.error("Hata: " + err.message);
+      toast.error("Hata: " + (err?.message || "Teklif kaydedilemedi"));
     } finally {
       setLoading(false);
     }

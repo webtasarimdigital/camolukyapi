@@ -64,14 +64,44 @@ export async function createSaleWithItems(input: CreateSaleInput) {
   const mm = String(today.getMonth() + 1).padStart(2, "0");
   const dd = String(today.getDate()).padStart(2, "0");
   const datePrefix = `${yyyy}${mm}${dd}`;
+  const prefix = `SAT-${datePrefix}-`;
 
-  const { count } = await supabase
+  const { data: topSales } = await supabase
     .from("sales")
-    .select("*", { count: "exact", head: true })
-    .eq("company_id", profile.company_id);
+    .select("sale_code")
+    .eq("company_id", profile.company_id)
+    .ilike("sale_code", `${prefix}%`)
+    .order("sale_code", { ascending: false })
+    .limit(20);
 
-  const seq = String((count || 0) + 1).padStart(4, "0");
-  const saleCode = `SAT-${datePrefix}-${seq}`;
+  let maxSeq = 0;
+  if (topSales && (topSales as any[]).length > 0) {
+    for (const s of (topSales as any[])) {
+      const trimmed = (s.sale_code || "").trim();
+      if (trimmed.startsWith(prefix)) {
+        const num = parseInt(trimmed.slice(prefix.length), 10);
+        if (!isNaN(num) && num > maxSeq) maxSeq = num;
+      }
+    }
+  }
+
+  let candidateSeq = maxSeq + 1;
+  let saleCode = `${prefix}${String(candidateSeq).padStart(4, "0")}`;
+
+  let attempts = 0;
+  while (attempts < 50) {
+    const { data: existing } = await supabase
+      .from("sales")
+      .select("id")
+      .eq("company_id", profile.company_id)
+      .eq("sale_code", saleCode)
+      .maybeSingle();
+
+    if (!existing) break;
+    candidateSeq++;
+    saleCode = `${prefix}${String(candidateSeq).padStart(4, "0")}`;
+    attempts++;
+  }
 
   const remainingAmount = Math.max(0, input.grandTotal - (input.paidAmount || 0));
 
