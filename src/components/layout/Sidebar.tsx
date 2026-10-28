@@ -36,6 +36,7 @@ import {
   Receipt,
   Coins,
   Paintbrush,
+  PackageCheck,
 } from "lucide-react";
 
 import { type UserRole } from "@/lib/auth/role-constants";
@@ -92,6 +93,13 @@ const navItems: NavItem[] = [
     icon: Truck,
     badge: "Canlı",
     allowedRoles: ["admin", "muhasebe1", "depo", "sofor", "satis"],
+  },
+  {
+    href: "/depo-takip",
+    label: "Depo Takip",
+    icon: PackageCheck,
+    badge: "Depo",
+    allowedRoles: ["admin", "muhasebe1", "satis", "depo"],
   },
   {
     href: "/otobil-gps",

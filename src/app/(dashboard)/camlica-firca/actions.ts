@@ -59,11 +59,12 @@ export async function getCamlicaFircaData(): Promise<{
 
     if (colError) console.error("camlica_firca_columns error:", colError);
 
-    // Satırları çek
+    // Satırları çek (sadece Çamlıca Fırça satırları)
     const { data: rows, error: rowError } = await service
       .from("camlica_firca_rows")
       .select("*")
       .eq("company_id", companyId)
+      .or("row_data->>_module.is.null,row_data->>_module.eq.camlica_firca")
       .order("sort_order", { ascending: true })
       .order("created_at", { ascending: true });
 

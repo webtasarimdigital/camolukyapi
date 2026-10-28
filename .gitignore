@@ -43,6 +43,7 @@ camolukyapi_tmp/
 scripts/
 scratch/
 check-vehicles.js
+supabase/.temp/
 
 # vercel
 .vercel
