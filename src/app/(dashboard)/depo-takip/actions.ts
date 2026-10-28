@@ -82,6 +82,18 @@ async function getCompanyId(): Promise<string> {
   return "a0000000-0000-0000-0000-000000000001";
 }
 
+function sortImagesNewestFirst(images: string[] = []): string[] {
+  if (!images || images.length <= 1) return images || [];
+  return [...images].sort((a, b) => {
+    const matchA = a.match(/[/_](\d{10,14})_/);
+    const matchB = b.match(/[/_](\d{10,14})_/);
+    if (matchA && matchB) {
+      return Number(matchB[1]) - Number(matchA[1]);
+    }
+    return 0;
+  });
+}
+
 export async function getWarehousePageData(): Promise<{
   brokenRecords: WarehouseBrokenRecord[];
   deliveryRecords: WarehouseDeliveryRecord[];
@@ -149,11 +161,12 @@ export async function getWarehousePageData(): Promise<{
 
     const brokenRecords: WarehouseBrokenRecord[] = (brokenRows || []).map((r: any) => {
       const data = r.row_data || {};
+      const imgs = sortImagesNewestFirst(data.images || (data.image_url ? [data.image_url] : []));
       return {
         id: r.id,
         company_id: r.company_id,
-        image_url: data.image_url || "",
-        images: data.images || (data.image_url ? [data.image_url] : []),
+        image_url: imgs[0] || "",
+        images: imgs,
         reason: data.reason || "",
         broken_date: data.broken_date || r.created_at?.slice(0, 10) || "",
         customer_id: data.customer_id || undefined,
@@ -180,32 +193,63 @@ export async function getWarehousePageData(): Promise<{
     const deliveryRecords: WarehouseDeliveryRecord[] = (deliveryRows || []).map((r: any) => {
       const data = r.row_data || {};
       const isDepoya = data.delivery_type === "depoya_teslim_edilen";
+
+      // 1. Depoya Teslim Edilen (Giriş) Görselleri - Yalnızca kendi alanına ait
+      const rawRecImgs: string[] = Array.isArray(data.received_images)
+        ? data.received_images
+        : data.received_image_url
+        ? [data.received_image_url]
+        : (isDepoya && data.receipt_images?.length ? data.receipt_images : (isDepoya && data.receipt_image_url ? [data.receipt_image_url] : []));
+
+      // 2. Depodan Teslim Alınan (Çıkış) Görselleri - Yalnızca kendi alanına ait
+      const rawDelImgs: string[] = Array.isArray(data.delivered_images)
+        ? data.delivered_images
+        : data.delivered_image_url
+        ? [data.delivered_image_url]
+        : (!isDepoya && data.delivery_type === "depodan_teslim_alinan" && data.receipt_images?.length ? data.receipt_images : (!isDepoya && data.delivery_type === "depodan_teslim_alinan" && data.receipt_image_url ? [data.receipt_image_url] : []));
+
+      const received_images = sortImagesNewestFirst(rawRecImgs);
+      const delivered_images = sortImagesNewestFirst(rawDelImgs);
+
       return {
         id: r.id,
         company_id: r.company_id,
-        delivery_type: (data.delivery_type as DeliveryType) || (data.received_image_url || data.received_date ? "depoya_teslim_edilen" : "depodan_teslim_alinan"),
+        delivery_type: (data.delivery_type as DeliveryType) || (received_images.length > 0 || data.received_date ? "depoya_teslim_edilen" : "depodan_teslim_alinan"),
         customer_id: data.customer_id || undefined,
         customer_name: data.customer_name || "",
         // Depoya Teslim Edilen
-        received_date: data.received_date || (isDepoya ? data.delivery_date : "") || "",
-        received_by: data.received_by || (isDepoya ? data.delivered_by : "") || "",
-        received_image_url: data.received_image_url || (isDepoya ? data.receipt_image_url : "") || "",
-        received_images: data.received_images || (data.received_image_url ? [data.received_image_url] : (isDepoya && data.receipt_image_url ? [data.receipt_image_url] : [])),
+        received_date: data.received_date || (isDepoya && data.delivery_date ? data.delivery_date : "") || "",
+        received_by: data.received_by || (isDepoya && data.delivered_by ? data.delivered_by : "") || "",
+        received_image_url: received_images[0] || "",
+        received_images,
         // Depodan Teslim Alınan
         delivered_date: data.delivered_date || (!isDepoya && data.delivery_date ? data.delivery_date : "") || "",
         delivered_by: data.delivered_by || (!isDepoya && data.delivered_by ? data.delivered_by : "") || "",
-        delivered_image_url: data.delivered_image_url || (!isDepoya && data.receipt_image_url ? data.receipt_image_url : "") || "",
-        delivered_images: data.delivered_images || (data.delivered_image_url ? [data.delivered_image_url] : (!isDepoya && data.receipt_image_url ? [data.receipt_image_url] : [])),
+        delivered_image_url: delivered_images[0] || "",
+        delivered_images,
         // Geriye dönük uyumluluk
         delivery_date: data.delivery_date || data.received_date || data.delivered_date || r.created_at?.slice(0, 10) || "",
         delivered_by_legacy: data.delivered_by || "",
-        receipt_image_url: data.receipt_image_url || data.received_image_url || data.delivered_image_url || "",
-        receipt_images: data.receipt_images || (data.receipt_image_url ? [data.receipt_image_url] : []),
+        receipt_image_url: received_images[0] || delivered_images[0] || "",
+        receipt_images: [...received_images, ...delivered_images],
         notes: data.notes || "",
         custom_fields: data.custom_fields || {},
         created_at: r.created_at,
         updated_at: r.updated_at,
       };
+    });
+
+    // Tüm kayıt sıralamaları EN YENİDEN ESKİYE (Newest First)
+    deliveryRecords.sort((a, b) => {
+      const timeA = new Date(a.created_at || a.received_date || a.delivered_date || 0).getTime();
+      const timeB = new Date(b.created_at || b.received_date || b.delivered_date || 0).getTime();
+      return timeB - timeA;
+    });
+
+    brokenRecords.sort((a, b) => {
+      const timeA = new Date(a.created_at || a.broken_date || 0).getTime();
+      const timeB = new Date(b.created_at || b.broken_date || 0).getTime();
+      return timeB - timeA;
     });
 
     return {
@@ -247,10 +291,18 @@ export async function saveBrokenRecord(record: {
     const companyId = await getCompanyId();
     const service: any = await createServiceClient();
 
+    const sortedImages = sortImagesNewestFirst(
+      record.images && record.images.length > 0
+        ? record.images
+        : record.image_url
+        ? [record.image_url]
+        : []
+    );
+
     const rowData = {
       _module: "depo_kiriklar",
-      image_url: record.image_url,
-      images: record.images || (record.image_url ? [record.image_url] : []),
+      image_url: sortedImages[0] || "",
+      images: sortedImages,
       reason: record.reason,
       broken_date: record.broken_date,
       customer_id: record.customer_id || null,
@@ -362,25 +414,49 @@ export async function saveDeliveryRecord(record: {
       }
     }
 
+    const finalDeliveryType =
+      record.delivery_type || prevData.delivery_type || "depoya_teslim_edilen";
+
+    const recImgs = sortImagesNewestFirst(
+      record.received_images !== undefined
+        ? record.received_images
+        : prevData.received_images || (prevData.received_image_url ? [prevData.received_image_url] : [])
+    );
+
+    const delImgs = sortImagesNewestFirst(
+      record.delivered_images !== undefined
+        ? record.delivered_images
+        : prevData.delivered_images || (prevData.delivered_image_url ? [prevData.delivered_image_url] : [])
+    );
+
     const rowData = {
       _module: "depo_teslimi",
-      delivery_type: record.delivery_type || prevData.delivery_type || "depoya_teslim_edilen",
+      delivery_type: finalDeliveryType,
       customer_id: record.customer_id !== undefined ? record.customer_id : (prevData.customer_id || null),
       customer_name: record.customer_name || prevData.customer_name || "",
-      // Depoya Teslim Edilen
+      // Depoya Teslim Edilen (Giriş) - Yalnızca kendi verisi
       received_date: record.received_date !== undefined ? record.received_date : (prevData.received_date || ""),
       received_by: record.received_by !== undefined ? record.received_by : (prevData.received_by || ""),
-      received_image_url: (record.received_images && record.received_images.length > 0) ? record.received_images[0] : (record.received_image_url !== undefined ? record.received_image_url : (prevData.received_image_url || "")),
-      received_images: record.received_images !== undefined ? record.received_images : (prevData.received_images || (prevData.received_image_url ? [prevData.received_image_url] : [])),
-      // Depodan Teslim Alınan
+      received_image_url: recImgs[0] || "",
+      received_images: recImgs,
+      // Depodan Teslim Alınan (Çıkış) - Yalnızca kendi verisi
       delivered_date: record.delivered_date !== undefined ? record.delivered_date : (prevData.delivered_date || ""),
       delivered_by: record.delivered_by !== undefined ? record.delivered_by : (prevData.delivered_by || ""),
-      delivered_image_url: (record.delivered_images && record.delivered_images.length > 0) ? record.delivered_images[0] : (record.delivered_image_url !== undefined ? record.delivered_image_url : (prevData.delivered_image_url || "")),
-      delivered_images: record.delivered_images !== undefined ? record.delivered_images : (prevData.delivered_images || (prevData.delivered_image_url ? [prevData.delivered_image_url] : [])),
-      // Geriye uyumluluk
-      delivery_date: record.received_date || record.delivered_date || record.delivery_date || prevData.delivery_date || "",
-      receipt_image_url: record.received_image_url || record.delivered_image_url || record.receipt_image_url || prevData.receipt_image_url || "",
-      receipt_images: record.receipt_images || prevData.receipt_images || [],
+      delivered_image_url: delImgs[0] || "",
+      delivered_images: delImgs,
+      // Geriye dönük alanlar - Kesinlikle birbirine sızdırma!
+      delivery_date:
+        (finalDeliveryType === "depoya_teslim_edilen"
+          ? (record.received_date || prevData.received_date)
+          : (record.delivered_date || prevData.delivered_date)) ||
+        record.delivery_date ||
+        prevData.delivery_date ||
+        "",
+      receipt_image_url:
+        finalDeliveryType === "depoya_teslim_edilen"
+          ? (recImgs[0] || "")
+          : (delImgs[0] || ""),
+      receipt_images: finalDeliveryType === "depoya_teslim_edilen" ? recImgs : delImgs,
       notes: record.notes !== undefined ? record.notes : (prevData.notes || ""),
       custom_fields: record.custom_fields || prevData.custom_fields || {},
     };
@@ -591,16 +667,16 @@ export async function quickAddPhotoToDelivery(
 
     if (target === "received") {
       const curImages = rowData.received_images || (rowData.received_image_url ? [rowData.received_image_url] : []);
-      const newImages = [...curImages, photoUrl];
-      rowData.received_images = newImages;
-      rowData.received_image_url = newImages[0];
+      const sortedImages = sortImagesNewestFirst([photoUrl, ...curImages]);
+      rowData.received_images = sortedImages;
+      rowData.received_image_url = sortedImages[0] || "";
       if (!rowData.received_date) rowData.received_date = today;
       if (!rowData.received_by && userName) rowData.received_by = userName;
     } else {
       const curImages = rowData.delivered_images || (rowData.delivered_image_url ? [rowData.delivered_image_url] : []);
-      const newImages = [...curImages, photoUrl];
-      rowData.delivered_images = newImages;
-      rowData.delivered_image_url = newImages[0];
+      const sortedImages = sortImagesNewestFirst([photoUrl, ...curImages]);
+      rowData.delivered_images = sortedImages;
+      rowData.delivered_image_url = sortedImages[0] || "";
       if (!rowData.delivered_date) rowData.delivered_date = today;
       if (!rowData.delivered_by && userName) rowData.delivered_by = userName;
     }
@@ -644,9 +720,9 @@ export async function quickAddPhotoToBroken(
 
     const rowData = { ...existing.row_data };
     const curImages = rowData.images || (rowData.image_url ? [rowData.image_url] : []);
-    const newImages = [...curImages, photoUrl];
-    rowData.images = newImages;
-    rowData.image_url = newImages[0];
+    const sortedImages = sortImagesNewestFirst([photoUrl, ...curImages]);
+    rowData.images = sortedImages;
+    rowData.image_url = sortedImages[0] || "";
 
     const { data, error } = await service
       .from("camlica_firca_rows")

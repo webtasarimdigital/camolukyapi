@@ -47,6 +47,18 @@ import {
   quickAddPhotoToBroken,
 } from "./actions";
 
+function sortImagesNewestFirst(images: string[] = []): string[] {
+  if (!images || images.length <= 1) return images || [];
+  return [...images].sort((a, b) => {
+    const matchA = a.match(/[/_](\d{10,14})_/);
+    const matchB = b.match(/[/_](\d{10,14})_/);
+    if (matchA && matchB) {
+      return Number(matchB[1]) - Number(matchA[1]);
+    }
+    return 0;
+  });
+}
+
 interface Props {
   initialBrokenRecords: WarehouseBrokenRecord[];
   initialDeliveryRecords: WarehouseDeliveryRecord[];
@@ -146,11 +158,28 @@ export function DepoTakipClient({
   // Müşteri seçimi filtreleme
   const [customerSearch, setCustomerSearch] = useState("");
 
+  // Yardımcı Fonksiyonlar: Tip Eşleme (Kayıtların birbirine sızmasını önler)
+  const isDepoyaRecord = (r: WarehouseDeliveryRecord) => {
+    if (r.delivery_type === "depoya_teslim_edilen") return true;
+    if (r.received_images && r.received_images.length > 0) return true;
+    if (r.received_image_url) return true;
+    if (r.received_date && r.delivery_type !== "depodan_teslim_alinan") return true;
+    return false;
+  };
+
+  const isDepodanRecord = (r: WarehouseDeliveryRecord) => {
+    if (r.delivery_type === "depodan_teslim_alinan") return true;
+    if (r.delivered_images && r.delivered_images.length > 0) return true;
+    if (r.delivered_image_url) return true;
+    if (r.delivered_date && r.delivery_type !== "depoya_teslim_edilen") return true;
+    return false;
+  };
+
   // -------------------------------------------------------------
-  // Filtrelenmiş Kırıklar
+  // Filtrelenmiş Kırıklar (EN YENİDEN ESKİYE)
   // -------------------------------------------------------------
   const filteredBrokenRecords = useMemo(() => {
-    let list = brokenRecords;
+    let list = [...brokenRecords];
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       list = list.filter((r) => {
@@ -165,30 +194,26 @@ export function DepoTakipClient({
         return inCust || inReason || inProd || inReported || inDate || inCustom;
       });
     }
+
+    // Sıralama EN YENİDEN ESKİYE (Newest First)
+    list.sort((a, b) => {
+      const timeA = new Date(a.created_at || a.broken_date || 0).getTime();
+      const timeB = new Date(b.created_at || b.broken_date || 0).getTime();
+      return timeB - timeA;
+    });
+
     return list;
   }, [brokenRecords, searchQuery]);
 
   // -------------------------------------------------------------
-  // Filtrelenmiş Teslimatlar
+  // Filtrelenmiş Teslimatlar (EN YENİDEN ESKİYE)
   // -------------------------------------------------------------
   const filteredDeliveryRecords = useMemo(() => {
-    let list = deliveryRecords;
+    let list = [...deliveryRecords];
     if (deliveryFilter === "depoya_teslim_edilen") {
-      list = list.filter(
-        (r) =>
-          r.received_image_url ||
-          (r.received_images && r.received_images.length > 0) ||
-          r.received_date ||
-          r.delivery_type === "depoya_teslim_edilen"
-      );
+      list = list.filter(isDepoyaRecord);
     } else if (deliveryFilter === "depodan_teslim_alinan") {
-      list = list.filter(
-        (r) =>
-          r.delivered_image_url ||
-          (r.delivered_images && r.delivered_images.length > 0) ||
-          r.delivered_date ||
-          r.delivery_type === "depodan_teslim_alinan"
-      );
+      list = list.filter(isDepodanRecord);
     }
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
@@ -215,30 +240,24 @@ export function DepoTakipClient({
         );
       });
     }
+
+    // Sıralama EN YENİDEN ESKİYE (Newest First)
+    list.sort((a, b) => {
+      const timeA = new Date(a.created_at || a.received_date || a.delivered_date || 0).getTime();
+      const timeB = new Date(b.created_at || b.received_date || b.delivered_date || 0).getTime();
+      return timeB - timeA;
+    });
+
     return list;
   }, [deliveryRecords, deliveryFilter, searchQuery]);
 
   // Sayaçlar (Depoya Teslim Edilen önce, Depodan Teslim Alınan sonra)
   const edilenCount = useMemo(
-    () =>
-      deliveryRecords.filter(
-        (r) =>
-          r.received_image_url ||
-          (r.received_images && r.received_images.length > 0) ||
-          r.received_date ||
-          r.delivery_type === "depoya_teslim_edilen"
-      ).length,
+    () => deliveryRecords.filter(isDepoyaRecord).length,
     [deliveryRecords]
   );
   const alinanCount = useMemo(
-    () =>
-      deliveryRecords.filter(
-        (r) =>
-          r.delivered_image_url ||
-          (r.delivered_images && r.delivered_images.length > 0) ||
-          r.delivered_date ||
-          r.delivery_type === "depodan_teslim_alinan"
-      ).length,
+    () => deliveryRecords.filter(isDepodanRecord).length,
     [deliveryRecords]
   );
 
@@ -259,11 +278,11 @@ export function DepoTakipClient({
       }
       if (newUrls.length > 0) {
         setBrokenForm((prev) => {
-          const combined = [...(prev.images || []), ...newUrls];
+          const combined = sortImagesNewestFirst([...newUrls, ...(prev.images || [])]);
           return {
             ...prev,
             images: combined,
-            image_url: prev.image_url || combined[0],
+            image_url: combined[0] || "",
           };
         });
         toast.success(`${newUrls.length} fotoğraf eklendi!`);
@@ -295,20 +314,20 @@ export function DepoTakipClient({
       if (newUrls.length > 0) {
         if (target === "received") {
           setDeliveryForm((prev) => {
-            const combined = [...(prev.received_images || []), ...newUrls];
+            const combined = sortImagesNewestFirst([...newUrls, ...(prev.received_images || [])]);
             return {
               ...prev,
               received_images: combined,
-              received_image_url: prev.received_image_url || combined[0],
+              received_image_url: combined[0] || "",
             };
           });
         } else {
           setDeliveryForm((prev) => {
-            const combined = [...(prev.delivered_images || []), ...newUrls];
+            const combined = sortImagesNewestFirst([...newUrls, ...(prev.delivered_images || [])]);
             return {
               ...prev,
               delivered_images: combined,
-              delivered_image_url: prev.delivered_image_url || combined[0],
+              delivered_image_url: combined[0] || "",
             };
           });
         }
@@ -349,12 +368,12 @@ export function DepoTakipClient({
               const curList = isRec
                 ? rec.received_images || (rec.received_image_url ? [rec.received_image_url] : [])
                 : rec.delivered_images || (rec.delivered_image_url ? [rec.delivered_image_url] : []);
-              const nextList = [...curList, res.url!];
+              const nextList = sortImagesNewestFirst([res.url!, ...curList]);
               return {
                 ...rec,
                 ...(isRec
-                  ? { received_images: nextList, received_image_url: nextList[0] }
-                  : { delivered_images: nextList, delivered_image_url: nextList[0] }),
+                  ? { received_images: nextList, received_image_url: nextList[0] || "" }
+                  : { delivered_images: nextList, delivered_image_url: nextList[0] || "" }),
               };
             })
           );
@@ -389,11 +408,11 @@ export function DepoTakipClient({
             prev.map((rec) => {
               if (rec.id !== quickBrokenPhotoId) return rec;
               const curList = rec.images || (rec.image_url ? [rec.image_url] : []);
-              const nextList = [...curList, res.url!];
+              const nextList = sortImagesNewestFirst([res.url!, ...curList]);
               return {
                 ...rec,
                 images: nextList,
-                image_url: nextList[0],
+                image_url: nextList[0] || "",
               };
             })
           );
@@ -548,16 +567,19 @@ export function DepoTakipClient({
     setEditingDelivery(null);
     setCustomerSearch("");
     const today = new Date().toISOString().slice(0, 10);
+    const chosenType = defaultType || "depoya_teslim_edilen";
+    const isEdilen = chosenType === "depoya_teslim_edilen";
+
     setDeliveryForm({
-      activeSection: defaultType || "depoya_teslim_edilen",
+      activeSection: chosenType,
       customer_id: "",
       customer_name: "",
-      received_date: today,
-      received_by: userName || "Depo Sorumlusu",
+      received_date: isEdilen ? today : "",
+      received_by: isEdilen ? (userName || "Depo Sorumlusu") : "",
       received_image_url: "",
       received_images: [],
-      delivered_date: today,
-      delivered_by: userName || "Depo Sorumlusu",
+      delivered_date: !isEdilen ? today : "",
+      delivered_by: !isEdilen ? (userName || "Depo Sorumlusu") : "",
       delivered_image_url: "",
       delivered_images: [],
       notes: "",
@@ -570,32 +592,36 @@ export function DepoTakipClient({
     setEditingDelivery(r);
     setCustomerSearch(r.customer_name);
     const today = new Date().toISOString().slice(0, 10);
-    const recImgs =
+    const recImgs = sortImagesNewestFirst(
       r.received_images && r.received_images.length > 0
         ? r.received_images
         : r.received_image_url
         ? [r.received_image_url]
-        : [];
-    const delImgs =
+        : []
+    );
+    const delImgs = sortImagesNewestFirst(
       r.delivered_images && r.delivered_images.length > 0
         ? r.delivered_images
         : r.delivered_image_url
         ? [r.delivered_image_url]
-        : [];
+        : []
+    );
 
-    const isEdilen = !!(recImgs.length > 0 || r.received_date);
+    const isEdilen = r.delivery_type
+      ? r.delivery_type === "depoya_teslim_edilen"
+      : recImgs.length > 0 || !delImgs.length;
 
     setDeliveryForm({
       activeSection: isEdilen ? "depoya_teslim_edilen" : "depodan_teslim_alinan",
       customer_id: r.customer_id || "",
       customer_name: r.customer_name,
-      received_date: r.received_date || today,
-      received_by: r.received_by || userName || "Depo Sorumlusu",
-      received_image_url: r.received_image_url || recImgs[0] || "",
+      received_date: r.received_date || (isEdilen ? today : ""),
+      received_by: r.received_by || (isEdilen ? (userName || "Depo Sorumlusu") : ""),
+      received_image_url: recImgs[0] || "",
       received_images: recImgs,
-      delivered_date: r.delivered_date || today,
-      delivered_by: r.delivered_by || userName || "Depo Sorumlusu",
-      delivered_image_url: r.delivered_image_url || delImgs[0] || "",
+      delivered_date: r.delivered_date || (!isEdilen ? today : ""),
+      delivered_by: r.delivered_by || (!isEdilen ? (userName || "Depo Sorumlusu") : ""),
+      delivered_image_url: delImgs[0] || "",
       delivered_images: delImgs,
       notes: r.notes || "",
       custom_fields: { ...(r.custom_fields || {}) },
@@ -610,8 +636,11 @@ export function DepoTakipClient({
     }
 
     startTransition(async () => {
-      const recPrimary = deliveryForm.received_images[0] || deliveryForm.received_image_url;
-      const delPrimary = deliveryForm.delivered_images[0] || deliveryForm.delivered_image_url;
+      const isEdilen = deliveryForm.activeSection === "depoya_teslim_edilen";
+      const recImgs = sortImagesNewestFirst(deliveryForm.received_images);
+      const delImgs = sortImagesNewestFirst(deliveryForm.delivered_images);
+      const recPrimary = recImgs[0] || deliveryForm.received_image_url || "";
+      const delPrimary = delImgs[0] || deliveryForm.delivered_image_url || "";
 
       const res = await saveDeliveryRecord({
         id: editingDelivery?.id,
@@ -621,11 +650,11 @@ export function DepoTakipClient({
         received_date: deliveryForm.received_date,
         received_by: deliveryForm.received_by,
         received_image_url: recPrimary,
-        received_images: deliveryForm.received_images,
+        received_images: recImgs,
         delivered_date: deliveryForm.delivered_date,
         delivered_by: deliveryForm.delivered_by,
         delivered_image_url: delPrimary,
-        delivered_images: deliveryForm.delivered_images,
+        delivered_images: delImgs,
         notes: deliveryForm.notes,
         custom_fields: deliveryForm.custom_fields,
       });
@@ -644,14 +673,15 @@ export function DepoTakipClient({
                     received_date: deliveryForm.received_date,
                     received_by: deliveryForm.received_by,
                     received_image_url: recPrimary,
-                    received_images: deliveryForm.received_images,
+                    received_images: recImgs,
                     delivered_date: deliveryForm.delivered_date,
                     delivered_by: deliveryForm.delivered_by,
                     delivered_image_url: delPrimary,
-                    delivered_images: deliveryForm.delivered_images,
+                    delivered_images: delImgs,
                     delivery_date:
-                      deliveryForm.received_date || deliveryForm.delivered_date || r.delivery_date,
-                    receipt_image_url: recPrimary || delPrimary || r.receipt_image_url,
+                      (isEdilen ? deliveryForm.received_date : deliveryForm.delivered_date) ||
+                      r.delivery_date,
+                    receipt_image_url: isEdilen ? recPrimary : delPrimary,
                     notes: deliveryForm.notes,
                     custom_fields: deliveryForm.custom_fields,
                   }
@@ -667,13 +697,13 @@ export function DepoTakipClient({
             received_date: deliveryForm.received_date,
             received_by: deliveryForm.received_by,
             received_image_url: recPrimary,
-            received_images: deliveryForm.received_images,
+            received_images: recImgs,
             delivered_date: deliveryForm.delivered_date,
             delivered_by: deliveryForm.delivered_by,
             delivered_image_url: delPrimary,
-            delivered_images: deliveryForm.delivered_images,
-            delivery_date: deliveryForm.received_date || deliveryForm.delivered_date,
-            receipt_image_url: recPrimary || delPrimary,
+            delivered_images: delImgs,
+            delivery_date: isEdilen ? deliveryForm.received_date : deliveryForm.delivered_date,
+            receipt_image_url: isEdilen ? recPrimary : delPrimary,
             notes: deliveryForm.notes,
             custom_fields: deliveryForm.custom_fields,
             created_at: new Date().toISOString(),
@@ -1017,18 +1047,20 @@ export function DepoTakipClient({
                 {/* --------------------------------------------------------- */}
                 <div className="block md:hidden space-y-3">
                   {filteredDeliveryRecords.map((item) => {
-                    const receivedImgs =
+                    const receivedImgs = sortImagesNewestFirst(
                       item.received_images && item.received_images.length > 0
                         ? item.received_images
                         : item.received_image_url
                         ? [item.received_image_url]
-                        : [];
-                    const deliveredImgs =
+                        : []
+                    );
+                    const deliveredImgs = sortImagesNewestFirst(
                       item.delivered_images && item.delivered_images.length > 0
                         ? item.delivered_images
                         : item.delivered_image_url
                         ? [item.delivered_image_url]
-                        : [];
+                        : []
+                    );
 
                     return (
                       <div
@@ -1298,18 +1330,20 @@ export function DepoTakipClient({
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {filteredDeliveryRecords.map((item) => {
-                          const receivedImgs =
+                          const receivedImgs = sortImagesNewestFirst(
                             item.received_images && item.received_images.length > 0
                               ? item.received_images
                               : item.received_image_url
                               ? [item.received_image_url]
-                              : [];
-                          const deliveredImgs =
+                              : []
+                          );
+                          const deliveredImgs = sortImagesNewestFirst(
                             item.delivered_images && item.delivered_images.length > 0
                               ? item.delivered_images
                               : item.delivered_image_url
                               ? [item.delivered_image_url]
-                              : [];
+                              : []
+                          );
 
                           return (
                             <tr key={item.id} className="hover:bg-slate-50/80 transition-colors">
@@ -1568,12 +1602,13 @@ export function DepoTakipClient({
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                 {filteredBrokenRecords.map((item) => {
-                  const imgList =
+                  const imgList = sortImagesNewestFirst(
                     item.images && item.images.length > 0
                       ? item.images
                       : item.image_url
                       ? [item.image_url]
-                      : [];
+                      : []
+                  );
 
                   return (
                     <div
