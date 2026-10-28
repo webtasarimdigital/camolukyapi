@@ -4,6 +4,7 @@ export interface VehicleExpense {
   date: string;            // YYYY-MM-DD
   amount: number;          // ₺
   km?: number | null;      // O anki km
+  liters?: number | null;  // Alınan yakıt litresi (opsiyonel)
   receipt_url?: string | null; // Fiş / fatura fotoğrafı
   notes?: string | null;   // Açıklama / İstasyon / Yapılan İşlem
   created_at?: string;

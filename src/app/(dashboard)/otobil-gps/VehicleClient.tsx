@@ -47,6 +47,10 @@ import {
   Receipt,
   FileSpreadsheet,
   BarChart3,
+  Gauge,
+  Zap,
+  ArrowRight,
+  TrendingUp,
 } from "lucide-react";
 import { InteractiveTable } from "@/components/ui/InteractiveTable";
 
@@ -100,6 +104,7 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
   );
   const [expenseAmount, setExpenseAmount] = useState<string>("");
   const [expenseKm, setExpenseKm] = useState<string>("");
+  const [expenseLiters, setExpenseLiters] = useState<string>("");
   const [expenseNotes, setExpenseNotes] = useState<string>("");
   const [expenseFile, setExpenseFile] = useState<File | null>(null);
   const [isSavingExpense, setIsSavingExpense] = useState(false);
@@ -311,6 +316,116 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
   // ── SEÇİLİ ARACIN AYLARI VE MASRAF ÖZETLERİ ──
   const detailExpenses = detailVehicle?.expenses || [];
 
+  // En son kaydedilmiş güncel KM
+  const latestRecordedKm = useMemo(() => {
+    if (!detailVehicle || !Array.isArray(detailVehicle.expenses)) return null;
+    const kms = detailVehicle.expenses
+      .map((e) => (typeof e.km === "number" && e.km > 0 ? e.km : null))
+      .filter((k): k is number => k !== null);
+    return kms.length > 0 ? Math.max(...kms) : null;
+  }, [detailVehicle]);
+
+  // Form içindeki anlık canlı yakıt ve KM farkı hesabı
+  const liveKmDiff = useMemo(() => {
+    const current = parseFloat(expenseKm);
+    if (isNaN(current) || current <= 0 || latestRecordedKm === null) return null;
+    const diff = current - latestRecordedKm;
+    return diff > 0 ? diff : null;
+  }, [expenseKm, latestRecordedKm]);
+
+  const liveCostPerKm = useMemo(() => {
+    const amt = parseFloat(expenseAmount);
+    if (isNaN(amt) || amt <= 0 || !liveKmDiff) return null;
+    return amt / liveKmDiff;
+  }, [expenseAmount, liveKmDiff]);
+
+  const liveCostPer100Km = useMemo(() => {
+    return liveCostPerKm ? liveCostPerKm * 100 : null;
+  }, [liveCostPerKm]);
+
+  const liveLitersPer100Km = useMemo(() => {
+    const l = parseFloat(expenseLiters);
+    if (isNaN(l) || l <= 0 || !liveKmDiff) return null;
+    return (l / liveKmDiff) * 100;
+  }, [expenseLiters, liveKmDiff]);
+
+  // Tüm masrafları kronolojik olarak inceleyip her yakıt kaydı için önceki KM'yi,
+  // KM farkını ve birim yakıt maliyetini hesaplayan zenginleştirilmiş liste:
+  const enrichedExpenses = useMemo(() => {
+    if (!detailVehicle || !Array.isArray(detailVehicle.expenses)) return [];
+
+    // Sadece KM bilgisi olan yakıt kayıtlarını kronolojik (tarih ve km artan) sırala
+    const sortedFuelWithKm = [...detailVehicle.expenses]
+      .filter((e) => e.type === "fuel" && typeof e.km === "number" && e.km > 0)
+      .sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return (a.km || 0) - (b.km || 0);
+      });
+
+    const statsMap = new Map<
+      string,
+      {
+        prevKm: number | null;
+        kmDiff: number | null;
+        costPerKm: number | null;
+        costPer100Km: number | null;
+        litersPer100Km: number | null;
+        isFirst: boolean;
+      }
+    >();
+
+    sortedFuelWithKm.forEach((curr, idx) => {
+      if (idx === 0) {
+        statsMap.set(curr.id, {
+          prevKm: null,
+          kmDiff: null,
+          costPerKm: null,
+          costPer100Km: null,
+          litersPer100Km: null,
+          isFirst: true,
+        });
+      } else {
+        const prev = sortedFuelWithKm[idx - 1];
+        const diff = (curr.km || 0) - (prev.km || 0);
+        if (diff > 0) {
+          const costPerKm = curr.amount / diff;
+          const costPer100Km = costPerKm * 100;
+          const litersPer100Km = curr.liters && curr.liters > 0 ? (curr.liters / diff) * 100 : null;
+          statsMap.set(curr.id, {
+            prevKm: prev.km || null,
+            kmDiff: diff,
+            costPerKm,
+            costPer100Km,
+            litersPer100Km,
+            isFirst: false,
+          });
+        } else {
+          statsMap.set(curr.id, {
+            prevKm: prev.km || null,
+            kmDiff: diff,
+            costPerKm: null,
+            costPer100Km: null,
+            litersPer100Km: null,
+            isFirst: false,
+          });
+        }
+      }
+    });
+
+    return detailVehicle.expenses.map((exp) => {
+      const s = statsMap.get(exp.id);
+      return {
+        ...exp,
+        prevKm: s?.prevKm ?? null,
+        kmDiff: s?.kmDiff ?? null,
+        costPerKm: s?.costPerKm ?? null,
+        costPer100Km: s?.costPer100Km ?? null,
+        litersPer100Km: s?.litersPer100Km ?? null,
+        isFirstFuel: s?.isFirst ?? false,
+      };
+    });
+  }, [detailVehicle]);
+
   const availableMonths = useMemo(() => {
     const monthsSet = new Set<string>();
     for (const exp of detailExpenses) {
@@ -323,7 +438,7 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
   }, [detailExpenses]);
 
   const filteredExpenses = useMemo(() => {
-    return detailExpenses.filter((e) => {
+    return enrichedExpenses.filter((e) => {
       if (selectedMonth !== "all" && !e.date.startsWith(selectedMonth)) {
         return false;
       }
@@ -332,7 +447,7 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
       }
       return true;
     });
-  }, [detailExpenses, selectedMonth, expenseTab]);
+  }, [enrichedExpenses, selectedMonth, expenseTab]);
 
   const monthFuelTotal = useMemo(() => {
     return detailExpenses
@@ -345,6 +460,40 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
       .filter((e) => (selectedMonth === "all" || e.date.startsWith(selectedMonth)) && e.type === "repair")
       .reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
   }, [detailExpenses, selectedMonth]);
+
+  // Seçili dönem için KM ve yakıt verimlilik istatistikleri
+  const periodFuelStats = useMemo(() => {
+    const periodFuels = filteredExpenses.filter((e) => e.type === "fuel");
+    const fuelAmount = periodFuels.reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+    const fuelLiters = periodFuels.reduce((sum, e) => sum + (Number(e.liters) || 0), 0);
+
+    // Katedilen toplam mesafe: Bu dönemdeki yakıt alımları arasındaki farkların toplamı
+    const totalKmDiff = periodFuels.reduce((sum, e) => sum + (e.kmDiff && e.kmDiff > 0 ? e.kmDiff : 0), 0);
+
+    const validKms = periodFuels
+      .map((e) => e.km)
+      .filter((k): k is number => typeof k === "number" && k > 0);
+    const minKm = validKms.length > 0 ? Math.min(...validKms) : null;
+    const maxKm = validKms.length > 0 ? Math.max(...validKms) : null;
+
+    const distanceDriven = totalKmDiff > 0 ? totalKmDiff : (minKm && maxKm && maxKm > minKm ? maxKm - minKm : 0);
+
+    const avgCostPerKm = distanceDriven > 0 ? fuelAmount / distanceDriven : null;
+    const avgCostPer100Km = avgCostPerKm ? avgCostPerKm * 100 : null;
+    const avgLitersPer100Km = distanceDriven > 0 && fuelLiters > 0 ? (fuelLiters / distanceDriven) * 100 : null;
+
+    return {
+      count: periodFuels.length,
+      fuelAmount,
+      fuelLiters,
+      distanceDriven,
+      avgCostPerKm,
+      avgCostPer100Km,
+      avgLitersPer100Km,
+      minKm,
+      maxKm,
+    };
+  }, [filteredExpenses]);
 
   // ── ARAÇ FORM KAYIT ──
   function handleOpenAdd() {
@@ -453,12 +602,14 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
       }
 
       const kmNum = expenseKm ? parseFloat(expenseKm) : null;
+      const litersNum = expenseLiters ? parseFloat(expenseLiters) : null;
 
       const res = await addVehicleExpense(detailVehicle.id, {
         type: expenseType,
         date: expenseDate,
         amount: amountNum,
         km: kmNum,
+        liters: litersNum,
         receipt_url: receiptUrl,
         notes: expenseNotes.trim() || null,
       });
@@ -473,6 +624,7 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
         // Formu temizle
         setExpenseAmount("");
         setExpenseKm("");
+        setExpenseLiters("");
         setExpenseNotes("");
         setExpenseFile(null);
 
@@ -1016,6 +1168,25 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
                   const inspAlert = v.inspection_date ? getExpiryAlert(v.inspection_date) : null;
                   const insAlert = v.insurance_date ? getExpiryAlert(v.insurance_date) : null;
 
+                  const vKms = expenses
+                    .map((e) => (typeof e.km === "number" && e.km > 0 ? e.km : null))
+                    .filter((k): k is number => k !== null);
+                  const latestKmForVehicle = vKms.length > 0 ? Math.max(...vKms) : null;
+
+                  const vFuelSorted = expenses
+                    .filter((e) => e.type === "fuel" && typeof e.km === "number" && e.km > 0)
+                    .sort((a, b) => (a.km || 0) - (b.km || 0));
+
+                  let vDistance = 0;
+                  let vFuelAmt = 0;
+                  if (vFuelSorted.length >= 2) {
+                    const minK = vFuelSorted[0].km!;
+                    const maxK = vFuelSorted[vFuelSorted.length - 1].km!;
+                    vDistance = maxK - minK;
+                    vFuelAmt = vFuelSorted.slice(1).reduce((sum, e) => sum + (Number(e.amount) || 0), 0);
+                  }
+                  const vAvgCostPerKm = vDistance > 0 && vFuelAmt > 0 ? vFuelAmt / vDistance : null;
+
                   return (
                     <tr key={v.id} className="hover:bg-slate-50/80 transition">
                       {/* Plaka & Tip */}
@@ -1028,6 +1199,12 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
                             {v.vehicle_type}
                           </span>
                         </div>
+                        {latestKmForVehicle !== null && (
+                          <div className="text-[10px] text-slate-500 font-mono mt-0.5 flex items-center gap-1 font-semibold">
+                            <Gauge size={11} className="text-slate-400" />
+                            <span>{latestKmForVehicle.toLocaleString("tr-TR")} KM</span>
+                          </div>
+                        )}
                       </td>
 
                       {/* Şoför & Telefon */}
@@ -1081,7 +1258,12 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
 
                       {/* Yakıt */}
                       <td className="py-3 px-4 text-right font-bold text-amber-700 tabular-nums">
-                        {formatCurrency(displayFuel)}
+                        <div>{formatCurrency(displayFuel)}</div>
+                        {vAvgCostPerKm !== null && (
+                          <div className="text-[10px] text-emerald-700 font-semibold font-mono">
+                            ~₺{vAvgCostPerKm.toFixed(2)}/km
+                          </div>
+                        )}
                       </td>
 
                       {/* Tamir */}
@@ -1336,7 +1518,7 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
                   Yeni Masraf Ekle (Yakıt Fişi / Tamir Faturası)
                 </h3>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3">
+                <div className={`grid grid-cols-1 sm:grid-cols-2 ${expenseType === "fuel" ? "md:grid-cols-5" : "md:grid-cols-4"} gap-3`}>
                   {/* Masraf Tipi */}
                   <div>
                     <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -1401,18 +1583,95 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
 
                   {/* O Anki KM */}
                   <div>
-                    <label className="block text-xs font-semibold text-slate-700 mb-1">
-                      Aracın O Anki KM'si
-                    </label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-semibold text-slate-700">
+                        Aracın O Anki KM'si
+                      </label>
+                      {latestRecordedKm !== null && (
+                        <span className="text-[10px] font-bold text-brand-navy bg-brand-navy/10 px-1.5 py-0.5 rounded" title="Son kayıtlı kilometre">
+                          Son: {latestRecordedKm.toLocaleString("tr-TR")}
+                        </span>
+                      )}
+                    </div>
                     <input
                       type="number"
-                      placeholder="Örn: 145200"
+                      placeholder={latestRecordedKm ? `Örn: ${latestRecordedKm + 2000}` : "Örn: 145200"}
                       value={expenseKm}
                       onChange={(e) => setExpenseKm(e.target.value)}
                       className="w-full bg-white border border-border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
                     />
                   </div>
+
+                  {/* Yakıt Litresi (Opsiyonel) */}
+                  {expenseType === "fuel" && (
+                    <div>
+                      <label className="block text-xs font-semibold text-slate-700 mb-1">
+                        Alınan Litre <span className="text-slate-400 font-normal">(Opsiyonel)</span>
+                      </label>
+                      <input
+                        type="number"
+                        step="0.01"
+                        placeholder="Örn: 80"
+                        value={expenseLiters}
+                        onChange={(e) => setExpenseLiters(e.target.value)}
+                        className="w-full bg-white border border-border rounded-xl px-3 py-2 text-xs font-bold focus:outline-none focus:ring-2 focus:ring-brand-gold/50"
+                      />
+                    </div>
+                  )}
                 </div>
+
+                {/* CANLI YAKIT VE KM FARKI HESAPLAMA BANNER'I */}
+                {expenseType === "fuel" && liveKmDiff !== null && liveCostPerKm !== null && (
+                  <div className="bg-emerald-50 border border-emerald-300 rounded-xl p-3 flex flex-wrap items-center justify-between gap-3 text-xs animate-in fade-in duration-200 shadow-2xs">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-black shadow-xs">
+                        <Zap size={18} />
+                      </div>
+                      <div>
+                        <div className="font-bold text-emerald-950 flex items-center gap-1.5">
+                          <span>{latestRecordedKm?.toLocaleString("tr-TR")} KM</span>
+                          <ArrowRight size={13} className="text-emerald-700 shrink-0" />
+                          <span className="underline decoration-emerald-500 font-black">{parseFloat(expenseKm).toLocaleString("tr-TR")} KM</span>
+                          <span className="bg-emerald-200 text-emerald-950 font-black px-2 py-0.5 rounded-full text-[11px] ml-1">
+                            +{liveKmDiff.toLocaleString("tr-TR")} KM Yol Yapıldı
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-emerald-800 mt-0.5">
+                          Araba bu yakıtla <strong>{liveKmDiff.toLocaleString("tr-TR")} KM</strong> yol yaptı.
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-4 bg-white/90 border border-emerald-200 px-3 py-1.5 rounded-xl shadow-2xs">
+                      <div className="text-right">
+                        <span className="text-[10px] text-slate-500 block uppercase font-bold">KM Başına Yakıt:</span>
+                        <span className="text-sm font-black text-emerald-900 font-mono">
+                          ₺{liveCostPerKm.toFixed(2)} <span className="text-[10px] text-emerald-700 font-normal">/ KM</span>
+                        </span>
+                      </div>
+                      <div className="text-right border-l border-emerald-200 pl-3">
+                        <span className="text-[10px] text-slate-500 block uppercase font-bold">100 KM Tüketimi:</span>
+                        <span className="text-sm font-black text-slate-900 font-mono">
+                          ₺{liveCostPer100Km?.toFixed(0)}
+                          {liveLitersPer100Km && (
+                            <span className="text-emerald-700 font-bold ml-1 text-xs">
+                              ({liveLitersPer100Km.toFixed(1)} lt)
+                            </span>
+                          )}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {expenseType === "fuel" && expenseKm && latestRecordedKm !== null && parseFloat(expenseKm) <= latestRecordedKm && (
+                  <div className="bg-amber-50 border border-amber-300 rounded-xl p-2.5 flex items-center gap-2 text-xs text-amber-900">
+                    <AlertTriangle size={15} className="text-amber-600 shrink-0" />
+                    <span>
+                      Girilen KM ({expenseKm}), son kayıtlı kilometreden ({latestRecordedKm.toLocaleString("tr-TR")} KM) düşük veya eşit. Kilometre artışı girildiğinde aradaki fark ve tüketim otomatik hesaplanır.
+                    </span>
+                  </div>
+                )}
 
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                   {/* Fiş Fotoğrafı Yükle */}
@@ -1528,26 +1787,82 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
                       </button>
                     </div>
                   </div>
+                </div>
 
-                  {/* Seçili Dönem Toplamları */}
-                  <div className="flex items-center gap-4 text-xs">
-                    <div className="text-right">
-                      <span className="text-slate-400 block text-[10px]">Dönem Yakıt:</span>
-                      <span className="font-black text-slate-900 text-sm">
-                        {formatCurrency(monthFuelTotal)}
-                      </span>
+                {/* 3. DÖNEM YAKIT & KM TÜKETİM ANALİZ KARTLARI */}
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                  {/* 1. Dönem Yakıt Masrafı */}
+                  <div className="bg-gradient-to-br from-blue-50 to-blue-100/60 p-3.5 rounded-xl border border-blue-200 shadow-2xs">
+                    <span className="text-[10px] font-bold text-blue-900 uppercase tracking-wide flex items-center gap-1.5">
+                      <Fuel size={14} className="text-blue-700" />
+                      Dönem Yakıtı
+                    </span>
+                    <p className="text-lg font-black text-blue-950 mt-1 tabular-nums">
+                      {formatCurrency(monthFuelTotal)}
+                    </p>
+                    <div className="text-[10px] text-blue-800 mt-1 flex items-center justify-between border-t border-blue-200/80 pt-1">
+                      <span>{periodFuelStats.count} Dolum Kaydı</span>
+                      {periodFuelStats.fuelLiters > 0 && (
+                        <span className="font-bold">{periodFuelStats.fuelLiters.toFixed(1)} Litre</span>
+                      )}
                     </div>
-                    <div className="text-right">
-                      <span className="text-slate-400 block text-[10px]">Dönem Tamir:</span>
-                      <span className="font-black text-slate-900 text-sm">
-                        {formatCurrency(monthRepairTotal)}
-                      </span>
+                  </div>
+
+                  {/* 2. Katedilen Mesafe (KM) */}
+                  <div className="bg-gradient-to-br from-emerald-50 to-emerald-100/60 p-3.5 rounded-xl border border-emerald-200 shadow-2xs">
+                    <span className="text-[10px] font-bold text-emerald-900 uppercase tracking-wide flex items-center gap-1.5">
+                      <Gauge size={14} className="text-emerald-700" />
+                      Katedilen Yol (KM)
+                    </span>
+                    <p className="text-lg font-black text-emerald-950 mt-1 tabular-nums">
+                      {periodFuelStats.distanceDriven > 0
+                        ? `+${periodFuelStats.distanceDriven.toLocaleString("tr-TR")} KM`
+                        : (periodFuelStats.maxKm ? `${periodFuelStats.maxKm.toLocaleString("tr-TR")} KM` : "Veri Yok")}
+                    </p>
+                    <div className="text-[10px] text-emerald-800 mt-1 flex items-center justify-between border-t border-emerald-200/80 pt-1 truncate">
+                      {periodFuelStats.minKm && periodFuelStats.maxKm && periodFuelStats.minKm !== periodFuelStats.maxKm ? (
+                        <span className="truncate">{periodFuelStats.minKm.toLocaleString("tr-TR")} ➔ {periodFuelStats.maxKm.toLocaleString("tr-TR")} KM</span>
+                      ) : (
+                        <span>Yakıtlar arası mesafe</span>
+                      )}
                     </div>
-                    <div className="text-right border-l border-slate-200 pl-3">
-                      <span className="text-slate-400 block text-[10px]">Dönem Toplamı:</span>
-                      <span className="font-black text-brand-navy text-sm">
-                        {formatCurrency(monthFuelTotal + monthRepairTotal)}
-                      </span>
+                  </div>
+
+                  {/* 3. Ortalama KM Başına Yakıt Tüketimi */}
+                  <div className="bg-gradient-to-br from-amber-50 to-amber-100/60 p-3.5 rounded-xl border border-amber-200 shadow-2xs">
+                    <span className="text-[10px] font-bold text-amber-900 uppercase tracking-wide flex items-center gap-1.5">
+                      <Zap size={14} className="text-amber-700" />
+                      KM Başına Yakıt
+                    </span>
+                    <p className="text-lg font-black text-amber-950 mt-1 tabular-nums font-mono">
+                      {periodFuelStats.avgCostPerKm !== null
+                        ? `₺${periodFuelStats.avgCostPerKm.toFixed(2)} / km`
+                        : "Hesaplama için 2 KM gerek"}
+                    </p>
+                    <div className="text-[10px] text-amber-900 mt-1 flex items-center justify-between border-t border-amber-200/80 pt-1">
+                      {periodFuelStats.avgCostPer100Km !== null ? (
+                        <span>100 km: <strong>₺{periodFuelStats.avgCostPer100Km.toFixed(0)}</strong></span>
+                      ) : (
+                        <span>100 km ortalaması</span>
+                      )}
+                      {periodFuelStats.avgLitersPer100Km !== null && (
+                        <span className="font-bold">{periodFuelStats.avgLitersPer100Km.toFixed(1)} lt/100km</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* 4. Dönem Toplam Masrafı (Yakıt + Bakım) */}
+                  <div className="bg-gradient-to-br from-slate-50 to-slate-100 p-3.5 rounded-xl border border-slate-300 shadow-2xs">
+                    <span className="text-[10px] font-bold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                      <Receipt size={14} className="text-slate-700" />
+                      Dönem Toplamı
+                    </span>
+                    <p className="text-lg font-black text-slate-900 mt-1 tabular-nums">
+                      {formatCurrency(monthFuelTotal + monthRepairTotal)}
+                    </p>
+                    <div className="text-[10px] text-slate-600 mt-1 flex items-center justify-between border-t border-slate-200 pt-1">
+                      <span>Tamir: {formatCurrency(monthRepairTotal)}</span>
+                      <span className="font-semibold">{selectedMonth === "all" ? "Tüm Zamanlar" : selectedMonth}</span>
                     </div>
                   </div>
                 </div>
@@ -1566,6 +1881,7 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
                           <th className="py-2.5 px-3">Tür</th>
                           <th className="py-2.5 px-3 text-right">Tutar</th>
                           <th className="py-2.5 px-3 text-center">Araç KM</th>
+                          <th className="py-2.5 px-3 text-center">KM Farkı & Yakıt Tüketimi</th>
                           <th className="py-2.5 px-3">Fiş / Fatura Fotoğrafı</th>
                           <th className="py-2.5 px-3">Açıklama</th>
                           <th className="py-2.5 px-3 text-center">Sil</th>
@@ -1592,7 +1908,42 @@ export function VehicleClient({ initialVehicles, userRole }: Props) {
                               {formatCurrency(exp.amount)}
                             </td>
                             <td className="py-2.5 px-3 text-center font-bold text-slate-700">
-                              {exp.km ? `${exp.km.toLocaleString("tr-TR")} KM` : "-"}
+                              {exp.km ? (
+                                <div>
+                                  <span className="font-mono">{exp.km.toLocaleString("tr-TR")} KM</span>
+                                  {exp.liters && exp.liters > 0 && (
+                                    <span className="text-[10px] text-slate-500 block font-normal">{exp.liters} Lt</span>
+                                  )}
+                                </div>
+                              ) : (
+                                "-"
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-center">
+                              {exp.type === "fuel" ? (
+                                exp.kmDiff !== null && exp.costPerKm !== null ? (
+                                  <div className="inline-flex flex-col items-center">
+                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-200 font-mono">
+                                      +{exp.kmDiff.toLocaleString("tr-TR")} KM
+                                    </span>
+                                    <span className="text-[11px] font-black text-slate-900 mt-0.5 font-mono">
+                                      ₺{exp.costPerKm.toFixed(2)} / km
+                                    </span>
+                                    <span className="text-[9px] text-slate-500 font-medium">
+                                      100 km: ₺{exp.costPer100Km?.toFixed(0)}
+                                      {exp.litersPer100Km ? ` • ${exp.litersPer100Km.toFixed(1)} lt` : ""}
+                                    </span>
+                                  </div>
+                                ) : exp.isFirstFuel ? (
+                                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-[10px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+                                    🏁 Başlangıç Kaydı
+                                  </span>
+                                ) : (
+                                  <span className="text-slate-400 text-[10px]">-</span>
+                                )
+                              ) : (
+                                <span className="text-slate-400 text-[10px] italic">Tamir / Bakım</span>
+                              )}
                             </td>
                             <td className="py-2.5 px-3">
                               {exp.receipt_url ? (
