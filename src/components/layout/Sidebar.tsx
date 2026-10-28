@@ -37,6 +37,7 @@ import {
   Coins,
   Paintbrush,
   PackageCheck,
+  Boxes,
 } from "lucide-react";
 
 import { type UserRole } from "@/lib/auth/role-constants";
@@ -173,6 +174,11 @@ const navItems: NavItem[] = [
         href: "/satislar",
         label: "Satışlar",
         icon: ReceiptText,
+      },
+      {
+        href: "/tedarik",
+        label: "Tedarik",
+        icon: Boxes,
       },
     ],
   },

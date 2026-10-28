@@ -17,6 +17,8 @@ import {
   MapPin
 } from "lucide-react";
 import { SaleDetailActions } from "./SaleDetailActions";
+import { getSaleProcurementItems } from "@/app/(dashboard)/tedarik/actions";
+import SaleItemsTable from "./SaleItemsTable";
 
 export default async function SaleDetailPage({
   params,
@@ -73,6 +75,7 @@ export default async function SaleDetailPage({
     .order("payment_date", { ascending: false });
 
   const payments = paymentsData || [];
+  const procurementRecords = await getSaleProcurementItems(id);
 
   const customerName = sale.customer_snapshot?.company_name || sale.customer?.company_name || sale.customer_snapshot?.contact_name || sale.customer?.contact_name || "Perakende Müşteri";
   const customerPhone = sale.customer_snapshot?.phone || sale.customer?.phone || "-";
@@ -170,79 +173,25 @@ export default async function SaleDetailPage({
         </div>
       </div>
 
-      {/* Items Table */}
-      <div className="bg-white rounded-2xl border border-border shadow-xs overflow-hidden">
-        <div className="p-4 border-b border-border bg-surface/50">
-          <h3 className="text-sm font-bold text-text flex items-center gap-2">
-            <ReceiptText size={16} className="text-brand-gold" />
-            Satılan Kalemler ({items.length} Kalem)
-          </h3>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead className="bg-surface border-b border-border text-text-muted uppercase text-[10px] font-bold">
-              <tr>
-                <th className="py-2.5 px-3 text-center w-8">#</th>
-                <th className="py-2.5 px-4 text-left">Ürün Açıklaması</th>
-                <th className="py-2.5 px-3 text-right">Miktar</th>
-                <th className="py-2.5 px-3 text-center">Birim</th>
-                <th className="py-2.5 px-3 text-right">Birim Fiyat</th>
-                <th className="py-2.5 px-3 text-right">İskonto</th>
-                <th className="py-2.5 px-4 text-right">Tutar (KDV Hariç)</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {items.map((item: any, idx: number) => (
-                <tr key={item.id || idx} className="hover:bg-surface/30">
-                  <td className="py-2.5 px-3 text-center text-text-muted">{idx + 1}</td>
-                  <td className="py-2.5 px-4">
-                    <p className="font-semibold text-text">{item.product_name_snapshot}</p>
-                    {item.product_code_snapshot && (
-                      <span className="text-[10px] text-text-muted font-mono">{item.product_code_snapshot}</span>
-                    )}
-                  </td>
-                  <td className="py-2.5 px-3 text-right font-medium tabular-nums">{item.quantity}</td>
-                  <td className="py-2.5 px-3 text-center text-text-muted">{item.unit_snapshot}</td>
-                  <td className="py-2.5 px-3 text-right tabular-nums">{formatCurrency(item.unit_price)}</td>
-                  <td className="py-2.5 px-3 text-right tabular-nums text-text-muted">
-                    {item.discount_amount > 0 ? formatCurrency(item.discount_amount) : "-"}
-                  </td>
-                  <td className="py-2.5 px-4 text-right font-bold text-text tabular-nums">{formatCurrency(item.line_total)}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        {/* Totals Summary Footer */}
-        <div className="bg-surface/30 border-t border-border p-4 flex justify-end">
-          <div className="w-64 space-y-1.5 text-xs">
-            <div className="flex justify-between text-text-muted">
-              <span>Ara Toplam:</span>
-              <span className="font-semibold text-text tabular-nums">{formatCurrency(sale.subtotal)}</span>
-            </div>
-            {sale.discount_total > 0 && (
-              <div className="flex justify-between text-brand-red">
-                <span>İskonto:</span>
-                <span className="font-semibold tabular-nums">-{formatCurrency(sale.discount_total)}</span>
-              </div>
-            )}
-            <div className="flex justify-between text-text-muted">
-              <span>Net Tutar:</span>
-              <span className="font-semibold text-text tabular-nums">{formatCurrency(sale.net_total)}</span>
-            </div>
-            <div className="flex justify-between text-text-muted">
-              <span>KDV (%{sale.vat_rate}):</span>
-              <span className="font-semibold text-text tabular-nums">{formatCurrency(sale.vat_total)}</span>
-            </div>
-            <div className="flex justify-between text-text font-black text-sm border-t border-border pt-1">
-              <span>Genel Toplam:</span>
-              <span className="tabular-nums text-brand-navy">{formatCurrency(sale.grand_total)}</span>
-            </div>
-          </div>
-        </div>
-      </div>
+      {/* Items Table & Procurement */}
+      <SaleItemsTable
+        items={items}
+        saleId={sale.id}
+        saleCode={sale.sale_code}
+        customerId={sale.customer_id}
+        customerName={customerName}
+        customerPhone={customerPhone !== "-" ? customerPhone : undefined}
+        initialProcurementRecords={procurementRecords}
+        formatCurrency={formatCurrency}
+        saleTotals={{
+          subtotal: sale.subtotal,
+          discount_total: sale.discount_total || 0,
+          net_total: sale.net_total,
+          vat_rate: sale.vat_rate,
+          vat_total: sale.vat_total,
+          grand_total: sale.grand_total,
+        }}
+      />
 
       {/* Payments History */}
       <div className="bg-white rounded-2xl border border-border shadow-xs p-6 space-y-3">
