@@ -138,7 +138,7 @@ export async function updateQuote(
   data: {
     items: Array<{
       product_id: string | null;
-      product_code_snapshot: string;
+      product_code_snapshot?: string;
       product_name_snapshot: string;
       description_snapshot?: string;
       unit_snapshot: string;
@@ -158,87 +158,105 @@ export async function updateQuote(
     paymentTerms?: string;
     notes?: string;
   }
-) {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) throw new Error("Oturum açılmamış.");
+): Promise<{ success: boolean; error?: string }> {
+  try {
+    const supabase = await createClient();
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) return { success: false, error: "Oturum süreniz dolmuş. Lütfen tekrar giriş yapın." };
 
-  // Sunucu tarafında satır ve toplamları baştan hesapla
-  const lines = data.items.map((item) =>
-    calculateLine({
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      discount_type: item.discount_type,
-      discount_value: item.discount_value,
-    })
-  );
+    const service = await createServiceClient();
 
-  const vatRate = data.vatRate ?? 20;
-  const totals = calculateTotals(lines, vatRate, data.generalDiscountType, data.generalDiscountValue);
+    // Sunucu tarafında satır ve toplamları baştan hesapla
+    const lines = (data.items || []).map((item) =>
+      calculateLine({
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount_type: item.discount_type,
+        discount_value: item.discount_value,
+      })
+    );
 
-  // 1. Quotes tablosunu güncelle
-  const updatePayload: Record<string, any> = {
-    subtotal: totals.subtotal,
-    line_discount_total: totals.line_discount_total,
-    general_discount_type: data.generalDiscountType,
-    general_discount_value: data.generalDiscountValue,
-    general_discount_amount: totals.general_discount_amount,
-    net_total: totals.net_total,
-    vat_rate: vatRate,
-    vat_total: totals.vat_total,
-    grand_total: totals.grand_total,
-    valid_until: data.validUntil,
-    delivery_terms: data.deliveryTerms,
-    payment_terms: data.paymentTerms,
-    notes: data.notes,
-    updated_at: new Date().toISOString(),
-    updated_by: user.id,
-  };
+    const vatRate = data.vatRate ?? 20;
+    const totals = calculateTotals(lines, vatRate, data.generalDiscountType, data.generalDiscountValue);
 
-  if (data.customerId !== undefined) {
-    updatePayload.customer_id = data.customerId;
+    // 1. Quotes tablosunu güncelle
+    const updatePayload: Record<string, any> = {
+      subtotal: totals.subtotal,
+      line_discount_total: totals.line_discount_total,
+      general_discount_type: data.generalDiscountType,
+      general_discount_value: data.generalDiscountValue,
+      general_discount_amount: totals.general_discount_amount,
+      net_total: totals.net_total,
+      vat_rate: vatRate,
+      vat_total: totals.vat_total,
+      grand_total: totals.grand_total,
+      valid_until: data.validUntil || null,
+      delivery_terms: data.deliveryTerms || "",
+      payment_terms: data.paymentTerms || "",
+      notes: data.notes || null,
+      updated_at: new Date().toISOString(),
+      updated_by: user.id,
+    };
+
+    if (data.customerId !== undefined) {
+      updatePayload.customer_id = data.customerId || null;
+    }
+    if (data.customerSnapshot !== undefined) {
+      updatePayload.customer_snapshot = data.customerSnapshot;
+    }
+
+    const { error: quoteErr } = await (service
+      .from("quotes") as any)
+      .update(updatePayload)
+      .eq("id", quoteId);
+
+    if (quoteErr) return { success: false, error: "Teklif güncellenemedi: " + quoteErr.message };
+
+    // 2. Eski kalemleri sil ve yenilerini ekle
+    await (service.from("quote_items") as any).delete().eq("quote_id", quoteId);
+
+    const newItems = (data.items || []).map((item, idx) => {
+      let cleanProductId: string | null = null;
+      if (item.product_id && typeof item.product_id === "string" && item.product_id.trim().length > 10) {
+        cleanProductId = item.product_id.trim();
+      }
+
+      return {
+        quote_id: quoteId,
+        sort_order: idx + 1,
+        product_id: cleanProductId,
+        product_code_snapshot: item.product_code_snapshot || "",
+        product_name_snapshot: item.product_name_snapshot || "Ürün",
+        description_snapshot: item.description_snapshot || "",
+        unit_snapshot: item.unit_snapshot || "M2",
+        price_source: item.price_source || "custom",
+        quantity: Number(item.quantity) || 1,
+        unit_price: Number(item.unit_price) || 0,
+        discount_type: item.discount_type || null,
+        discount_value: Number(item.discount_value) || 0,
+        discount_amount: lines[idx]?.discount_amount || 0,
+        line_subtotal: lines[idx]?.line_subtotal || 0,
+        line_total: lines[idx]?.line_total || 0,
+      };
+    });
+
+    if (newItems.length > 0) {
+      const { error: itemsErr } = await (service
+        .from("quote_items") as any)
+        .insert(newItems);
+      if (itemsErr) return { success: false, error: "Teklif kalemleri güncellenemedi: " + itemsErr.message };
+    }
+
+    revalidatePath(`/teklifler`);
+    revalidatePath(`/teklifler/${quoteId}`);
+    revalidatePath(`/teklif-onizleme/${quoteId}`);
+    revalidatePath(`/teklif-yazdir/${quoteId}`);
+
+    return { success: true };
+  } catch (err: any) {
+    console.error("updateQuote catch error:", err);
+    return { success: false, error: err?.message || "Teklif güncellenirken bir hata oluştu." };
   }
-  if (data.customerSnapshot !== undefined) {
-    updatePayload.customer_snapshot = data.customerSnapshot;
-  }
-
-  const { error: quoteErr } = await supabase
-    .from("quotes")
-    .update(updatePayload as never)
-    .eq("id", quoteId);
-
-  if (quoteErr) throw new Error(quoteErr.message);
-
-  // 2. Eski kalemleri sil ve yenilerini ekle
-  await supabase.from("quote_items").delete().eq("quote_id", quoteId);
-
-  const newItems = data.items.map((item, idx) => ({
-    quote_id: quoteId,
-    sort_order: idx + 1,
-    product_id: item.product_id,
-    product_code_snapshot: item.product_code_snapshot,
-    product_name_snapshot: item.product_name_snapshot,
-    description_snapshot: item.description_snapshot || "",
-    unit_snapshot: item.unit_snapshot,
-    price_source: item.price_source || "quality_1",
-    quantity: item.quantity,
-    unit_price: item.unit_price,
-    discount_type: item.discount_type,
-    discount_value: item.discount_value,
-    discount_amount: lines[idx].discount_amount,
-    line_subtotal: lines[idx].line_subtotal,
-    line_total: lines[idx].line_total,
-  }));
-
-  const { error: itemsErr } = await supabase.from("quote_items").insert(newItems as never);
-  if (itemsErr) throw new Error(itemsErr.message);
-
-  revalidatePath(`/teklifler`);
-  revalidatePath(`/teklifler/${quoteId}`);
-  revalidatePath(`/teklif-onizleme/${quoteId}`);
-  revalidatePath(`/teklif-yazdir/${quoteId}`);
-
-  return { success: true };
 }
 
 export async function deleteQuote(quoteId: string) {

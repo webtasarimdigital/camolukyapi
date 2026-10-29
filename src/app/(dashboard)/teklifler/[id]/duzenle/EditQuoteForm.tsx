@@ -235,7 +235,7 @@ export function EditQuoteForm({
 
     setLoading(true);
     try {
-      await updateQuote(quote.id, {
+      const res = await updateQuote(quote.id, {
         customerId: finalCustomerId,
         customerSnapshot: finalCustomerSnapshot,
         items: items.map((it) => ({
@@ -254,6 +254,12 @@ export function EditQuoteForm({
         validUntil,
         notes,
       });
+
+      if (!res.success) {
+        toast.error(res.error || "Güncelleme başarısız");
+        setLoading(false);
+        return;
+      }
 
       toast.success("Teklif başarıyla güncellendi!");
       router.push(`/teklifler/${quote.id}`);

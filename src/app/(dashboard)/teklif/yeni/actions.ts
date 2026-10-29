@@ -149,22 +149,30 @@ export async function saveQuote(data: any): Promise<{
 
     const quoteData = quote as { id: string };
 
-    const quoteItems = data.items.map((item: any, i: number) => ({
-      quote_id: quoteData.id,
-      product_id: item.product_id,
-      product_code_snapshot: item.product_code_snapshot,
-      product_name_snapshot: item.product_name_snapshot,
-      description_snapshot: item.description_snapshot,
-      unit_snapshot: item.unit_snapshot,
-      price_source: item.price_source,
-      quantity: item.quantity,
-      unit_price: item.unit_price,
-      discount_type: item.discount_type,
-      discount_value: item.discount_value,
-      line_subtotal: lines[i].line_subtotal,
-      discount_amount: lines[i].discount_amount,
-      line_total: lines[i].line_total,
-    }));
+    const quoteItems = data.items.map((item: any, i: number) => {
+      let cleanProductId: string | null = null;
+      if (item.product_id && typeof item.product_id === "string" && item.product_id.trim().length > 10) {
+        cleanProductId = item.product_id.trim();
+      }
+
+      return {
+        quote_id: quoteData.id,
+        sort_order: i + 1,
+        product_id: cleanProductId,
+        product_code_snapshot: item.product_code_snapshot || "",
+        product_name_snapshot: item.product_name_snapshot || "Ürün",
+        description_snapshot: item.description_snapshot || "",
+        unit_snapshot: item.unit_snapshot || "M2",
+        price_source: item.price_source || "custom",
+        quantity: Number(item.quantity) || 1,
+        unit_price: Number(item.unit_price) || 0,
+        discount_type: item.discount_type || null,
+        discount_value: Number(item.discount_value) || 0,
+        line_subtotal: lines[i]?.line_subtotal || 0,
+        discount_amount: lines[i]?.discount_amount || 0,
+        line_total: lines[i]?.line_total || 0,
+      };
+    });
 
     const { error: itemsError } = await (service
       .from("quote_items") as any)

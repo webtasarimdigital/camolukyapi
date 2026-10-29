@@ -41,6 +41,12 @@ export async function middleware(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
   const isPublic = PUBLIC_ROUTES.some((route) => pathname.startsWith(route));
+  const isServerAction = request.headers.has("next-action");
+
+  // Server Action isteklerinde middleware HTML yönlendirmesi yapamaz (aksi halde "unexpected response" hatası verir)
+  if (isServerAction) {
+    return supabaseResponse;
+  }
 
   // Login olmayan kullanıcı → login'e yönlendir
   if (!user && !isPublic) {
