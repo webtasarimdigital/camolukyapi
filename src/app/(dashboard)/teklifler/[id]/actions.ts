@@ -20,14 +20,26 @@ export async function updateQuoteStatus(quoteId: string, status: string) {
   revalidatePath(`/teklifler`);
 }
 
+export interface ConvertSalePaymentDetails {
+  paymentStatus: "paid" | "partial" | "unpaid";
+  paidAmount: number;
+  paymentMethod: string;
+  dueDate?: string;
+  notes?: string;
+}
+
 /**
  * Teklifi doğrudan onaylayıp satışa dönüştürür ve satışı tamamlar:
  * - Stoktan otomatik düşer
- * - Finans gelirlerine (ciro ve tahsilat) yansıtır
+ * - Belirlenen ödeme durumu ve tahsilat tutarını işler
  * - Teklif durumunu 'converted_to_sale' yapar
  */
-export async function convertAndCompleteSale(quoteId: string) {
+export async function convertAndCompleteSale(
+  quoteId: string,
+  paymentDetails?: ConvertSalePaymentDetails
+) {
   const supabase = await createClient();
+  const service = await createServiceClient();
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("Oturum açılmamış.");
 
@@ -43,13 +55,69 @@ export async function convertAndCompleteSale(quoteId: string) {
   const saleId = result?.sale_id;
   if (!saleId) throw new Error("Satış oluşturulamadı.");
 
-  // 2. Satışı tamamla (Stok düşürür, tahsilat & gelir tablosuna işler)
+  // 2. Ödeme detayları varsa satışı güncelle
+  if (paymentDetails) {
+    const { data: saleRow } = await (service
+      .from("sales") as any)
+      .select("grand_total")
+      .eq("id", saleId)
+      .single();
+
+    const grandTotal = Number(saleRow?.grand_total) || 0;
+    const paidAmount = Math.max(0, Number(paymentDetails.paidAmount) || 0);
+    const remainingAmount = Math.max(0, grandTotal - paidAmount);
+
+    await (service
+      .from("sales") as any)
+      .update({
+        payment_status: paymentDetails.paymentStatus,
+        paid_amount: paidAmount,
+        remaining_amount: remainingAmount,
+        due_date: paymentDetails.dueDate || null,
+      })
+      .eq("id", saleId);
+  }
+
+  // 3. Satışı tamamla (Stok düşürür)
   const { error: finErr } = await supabase.rpc("finalize_sale" as never, {
     p_sale_id: saleId,
     p_user_id: user.id,
   } as never);
 
-  if (finErr) throw new Error(finErr.message);
+  if (finErr) {
+    console.warn("finalize_sale RPC uyarı:", finErr.message);
+    await (service
+      .from("sales") as any)
+      .update({
+        status: "completed",
+        completed_at: new Date().toISOString(),
+      })
+      .eq("id", saleId);
+  }
+
+  // 4. Tahsilat yapıldıysa payments tablosuna işle
+  if (paymentDetails && paymentDetails.paidAmount > 0) {
+    const { data: saleFull } = await (service
+      .from("sales") as any)
+      .select("company_id, customer_id, sale_code")
+      .eq("id", saleId)
+      .single();
+
+    if (saleFull) {
+      const today = new Date().toISOString().split("T")[0];
+      await (service.from("payments") as any).insert({
+        company_id: saleFull.company_id,
+        sale_id: saleId,
+        customer_id: saleFull.customer_id || null,
+        amount: paymentDetails.paidAmount,
+        payment_date: today,
+        payment_method: paymentDetails.paymentMethod || "nakit",
+        reference_no: saleFull.sale_code,
+        notes: paymentDetails.notes || `Tekliften satışa dönüşüm tahsilatı: ${saleFull.sale_code}`,
+        created_by: user.id,
+      });
+    }
+  }
 
   revalidatePath(`/teklifler`);
   revalidatePath(`/teklifler/${quoteId}`);

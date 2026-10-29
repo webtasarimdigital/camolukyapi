@@ -31,7 +31,26 @@ export default async function TedarikPage() {
     console.error("TedarikPage auth error:", err);
   }
 
+  let customers: any[] = [];
+  try {
+    const supabase = await createClient();
+    const { data: custData } = await supabase
+      .from("customers")
+      .select("id, company_name, contact_name, phone")
+      .eq("is_active", true)
+      .order("company_name", { ascending: true });
+    if (custData) customers = custData;
+  } catch (err) {
+    console.error("TedarikPage customers error:", err);
+  }
+
   const records = await getProcurementRecords();
 
-  return <TedarikClient initialRecords={records} userRole={userRole} />;
+  return (
+    <TedarikClient
+      initialRecords={records}
+      userRole={userRole}
+      initialCustomers={customers}
+    />
+  );
 }

@@ -20,22 +20,28 @@ import {
   ChevronDown,
   ChevronRight,
   Filter,
+  Plus,
+  X,
+  User,
 } from "lucide-react";
 import { toast } from "sonner";
 import type {
   ProcurementRecord,
   ProcurementStatus,
   ConsolidatedPendingProduct,
+  CustomerOption,
 } from "./types";
 import {
   updateProcurementSupplier,
   updateProcurementStatus,
   deleteProcurementRecord,
+  createManualProcurementItem,
 } from "./actions";
 
 interface TedarikClientProps {
   initialRecords: ProcurementRecord[];
   userRole: string;
+  initialCustomers?: CustomerOption[];
 }
 
 const STATUS_CONFIG: Record<
@@ -75,6 +81,7 @@ const STATUS_CONFIG: Record<
 export default function TedarikClient({
   initialRecords,
   userRole,
+  initialCustomers = [],
 }: TedarikClientProps) {
   const [records, setRecords] = useState<ProcurementRecord[]>(initialRecords);
   const [activeTab, setActiveTab] = useState<"items" | "consolidated">("items");
@@ -85,6 +92,89 @@ export default function TedarikClient({
   const [savingSupplierId, setSavingSupplierId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [expandedProducts, setExpandedProducts] = useState<Record<string, boolean>>({});
+
+  // Manuel Tedarik Girişi Modal State
+  const [isNewModalOpen, setIsNewModalOpen] = useState(false);
+  const [isSubmittingNew, setIsSubmittingNew] = useState(false);
+  const [newCustomerName, setNewCustomerName] = useState("");
+  const [newCustomerPhone, setNewCustomerPhone] = useState("");
+  const [newCustomerId, setNewCustomerId] = useState<string | undefined>(undefined);
+  const [newProductName, setNewProductName] = useState("");
+  const [newProductCode, setNewProductCode] = useState("");
+  const [newQuantity, setNewQuantity] = useState<number | string>(1);
+  const [newUnit, setNewUnit] = useState("Adet");
+  const [newSupplierName, setNewSupplierName] = useState("");
+  const [newStatus, setNewStatus] = useState<ProcurementStatus>("bekliyor");
+  const [newNotes, setNewNotes] = useState("");
+
+  const handleSelectExistingCustomer = (cId: string) => {
+    if (!cId) {
+      setNewCustomerId(undefined);
+      return;
+    }
+    const cust = initialCustomers.find((c) => c.id === cId);
+    if (cust) {
+      setNewCustomerId(cust.id);
+      setNewCustomerName(cust.company_name);
+      setNewCustomerPhone(cust.phone || "");
+    }
+  };
+
+  const handleCreateManual = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCustomerName.trim()) {
+      toast.error("Lütfen müşteri adını giriniz veya listeden seçiniz.");
+      return;
+    }
+    if (!newProductName.trim()) {
+      toast.error("Lütfen ürün adını giriniz.");
+      return;
+    }
+    const q = Number(newQuantity);
+    if (!q || q <= 0) {
+      toast.error("Lütfen geçerli bir miktar giriniz.");
+      return;
+    }
+
+    setIsSubmittingNew(true);
+    try {
+      const res = await createManualProcurementItem({
+        customer_name: newCustomerName,
+        customer_phone: newCustomerPhone,
+        customer_id: newCustomerId,
+        product_name: newProductName,
+        product_code: newProductCode,
+        quantity: q,
+        unit: newUnit,
+        supplier_name: newSupplierName,
+        status: newStatus,
+        notes: newNotes,
+      });
+
+      if (res.success && res.record) {
+        toast.success("Tedarik kaydı başarıyla oluşturuldu!");
+        setRecords((prev) => [res.record!, ...prev]);
+        setIsNewModalOpen(false);
+        // Reset form
+        setNewCustomerName("");
+        setNewCustomerPhone("");
+        setNewCustomerId(undefined);
+        setNewProductName("");
+        setNewProductCode("");
+        setNewQuantity(1);
+        setNewUnit("Adet");
+        setNewSupplierName("");
+        setNewStatus("bekliyor");
+        setNewNotes("");
+      } else {
+        toast.error(res.error || "Tedarik kaydı oluşturulamadı.");
+      }
+    } catch {
+      toast.error("Bağlantı hatası");
+    } finally {
+      setIsSubmittingNew(false);
+    }
+  };
 
   // KPI Hesaplamaları
   const kpis = useMemo(() => {
@@ -275,8 +365,19 @@ export default function TedarikClient({
             </h1>
           </div>
           <p className="text-xs text-text-muted">
-            Satışlardan aktarılan tedarik kalemleri, tedarikçi firma atamaları ve ürün bazlı toplu ihtiyaç takibi.
+            Satışlardan aktarılan veya manuel eklenen tedarik kalemleri, tedarikçi firma atamaları ve ürün bazlı toplu ihtiyaç takibi.
           </p>
+        </div>
+
+        <div>
+          <button
+            type="button"
+            onClick={() => setIsNewModalOpen(true)}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-sm transition-all"
+          >
+            <Plus size={16} />
+            + Yeni Tedarik Ekle (Müşteri Bazlı)
+          </button>
         </div>
       </div>
 
@@ -447,14 +548,20 @@ export default function TedarikClient({
                       <tr key={r.id} className="hover:bg-surface/30 transition-colors">
                         {/* Sipariş No */}
                         <td className="py-3 px-4 whitespace-nowrap">
-                          <Link
-                            href={`/satislar/${r.sale_id}`}
-                            className="inline-flex items-center gap-1 font-mono font-bold text-amber-700 hover:text-amber-800 hover:underline"
-                            title="Satış detayına git"
-                          >
-                            {r.sale_code}
-                            <ExternalLink size={11} />
-                          </Link>
+                          {r.sale_id ? (
+                            <Link
+                              href={`/satislar/${r.sale_id}`}
+                              className="inline-flex items-center gap-1 font-mono font-bold text-amber-700 hover:text-amber-800 hover:underline"
+                              title="Satış detayına git"
+                            >
+                              {r.sale_code || "Satış Detayı"}
+                              <ExternalLink size={11} />
+                            </Link>
+                          ) : (
+                            <span className="inline-flex items-center px-2 py-0.5 rounded-md font-mono text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                              Manuel Giriş
+                            </span>
+                          )}
                           <span className="block text-[10px] text-text-muted mt-0.5">
                             {new Date(r.created_at).toLocaleDateString("tr-TR")}
                           </span>
@@ -692,13 +799,19 @@ export default function TedarikClient({
                                 >
                                   {/* Sipariş */}
                                   <td className="py-2.5 px-4 whitespace-nowrap">
-                                    <Link
-                                      href={`/satislar/${order.sale_id}`}
-                                      className="inline-flex items-center gap-1 font-mono font-bold text-amber-700 hover:underline"
-                                    >
-                                      {order.sale_code}
-                                      <ExternalLink size={10} />
-                                    </Link>
+                                    {order.sale_id ? (
+                                      <Link
+                                        href={`/satislar/${order.sale_id}`}
+                                        className="inline-flex items-center gap-1 font-mono font-bold text-amber-700 hover:underline"
+                                      >
+                                        {order.sale_code}
+                                        <ExternalLink size={10} />
+                                      </Link>
+                                    ) : (
+                                      <span className="inline-flex items-center px-2 py-0.5 rounded-md font-mono text-[10px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                        Manuel Giriş
+                                      </span>
+                                    )}
                                   </td>
 
                                   {/* Müşteri */}
@@ -762,6 +875,216 @@ export default function TedarikClient({
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ===================== MANUEL TEDARİK GİRİŞİ MODALI ===================== */}
+      {isNewModalOpen && (
+        <div className="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white rounded-2xl border border-border shadow-2xl max-w-lg w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150">
+            {/* Modal Header */}
+            <div className="p-4 sm:p-5 border-b border-border bg-surface/50 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-xl bg-amber-500/10 text-amber-600">
+                  <Boxes size={20} />
+                </span>
+                <div>
+                  <h3 className="text-base font-black text-text">
+                    Yeni Tedarik Kaydı Ekle
+                  </h3>
+                  <p className="text-xs text-text-muted mt-0.5">
+                    Müşteri bazlı doğrudan tedarik ihtiyacı girişi yapın.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsNewModalOpen(false)}
+                className="p-1.5 rounded-lg text-text-muted hover:text-text hover:bg-surface transition-colors"
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            {/* Modal Form */}
+            <form onSubmit={handleCreateManual} className="p-5 space-y-4 text-xs">
+              {/* Müşteri Seçimi / Girişi */}
+              <div>
+                <label className="block text-xs font-bold text-text mb-1">
+                  Müşteri Seçin veya Yeni Yazın <span className="text-rose-500">*</span>
+                </label>
+                {initialCustomers && initialCustomers.length > 0 && (
+                  <select
+                    value={newCustomerId || ""}
+                    onChange={(e) => handleSelectExistingCustomer(e.target.value)}
+                    className="w-full mb-2 p-2.5 rounded-xl border border-border bg-surface/30 text-text font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20"
+                  >
+                    <option value="">-- Kayıtlı Müşterilerden Seçin (İsteğe Bağlı) --</option>
+                    {initialCustomers.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.company_name} {c.phone ? `(${c.phone})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                )}
+                <input
+                  type="text"
+                  required
+                  placeholder="Müşteri / Ünvan Adı"
+                  value={newCustomerName}
+                  onChange={(e) => {
+                    setNewCustomerName(e.target.value);
+                    if (newCustomerId) setNewCustomerId(undefined);
+                  }}
+                  className="w-full p-2.5 rounded-xl border border-border bg-white text-text font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                />
+              </div>
+
+              {/* Müşteri Telefonu */}
+              <div>
+                <label className="block text-xs font-bold text-text mb-1">
+                  Müşteri Telefon Numarası
+                </label>
+                <input
+                  type="tel"
+                  placeholder="Örn: 0532 123 45 67"
+                  value={newCustomerPhone}
+                  onChange={(e) => setNewCustomerPhone(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-border bg-white text-text focus:outline-hidden focus:ring-2 focus:ring-amber-500/20"
+                />
+              </div>
+
+              {/* Ürün Adı & Kodu */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-text mb-1">
+                    Ürün Açıklaması / Adı <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="Örn: 60x120 Pulvis Gri Seramik"
+                    value={newProductName}
+                    onChange={(e) => setNewProductName(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-border bg-white text-text font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 focus:border-amber-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-text mb-1">
+                    Ürün Kodu
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Örn: PLV-120"
+                    value={newProductCode}
+                    onChange={(e) => setNewProductCode(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-border bg-white text-text font-mono focus:outline-hidden focus:ring-2 focus:ring-amber-500/20"
+                  />
+                </div>
+              </div>
+
+              {/* Miktar & Birim */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-text mb-1">
+                    Miktar <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="any"
+                    required
+                    value={newQuantity}
+                    onChange={(e) => setNewQuantity(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-border bg-white text-text font-bold tabular-nums focus:outline-hidden focus:ring-2 focus:ring-amber-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-text mb-1">
+                    Birim
+                  </label>
+                  <select
+                    value={newUnit}
+                    onChange={(e) => setNewUnit(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-border bg-white text-text font-medium focus:outline-hidden focus:ring-2 focus:ring-amber-500/20"
+                  >
+                    <option value="Adet">Adet</option>
+                    <option value="m²">m²</option>
+                    <option value="Koli">Koli</option>
+                    <option value="Paket">Paket</option>
+                    <option value="Palet">Palet</option>
+                    <option value="Metre">Metre</option>
+                    <option value="Takım">Takım</option>
+                    <option value="Torba">Torba</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Tedarikçi Firma & Başlangıç Statüsü */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-text mb-1">
+                    Tedarikçi Firma (İsteğe Bağlı)
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="Örn: Kütahya Seramik, A Firması"
+                    value={newSupplierName}
+                    onChange={(e) => setNewSupplierName(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-border bg-white text-text focus:outline-hidden focus:ring-2 focus:ring-amber-500/20"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-text mb-1">
+                    Başlangıç Statüsü
+                  </label>
+                  <select
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value as ProcurementStatus)}
+                    className="w-full p-2.5 rounded-xl border border-border bg-white text-text font-semibold focus:outline-hidden focus:ring-2 focus:ring-amber-500/20"
+                  >
+                    <option value="bekliyor">🟡 Tedarik Bekliyor</option>
+                    <option value="siparis_verildi">🔵 Sipariş Verildi</option>
+                    <option value="tedarik_edildi">🟢 Tedarik Edildi</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Notlar */}
+              <div>
+                <label className="block text-xs font-bold text-text mb-1">
+                  Not / Açıklama
+                </label>
+                <textarea
+                  rows={2}
+                  placeholder="İsteğe bağlı özel not..."
+                  value={newNotes}
+                  onChange={(e) => setNewNotes(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-border bg-white text-text focus:outline-hidden focus:ring-2 focus:ring-amber-500/20 resize-none"
+                />
+              </div>
+
+              {/* Modal Butonlar */}
+              <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-border">
+                <button
+                  type="button"
+                  onClick={() => setIsNewModalOpen(false)}
+                  disabled={isSubmittingNew}
+                  className="px-4 py-2 rounded-xl text-xs font-bold border border-border text-text hover:bg-surface transition-colors disabled:opacity-50"
+                >
+                  Vazgeç
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingNew}
+                  className="inline-flex items-center gap-1.5 px-5 py-2 rounded-xl text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-sm transition-all disabled:opacity-50"
+                >
+                  <Plus size={15} />
+                  {isSubmittingNew ? "Kaydediliyor..." : "Tedarik Kaydı Oluştur"}
+                </button>
+              </div>
+            </form>
+          </div>
         </div>
       )}
     </div>

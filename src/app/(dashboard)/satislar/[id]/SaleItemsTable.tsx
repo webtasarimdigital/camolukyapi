@@ -12,6 +12,7 @@ import {
   ExternalLink,
   Building2,
 } from "lucide-react";
+import { formatCurrency } from "@/lib/formatters";
 import { toast } from "sonner";
 import { sendItemsToProcurement } from "@/app/(dashboard)/tedarik/actions";
 import type { ProcurementRecord } from "@/app/(dashboard)/tedarik/types";
@@ -24,7 +25,6 @@ interface SaleItemsTableProps {
   customerName: string;
   customerPhone?: string;
   initialProcurementRecords: ProcurementRecord[];
-  formatCurrency: (val: number) => string;
   saleTotals: {
     subtotal: number;
     discount_total: number;
@@ -43,7 +43,6 @@ export default function SaleItemsTable({
   customerName,
   customerPhone,
   initialProcurementRecords,
-  formatCurrency,
   saleTotals,
 }: SaleItemsTableProps) {
   const [procurementRecords, setProcurementRecords] = useState<ProcurementRecord[]>(

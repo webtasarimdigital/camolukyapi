@@ -7,6 +7,7 @@ import type {
   ProcurementRecord,
   ProcurementStatus,
   NewProcurementItemInput,
+  CreateManualProcurementInput,
 } from "./types";
 
 async function getCompanyAndUser() {
@@ -333,3 +334,87 @@ export async function deleteProcurementRecord(
     return { success: false, error: err?.message || "Tedarik kaydı silinemedi." };
   }
 }
+
+/**
+ * Tedarik modülüne doğrudan müşteri bazlı manuel kayıt ekler
+ */
+export async function createManualProcurementItem(
+  input: CreateManualProcurementInput
+): Promise<{ success: boolean; record?: ProcurementRecord; error?: string }> {
+  try {
+    if (!input.customer_name?.trim()) {
+      return { success: false, error: "Müşteri adı zorunludur." };
+    }
+    if (!input.product_name?.trim()) {
+      return { success: false, error: "Ürün adı zorunludur." };
+    }
+    if (!input.quantity || Number(input.quantity) <= 0) {
+      return { success: false, error: "Geçerli bir miktar giriniz." };
+    }
+
+    const { service, companyId } = await getCompanyAndUser();
+    const now = new Date().toISOString();
+
+    const row_data = {
+      _module: "tedarik",
+      sale_id: "",
+      sale_code: "Manuel Giriş",
+      customer_id: input.customer_id || null,
+      customer_name: input.customer_name.trim(),
+      customer_phone: input.customer_phone?.trim() || "",
+      product_id: null,
+      product_name: input.product_name.trim(),
+      product_code: input.product_code?.trim() || "",
+      quantity: Number(input.quantity),
+      unit: input.unit?.trim() || "Adet",
+      supplier_name: input.supplier_name?.trim() || "",
+      status: input.status || "bekliyor",
+      notes: input.notes?.trim() || "",
+      created_at: now,
+      updated_at: now,
+    };
+
+    const { data, error } = await (service
+      .from("camlica_firca_rows") as any)
+      .insert({
+        company_id: companyId,
+        row_data,
+      })
+      .select("id, company_id, row_data, created_at")
+      .single();
+
+    if (error) {
+      console.error("createManualProcurementItem error:", error);
+      return { success: false, error: error.message };
+    }
+
+    revalidatePath("/tedarik");
+
+    return {
+      success: true,
+      record: {
+        id: data.id,
+        company_id: data.company_id,
+        _module: "tedarik",
+        sale_id: "",
+        sale_code: "Manuel Giriş",
+        customer_id: input.customer_id,
+        customer_name: input.customer_name.trim(),
+        customer_phone: input.customer_phone?.trim() || "",
+        product_name: input.product_name.trim(),
+        product_code: input.product_code?.trim() || "",
+        quantity: Number(input.quantity),
+        unit: input.unit?.trim() || "Adet",
+        supplier_name: input.supplier_name?.trim() || "",
+        status: input.status || "bekliyor",
+        notes: input.notes?.trim() || "",
+        created_at: now,
+        updated_at: now,
+      },
+    };
+  } catch (err: any) {
+    console.error("createManualProcurementItem catch:", err);
+    return { success: false, error: err?.message || "Tedarik kaydı oluşturulamadı." };
+  }
+}
+

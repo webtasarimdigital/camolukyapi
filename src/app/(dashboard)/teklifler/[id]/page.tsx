@@ -124,7 +124,19 @@ export default async function QuoteDetailPage({
 
           {!isDeleted && (
             <>
-              <ConvertQuoteButton quoteId={quote.id} isConverted={isConverted} />
+              <ConvertQuoteButton
+                quoteId={quote.id}
+                quoteCode={quote.quote_code}
+                isConverted={isConverted}
+                grandTotal={quote.grand_total || 0}
+                customerName={
+                  quote.customer_snapshot?.company_name ||
+                  quote.customer?.company_name ||
+                  quote.customer_snapshot?.contact_name ||
+                  quote.customer?.contact_name ||
+                  "Müşteri"
+                }
+              />
 
               {canDeleteQuote && (
                 <DeleteQuoteButton 

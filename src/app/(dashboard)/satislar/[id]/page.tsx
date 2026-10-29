@@ -75,7 +75,12 @@ export default async function SaleDetailPage({
     .order("payment_date", { ascending: false });
 
   const payments = paymentsData || [];
-  const procurementRecords = await getSaleProcurementItems(id);
+  let procurementRecords: any[] = [];
+  try {
+    procurementRecords = await getSaleProcurementItems(id);
+  } catch (err) {
+    console.error("SaleDetailPage getSaleProcurementItems error:", err);
+  }
 
   const customerName = sale.customer_snapshot?.company_name || sale.customer?.company_name || sale.customer_snapshot?.contact_name || sale.customer?.contact_name || "Perakende Müşteri";
   const customerPhone = sale.customer_snapshot?.phone || sale.customer?.phone || "-";
@@ -181,8 +186,7 @@ export default async function SaleDetailPage({
         customerId={sale.customer_id}
         customerName={customerName}
         customerPhone={customerPhone !== "-" ? customerPhone : undefined}
-        initialProcurementRecords={procurementRecords}
-        formatCurrency={formatCurrency}
+        initialProcurementRecords={procurementRecords || []}
         saleTotals={{
           subtotal: sale.subtotal,
           discount_total: sale.discount_total || 0,

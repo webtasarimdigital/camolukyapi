@@ -54,3 +54,23 @@ export interface NewProcurementItemInput {
   unit: string;
   notes?: string;
 }
+
+export interface CreateManualProcurementInput {
+  customer_name: string;
+  customer_phone?: string;
+  customer_id?: string;
+  product_name: string;
+  product_code?: string;
+  quantity: number;
+  unit: string;
+  supplier_name?: string;
+  status?: ProcurementStatus;
+  notes?: string;
+}
+
+export interface CustomerOption {
+  id: string;
+  company_name: string;
+  contact_name?: string | null;
+  phone?: string | null;
+}
