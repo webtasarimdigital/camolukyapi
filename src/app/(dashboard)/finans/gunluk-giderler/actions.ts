@@ -40,7 +40,7 @@ export async function getUnifiedDailyExpenses() {
     if (manErr) console.error("daily_expenses error:", manErr);
     const manualExpenses = ((manualData || []) as any[]).map((m: any) => ({
       ...m,
-      source_type: "manual",
+      source_type: m.source_type || "manual",
       is_manual: true,
     }));
 
@@ -128,11 +128,14 @@ export async function saveDailyExpense(formData: {
   amount: number;
   status?: string;
   payment_method?: string;
+  source_type?: string;
   notes?: string;
 }): Promise<{ success: boolean; data?: any; error?: string }> {
   try {
     const { companyId, userName } = await getCompanyIdAndUser();
     const service: any = await createServiceClient();
+
+    const sourceType = formData.source_type || "manual";
 
     if (formData.id) {
       const { data, error } = await service
@@ -144,6 +147,7 @@ export async function saveDailyExpense(formData: {
           amount: Number(formData.amount),
           status: formData.status || "Ödendi",
           payment_method: formData.payment_method || "Nakit",
+          source_type: sourceType,
           notes: formData.notes || null,
           updated_at: new Date().toISOString(),
         })
@@ -153,7 +157,7 @@ export async function saveDailyExpense(formData: {
 
       if (error) return { success: false, error: error.message };
       revalidatePath("/finans/gunluk-giderler");
-      return { success: true, data };
+      return { success: true, data: { ...data, is_manual: true } };
     }
 
     const { data, error } = await service
@@ -166,7 +170,7 @@ export async function saveDailyExpense(formData: {
         amount: Number(formData.amount),
         status: formData.status || "Ödendi",
         payment_method: formData.payment_method || "Nakit",
-        source_type: "manual",
+        source_type: sourceType,
         notes: formData.notes || null,
         created_by_name: userName,
       })
@@ -175,7 +179,7 @@ export async function saveDailyExpense(formData: {
 
     if (error) return { success: false, error: error.message };
     revalidatePath("/finans/gunluk-giderler");
-    return { success: true, data };
+    return { success: true, data: { ...data, is_manual: true } };
   } catch (err: any) {
     return { success: false, error: err.message };
   }

@@ -228,7 +228,7 @@ const navItems: NavItem[] = [
       },
       {
         href: "/finans/gunluk-giderler",
-        label: "Günlük Giderler",
+        label: "Günlük & Genel Giderler",
         icon: Coins,
       },
     ],
