@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { formatCurrency } from "@/lib/formatters";
 import { calculateLine, calculateTotals } from "@/lib/calculations";
 import { updateQuote } from "../actions";
+import { searchProductsLive } from "@/app/(dashboard)/teklif/yeni/actions";
 import { toast } from "sonner";
 import {
   ArrowLeft,
@@ -17,19 +18,13 @@ import {
   Search,
   PenLine,
   CheckCircle2,
+  PackageCheck,
+  AlertTriangle,
+  X,
+  Package,
+  Briefcase,
 } from "lucide-react";
-
-interface ItemState {
-  id: string;
-  product_id: string | null;
-  product_code_snapshot: string;
-  product_name_snapshot: string;
-  unit_snapshot: string;
-  quantity: number;
-  unit_price: number;
-  discount_type: "percent" | "fixed" | null;
-  discount_value: number;
-}
+import { extractPlasiyer } from "@/lib/customer-helpers";
 
 export interface CustomerOption {
   id: string;
@@ -40,21 +35,63 @@ export interface CustomerOption {
   tax_office?: string | null;
   tax_number?: string | null;
   email?: string | null;
+  notes?: string | null;
+}
+
+export interface ProductOption {
+  id: string;
+  product_code: string;
+  product_name: string;
+  unit: string;
+  stock_qty?: number | null;
+  min_stock_qty?: number | null;
+  default_sale_price: number | null;
+  cost_price?: number | null;
+  product_group?: string | null;
+  series_name?: string | null;
+  size?: string | null;
+  brand?: string | null;
+  price_quality_1?: number | null;
+  price_quality_2?: number | null;
+  price_commercial?: number | null;
+}
+
+export interface QuoteLineItem {
+  id: string;
+  product_id: string | null;
+  product_code_snapshot: string;
+  product_name_snapshot: string;
+  description_snapshot?: string;
+  unit_snapshot: string;
+  price_source?: "quality_1" | "quality_2" | "commercial" | "default" | "custom" | string;
+  quantity: number;
+  unit_price: number;
+  discount_type: "percent" | "fixed" | null;
+  discount_value: number;
+  stock_qty?: number | null;
+  brand?: string | null;
+  series_name?: string | null;
+  size?: string | null;
+  price_quality_1?: number | null;
+  price_quality_2?: number | null;
+  price_commercial?: number | null;
 }
 
 export function EditQuoteForm({
   quote,
   initialItems,
   customers = [],
+  products = [],
 }: {
   quote: any;
   initialItems: any[];
   customers?: CustomerOption[];
+  products?: ProductOption[];
 }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
 
-  // Müşteri / Firma Bilgileri Modu
+  // ──────────────────── MÜŞTERİ / FİRMA BİLGİLERİ ────────────────────
   const initialHasRegistered = Boolean(
     quote.customer_id && customers.some((c) => c.id === quote.customer_id)
   );
@@ -109,50 +146,182 @@ export function EditQuoteForm({
     }
   }
 
-  const [items, setItems] = useState<ItemState[]>(
-    initialItems.map((it) => ({
-      id: it.id || crypto.randomUUID(),
-      product_id: it.product_id,
-      product_code_snapshot: it.product_code_snapshot || "",
-      product_name_snapshot: it.product_name_snapshot || "",
-      unit_snapshot: it.unit_snapshot || "M2",
-      quantity: Number(it.quantity) || 1,
-      unit_price: Number(it.unit_price) || 0,
-      discount_type: it.discount_type || null,
-      discount_value: Number(it.discount_value) || 0,
-    }))
+  // ──────────────────── KALEMLER (TEKLİF LİSTESİ) ────────────────────
+  const [items, setItems] = useState<QuoteLineItem[]>(() =>
+    initialItems.map((it) => {
+      const discountVal = Number(it.discount_value) || 0;
+      const discountType = (it.discount_type === "fixed" ? "fixed" : "percent") as "percent" | "fixed";
+      return {
+        id: it.id || crypto.randomUUID(),
+        product_id: it.product_id || null,
+        product_code_snapshot: it.product_code_snapshot || "",
+        product_name_snapshot: it.product_name_snapshot || "",
+        description_snapshot: it.description_snapshot || "",
+        unit_snapshot: it.unit_snapshot || "M2",
+        price_source: it.price_source || "custom",
+        quantity: Number(it.quantity) || 1,
+        unit_price: Number(it.unit_price) || 0,
+        discount_type: discountVal > 0 ? (it.discount_type || "percent") : discountType,
+        discount_value: discountVal,
+        stock_qty: it.product?.stock_qty ?? it.stock_qty ?? null,
+        brand: it.product?.brand ?? it.brand ?? null,
+        series_name: it.product?.series_name ?? it.series_name ?? null,
+        size: it.product?.size ?? it.size ?? null,
+        price_quality_1: it.product?.price_quality_1 ?? null,
+        price_quality_2: it.product?.price_quality_2 ?? null,
+        price_commercial: it.product?.price_commercial ?? null,
+      };
+    })
   );
 
-  const [generalDiscountType, setGeneralDiscountType] = useState<"percent" | "fixed" | null>(
-    quote.general_discount_type || null
-  );
-  const [generalDiscountValue, setGeneralDiscountValue] = useState<number>(
-    Number(quote.general_discount_value) || 0
-  );
-  const [vatRate, setVatRate] = useState<number>(Number(quote.vat_rate) || 20);
-  const [validUntil, setValidUntil] = useState<string>(
-    quote.valid_until ? new Date(quote.valid_until).toISOString().split("T")[0] : ""
-  );
-  const [notes, setNotes] = useState<string>(quote.notes || "");
+  // ──────────────────── CANLI ÜRÜN ARAMASI & STAGING (4,371+ ÜRÜN) ────────────────────
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [productResults, setProductResults] = useState<ProductOption[]>(products.slice(0, 30));
+  const [isProductDropdownOpen, setIsProductDropdownOpen] = useState(false);
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false);
+  const productBoxRef = useRef<HTMLDivElement>(null);
 
-  // Canlı Hesaplama
-  const { lines, totals } = useMemo(() => {
-    const calculatedLines = items.map((item) =>
-      calculateLine({
-        quantity: item.quantity,
-        unit_price: item.unit_price,
-        discount_type: item.discount_type,
-        discount_value: item.discount_value,
-      })
+  // Seçilen / Staging Ürün
+  const [stagedProduct, setStagedProduct] = useState<ProductOption | null>(null);
+  const [stagedQty, setStagedQty] = useState(1);
+  const [stagedPrice, setStagedPrice] = useState(0);
+  const [stagedDiscountType, setStagedDiscountType] = useState<"percent" | "fixed">("percent");
+  const [stagedDiscountValue, setStagedDiscountValue] = useState(0);
+  const [stagedSelectedQuality, setStagedSelectedQuality] = useState<"q1" | "q2" | "commercial" | "custom">("q1");
+
+  // Click outside to close dropdowns
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (productBoxRef.current && !productBoxRef.current.contains(event.target as Node)) {
+        setIsProductDropdownOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Debounced Product Search
+  useEffect(() => {
+    const timer = setTimeout(async () => {
+      const q = productSearchQuery.trim();
+      if (!q) {
+        setProductResults(products.slice(0, 30));
+        return;
+      }
+      setIsSearchingProducts(true);
+      try {
+        const results = await searchProductsLive(q);
+        setProductResults(results);
+      } catch (err) {
+        console.error("Ürün arama hatası:", err);
+      } finally {
+        setIsSearchingProducts(false);
+      }
+    }, 200);
+
+    return () => clearTimeout(timer);
+  }, [productSearchQuery, products]);
+
+  // Ürün Seçimi
+  const handleSelectProduct = (product: ProductOption) => {
+    setStagedProduct(product);
+    const initialPrice = product.price_quality_1 ?? product.default_sale_price ?? 0;
+    setStagedPrice(initialPrice);
+    setStagedSelectedQuality(product.price_quality_1 ? "q1" : "custom");
+    setStagedQty(1);
+    setStagedDiscountType("percent");
+    setStagedDiscountValue(0);
+    setIsProductDropdownOpen(false);
+  };
+
+  const handleSetQualityPrice = (quality: "q1" | "q2" | "commercial") => {
+    if (!stagedProduct) return;
+    setStagedSelectedQuality(quality);
+    if (quality === "q1" && stagedProduct.price_quality_1) setStagedPrice(stagedProduct.price_quality_1);
+    else if (quality === "q2" && stagedProduct.price_quality_2) setStagedPrice(stagedProduct.price_quality_2);
+    else if (quality === "commercial" && stagedProduct.price_commercial) setStagedPrice(stagedProduct.price_commercial);
+  };
+
+  const stagedSubtotal = (Number(stagedQty) || 0) * (Number(stagedPrice) || 0);
+  const stagedDiscountAmount = stagedDiscountType === "percent"
+    ? stagedSubtotal * ((Number(stagedDiscountValue) || 0) / 100)
+    : Number(stagedDiscountValue) || 0;
+  const stagedLineTotal = Math.max(0, stagedSubtotal - Math.min(stagedSubtotal, stagedDiscountAmount));
+
+  // Seçilen Kalemi Teklif Listesine Ekle
+  const handleAddStagedItem = () => {
+    if (!stagedProduct) return;
+    if (stagedQty <= 0) {
+      toast.error("Lütfen geçerli bir miktar giriniz.");
+      return;
+    }
+    const newItem: QuoteLineItem = {
+      id: crypto.randomUUID(),
+      product_id: stagedProduct.id,
+      product_code_snapshot: stagedProduct.product_code || "",
+      product_name_snapshot: stagedProduct.product_name,
+      description_snapshot: [
+        stagedProduct.brand ? `Marka: ${stagedProduct.brand}` : "",
+        stagedProduct.series_name ? `Seri: ${stagedProduct.series_name}` : "",
+        stagedProduct.size ? `Ebat: ${stagedProduct.size}` : "",
+      ].filter(Boolean).join(" • "),
+      unit_snapshot: stagedProduct.unit || "M2",
+      price_source:
+        stagedSelectedQuality === "q1"
+          ? "quality_1"
+          : stagedSelectedQuality === "q2"
+          ? "quality_2"
+          : stagedSelectedQuality === "commercial"
+          ? "commercial"
+          : "custom",
+      quantity: stagedQty,
+      unit_price: stagedPrice,
+      discount_type: stagedDiscountValue > 0 ? stagedDiscountType : "percent",
+      discount_value: stagedDiscountValue,
+      stock_qty: stagedProduct.stock_qty,
+      brand: stagedProduct.brand,
+      series_name: stagedProduct.series_name,
+      size: stagedProduct.size,
+      price_quality_1: stagedProduct.price_quality_1,
+      price_quality_2: stagedProduct.price_quality_2,
+      price_commercial: stagedProduct.price_commercial,
+    };
+    setItems((prev) => [...prev, newItem]);
+    toast.success(`"${stagedProduct.product_name}" teklif listesine eklendi!`, {
+      icon: <CheckCircle2 className="text-emerald-500" size={16} />,
+    });
+    setStagedProduct(null);
+    setProductSearchQuery("");
+    setStagedQty(1);
+    setStagedPrice(0);
+    setStagedDiscountValue(0);
+  };
+
+  // Serbest Kalem Ekleme
+  const handleAddCustomItem = () => {
+    const newItem: QuoteLineItem = {
+      id: crypto.randomUUID(),
+      product_id: null,
+      product_code_snapshot: "",
+      product_name_snapshot: "Yeni Serbest Kalem / Hizmet",
+      description_snapshot: "",
+      unit_snapshot: "Adet",
+      price_source: "custom",
+      quantity: 1,
+      unit_price: 0,
+      discount_type: "percent",
+      discount_value: 0,
+      stock_qty: null,
+    };
+    setItems((prev) => [...prev, newItem]);
+  };
+
+  // Kalem Güncelleme (Functional updater ile state kaybı kesin olarak önlenir)
+  function handleUpdateItem(id: string, updates: Partial<QuoteLineItem>) {
+    setItems((prev) =>
+      prev.map((item) => (item.id === id ? { ...item, ...updates } : item))
     );
-    const calculatedTotals = calculateTotals(
-      calculatedLines,
-      vatRate,
-      generalDiscountType,
-      generalDiscountValue
-    );
-    return { lines: calculatedLines, totals: calculatedTotals };
-  }, [items, vatRate, generalDiscountType, generalDiscountValue]);
+  }
 
   // Kalem Çıkartma (Silme)
   function handleRemoveItem(index: number) {
@@ -166,32 +335,41 @@ export function EditQuoteForm({
     toast.info(`"${removed.product_name_snapshot}" tekliften çıkarıldı.`);
   }
 
-  // Yeni Serbest Kalem Ekleme
-  function handleAddCustomItem() {
-    const newItem: ItemState = {
-      id: crypto.randomUUID(),
-      product_id: null,
-      product_code_snapshot: "",
-      product_name_snapshot: "Yeni Ürün / Hizmet",
-      unit_snapshot: "M2",
-      quantity: 1,
-      unit_price: 0,
-      discount_type: null,
-      discount_value: 0,
-    };
-    setItems([...items, newItem]);
-  }
+  // ──────────────────── GENEL TOPLAMLAR & İSKONTO ────────────────────
+  const [generalDiscountType, setGeneralDiscountType] = useState<"percent" | "fixed" | null>(
+    quote.general_discount_type || null
+  );
+  const [generalDiscountValue, setGeneralDiscountValue] = useState<number>(
+    Number(quote.general_discount_value) || 0
+  );
+  const [vatRate, setVatRate] = useState<number>(Number(quote.vat_rate) || 20);
+  const [validUntil, setValidUntil] = useState<string>(
+    quote.valid_until ? new Date(quote.valid_until).toISOString().split("T")[0] : ""
+  );
+  const [deliveryTerms, setDeliveryTerms] = useState<string>(quote.delivery_terms || "");
+  const [paymentTerms, setPaymentTerms] = useState<string>(quote.payment_terms || "");
+  const [notes, setNotes] = useState<string>(quote.notes || "");
 
-  function handleItemChange<K extends keyof ItemState>(
-    index: number,
-    field: K,
-    val: ItemState[K]
-  ) {
-    const next = [...items];
-    next[index] = { ...next[index], [field]: val };
-    setItems(next);
-  }
+  // Canlı Hesaplama
+  const { lines, totals } = useMemo(() => {
+    const calculatedLines = items.map((item) =>
+      calculateLine({
+        quantity: item.quantity,
+        unit_price: item.unit_price,
+        discount_type: (item.discount_value || 0) > 0 ? (item.discount_type || "percent") : null,
+        discount_value: item.discount_value,
+      })
+    );
+    const calculatedTotals = calculateTotals(
+      calculatedLines,
+      vatRate,
+      generalDiscountType,
+      generalDiscountValue
+    );
+    return { lines: calculatedLines, totals: calculatedTotals };
+  }, [items, vatRate, generalDiscountType, generalDiscountValue]);
 
+  // ──────────────────── KAYDETME ────────────────────
   async function handleSave() {
     if (items.length === 0) {
       toast.error("Lütfen en az bir kalem ekleyin.");
@@ -242,16 +420,20 @@ export function EditQuoteForm({
           product_id: it.product_id,
           product_code_snapshot: it.product_code_snapshot,
           product_name_snapshot: it.product_name_snapshot,
+          description_snapshot: it.description_snapshot,
           unit_snapshot: it.unit_snapshot,
+          price_source: it.price_source,
           quantity: it.quantity,
           unit_price: it.unit_price,
-          discount_type: it.discount_type,
-          discount_value: it.discount_value,
+          discount_type: (it.discount_value || 0) > 0 ? (it.discount_type || "percent") : null,
+          discount_value: it.discount_value || 0,
         })),
         generalDiscountType,
         generalDiscountValue,
         vatRate,
         validUntil,
+        deliveryTerms,
+        paymentTerms,
         notes,
       });
 
@@ -383,11 +565,15 @@ export function EditQuoteForm({
                   className="w-full border border-border rounded-lg px-3 py-2 bg-white text-xs font-medium outline-none focus:border-brand-navy focus:ring-1 focus:ring-brand-navy"
                 >
                   <option value="">-- Müşteri Seçiniz --</option>
-                  {customers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.company_name || c.contact_name} {c.phone ? `(${c.phone})` : ""}
-                    </option>
-                  ))}
+                  {customers.map((c) => {
+                    const plas = extractPlasiyer(c.notes);
+                    const plasTag = plas ? ` [${plas.replace(/-\[.*?\]$/, "")}]` : "";
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.company_name || c.contact_name}{plasTag} {c.phone ? `(${c.phone})` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
@@ -400,7 +586,7 @@ export function EditQuoteForm({
                     type="text"
                     value={customerSearch}
                     onChange={(e) => setCustomerSearch(e.target.value)}
-                    placeholder="Firma adı veya telefon..."
+                    placeholder="Firma adı, telefon veya plasiyer..."
                     className="w-full border border-border rounded-lg pl-8 pr-3 py-2 bg-surface text-xs outline-none focus:bg-white focus:border-brand-navy"
                   />
                   <Search size={14} className="absolute left-2.5 top-2.5 text-text-muted" />
@@ -419,29 +605,38 @@ export function EditQuoteForm({
                       return (
                         (c.company_name && c.company_name.toLowerCase().includes(q)) ||
                         (c.contact_name && c.contact_name.toLowerCase().includes(q)) ||
-                        (c.phone && c.phone.includes(q))
+                        (c.phone && c.phone.includes(q)) ||
+                        (c.notes && c.notes.toLowerCase().includes(q))
                       );
                     })
                     .slice(0, 15)
-                    .map((c) => (
-                      <button
-                        key={c.id}
-                        type="button"
-                        onClick={() => {
-                          handleSelectCustomer(c.id);
-                          setCustomerSearch("");
-                        }}
-                        className={`text-xs px-2.5 py-1 rounded-md border text-left transition cursor-pointer flex items-center gap-1 ${
-                          selectedCustomerId === c.id
-                            ? "bg-brand-navy text-white border-brand-navy font-bold"
-                            : "bg-white text-text border-border hover:border-brand-navy"
-                        }`}
-                      >
-                        <Building2 size={11} />
-                        <span>{c.company_name || c.contact_name}</span>
-                        {c.phone && <span className="opacity-75 text-[10px]">({c.phone})</span>}
-                      </button>
-                    ))}
+                    .map((c) => {
+                      const plas = extractPlasiyer(c.notes);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            handleSelectCustomer(c.id);
+                            setCustomerSearch("");
+                          }}
+                          className={`text-xs px-2.5 py-1 rounded-md border text-left transition cursor-pointer flex items-center gap-1.5 ${
+                            selectedCustomerId === c.id
+                              ? "bg-brand-navy text-white border-brand-navy font-bold"
+                              : "bg-white text-text border-border hover:border-brand-navy"
+                          }`}
+                        >
+                          <Building2 size={11} />
+                          <span>{c.company_name || c.contact_name}</span>
+                          {plas && (
+                            <span className="text-[10px] px-1 py-0.2 rounded bg-amber-100 text-amber-900 font-bold">
+                              👔 {plas.replace(/-\[.*?\]$/, "")}
+                            </span>
+                          )}
+                          {c.phone && <span className="opacity-75 text-[10px]">({c.phone})</span>}
+                        </button>
+                      );
+                    })}
                 </div>
               </div>
             )}
@@ -455,6 +650,11 @@ export function EditQuoteForm({
                     <span>{selectedCustomerObj.company_name || selectedCustomerObj.contact_name}</span>
                   </div>
                   <div className="text-text-muted flex flex-wrap gap-x-4 gap-y-0.5 text-[11px]">
+                    {extractPlasiyer(selectedCustomerObj.notes) && (
+                      <span className="text-amber-900 font-bold bg-amber-100 px-1.5 py-0.5 rounded text-[10px]">
+                        👔 Plasiyer: {extractPlasiyer(selectedCustomerObj.notes)}
+                      </span>
+                    )}
                     {selectedCustomerObj.contact_name && (
                       <span>Yetkili: <strong className="text-text">{selectedCustomerObj.contact_name}</strong></span>
                     )}
@@ -556,51 +756,449 @@ export function EditQuoteForm({
         )}
       </div>
 
-      {/* Kalemler Tablosu (Düzenlenebilir) */}
-      <div className="bg-white rounded-xl border border-border overflow-hidden">
-        <div className="p-4 border-b border-border bg-surface flex justify-between items-center">
-          <h2 className="text-xs font-semibold text-text uppercase tracking-wide">
-            Kalem Listesi ({items.length} Kalem) — İstenmeyen ürünü silmek için sağdaki çöp kutusuna tıklayın
-          </h2>
+      {/* ──────────────────── 2. YENİ ÜRÜN ARA & SEÇ (4,371+ ÜRÜN) ──────────────────── */}
+      <div className="bg-white rounded-xl border border-border p-4 sm:p-5 space-y-4 shadow-xs">
+        <div className="flex items-center justify-between border-b border-border pb-3">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-lg bg-emerald-600/10 text-emerald-700 flex items-center justify-center font-bold">
+              <Package size={18} />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold text-text">2. Teklife Yeni Ürün Ekle (Katalogdan Canlı Ara)</h2>
+              <p className="text-xs text-text-muted">
+                4,371+ ürün içerisinden canlı arayın, depodaki anlık stok ve kalite fiyatlarıyla teklife dahil edin.
+              </p>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={handleAddCustomItem}
+            className="text-xs font-semibold text-brand-navy hover:underline flex items-center gap-1 cursor-pointer"
+          >
+            <Plus size={14} /> + Serbest Kalem Ekle
+          </button>
+        </div>
+
+        {/* Canlı Arama Input Kutusu */}
+        <div className="relative" ref={productBoxRef}>
+          <div className="relative">
+            <input
+              type="text"
+              value={productSearchQuery}
+              onFocus={() => setIsProductDropdownOpen(true)}
+              onChange={(e) => {
+                setProductSearchQuery(e.target.value);
+                setIsProductDropdownOpen(true);
+              }}
+              placeholder="🔍 Ürün kodu, ürün adı, seri, ebat veya marka ile canlı ara (Örn: Aragonit, Kütahya, 60x120)..."
+              className="w-full border-2 border-emerald-500/30 focus:border-emerald-600 rounded-xl pl-10 pr-10 py-3 text-sm font-semibold outline-none transition bg-white shadow-xs"
+            />
+            <Search className="absolute left-3.5 top-3.5 text-emerald-700" size={18} />
+            {isSearchingProducts && (
+              <Loader2 className="absolute right-3.5 top-3.5 animate-spin text-emerald-700" size={18} />
+            )}
+            {productSearchQuery && !isSearchingProducts && (
+              <button
+                type="button"
+                onClick={() => {
+                  setProductSearchQuery("");
+                  setProductResults(products.slice(0, 30));
+                }}
+                className="absolute right-3 top-3 text-text-muted hover:text-text p-1 cursor-pointer"
+              >
+                <X size={16} />
+              </button>
+            )}
+          </div>
+
+          {/* Arama Sonuçları Dropdown */}
+          {isProductDropdownOpen && (
+            <div className="absolute z-30 left-0 right-0 mt-1.5 bg-white border border-border rounded-xl shadow-xl max-h-80 overflow-y-auto divide-y divide-border">
+              {productResults.length > 0 ? (
+                productResults.map((p) => {
+                  const stock = p.stock_qty ?? 0;
+                  const hasStock = stock > 0;
+                  return (
+                    <div
+                      key={p.id}
+                      onClick={() => handleSelectProduct(p)}
+                      className="p-3 hover:bg-emerald-50/60 cursor-pointer transition flex items-center justify-between gap-3 text-xs group"
+                    >
+                      <div className="space-y-1 flex-1">
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono text-[11px] font-bold text-brand-navy bg-surface px-1.5 py-0.5 rounded border border-border">
+                            {p.product_code || "KODSUZ"}
+                          </span>
+                          <span className="font-bold text-text text-sm group-hover:text-emerald-800">
+                            {p.product_name}
+                          </span>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-text-muted text-[11px]">
+                          {p.brand && <span>Marka: <strong className="text-text">{p.brand}</strong></span>}
+                          {p.series_name && <span>• Seri: <strong className="text-text">{p.series_name}</strong></span>}
+                          {p.size && <span>• Ebat: <strong className="text-text">{p.size}</strong></span>}
+                          {p.product_group && <span>• Grup: <strong className="text-text">{p.product_group}</strong></span>}
+
+                          {/* CANLI DEPO STOK ROZETİ */}
+                          <span
+                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-bold ${
+                              hasStock
+                                ? "bg-emerald-100 text-emerald-800 border border-emerald-300"
+                                : "bg-rose-100 text-rose-800 border border-rose-200"
+                            }`}
+                          >
+                            <span className={`w-1.5 h-1.5 rounded-full ${hasStock ? "bg-emerald-500" : "bg-rose-500"}`}></span>
+                            {hasStock ? `${stock} ${p.unit || "M2"} Depoda Mevcut` : `Stokta Yok (0 ${p.unit || "M2"})`}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* FİYATLAR & SEÇ BUTONU */}
+                      <div className="text-right flex items-center gap-3 flex-shrink-0">
+                        <div>
+                          {p.price_quality_1 ? (
+                            <p className="text-xs font-bold text-emerald-700 tabular-nums">
+                              1. Kalite: {formatCurrency(p.price_quality_1)}
+                            </p>
+                          ) : p.default_sale_price ? (
+                            <p className="text-xs font-bold text-text tabular-nums">
+                              Liste: {formatCurrency(p.default_sale_price)}
+                            </p>
+                          ) : null}
+                          {p.price_commercial ? (
+                            <p className="text-[11px] text-text-muted tabular-nums">
+                              Ticari: {formatCurrency(p.price_commercial)}
+                            </p>
+                          ) : null}
+                        </div>
+                        <button
+                          type="button"
+                          className="bg-brand-gold text-brand-navy px-3.5 py-1.5 rounded-lg text-xs font-bold group-hover:bg-brand-navy group-hover:text-white transition shadow-xs cursor-pointer"
+                        >
+                          Seç →
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="p-6 text-center text-xs text-text-muted">
+                  Aramanıza uygun ürün bulunamadı. Lütfen ürün kodunu veya adını kontrol edin.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ──────────────────── SEÇİLEN ÜRÜN STAGING KUTUSU ──────────────────── */}
+        {stagedProduct && (
+          <div className="bg-emerald-50/50 border-2 border-emerald-300 rounded-xl p-4 sm:p-5 space-y-4 animate-in fade-in duration-150">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-200 pb-3">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-800 bg-emerald-200/80 px-2 py-0.5 rounded-full">
+                    Seçilen Ürün
+                  </span>
+                  <span className="font-mono text-xs font-bold text-brand-navy bg-white border border-emerald-300 px-2 py-0.5 rounded">
+                    {stagedProduct.product_code || "KODSUZ"}
+                  </span>
+                </div>
+                <h3 className="text-base font-bold text-text mt-1">{stagedProduct.product_name}</h3>
+                <div className="flex flex-wrap gap-2 text-xs text-text-muted mt-0.5">
+                  {stagedProduct.brand && <span>Marka: <strong className="text-text">{stagedProduct.brand}</strong></span>}
+                  {stagedProduct.series_name && <span>• Seri: <strong className="text-text">{stagedProduct.series_name}</strong></span>}
+                  {stagedProduct.size && <span>• Ebat: <strong className="text-text">{stagedProduct.size}</strong></span>}
+                  {stagedProduct.product_group && <span>• Grup: <strong className="text-text">{stagedProduct.product_group}</strong></span>}
+                  <span>• Birim: <strong className="text-emerald-700">{stagedProduct.unit || "M2"}</strong></span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-3">
+                {/* DEPO STOK ROZETİ */}
+                <div
+                  className={`px-3 py-1 rounded-lg text-xs font-bold flex items-center gap-1.5 border ${
+                    (stagedProduct.stock_qty || 0) > 0
+                      ? "bg-emerald-100 text-emerald-900 border-emerald-300"
+                      : "bg-rose-100 text-rose-900 border-rose-300"
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full ${(stagedProduct.stock_qty || 0) > 0 ? "bg-emerald-600 animate-pulse" : "bg-rose-600"}`}></span>
+                  <span>
+                    Depo Stoku: <strong>{stagedProduct.stock_qty ?? 0} {stagedProduct.unit || "M2"}</strong>
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setStagedProduct(null)}
+                  className="text-xs text-rose-600 hover:text-rose-800 bg-white border border-rose-200 hover:bg-rose-50 px-2.5 py-1.5 rounded-lg flex items-center gap-1 transition cursor-pointer"
+                >
+                  <X size={14} /> Vazgeç
+                </button>
+              </div>
+            </div>
+
+            {/* Fiyat Seçenekleri */}
+            <div>
+              <label className="block text-xs font-semibold text-text-muted mb-1.5">Fiyat Seçimi:</label>
+              <div className="flex flex-wrap gap-2">
+                {stagedProduct.price_quality_1 ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSetQualityPrice("q1")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      stagedSelectedQuality === "q1"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-white border border-border text-emerald-700 hover:bg-emerald-50"
+                    }`}
+                  >
+                    <span>1. Kalite:</span>
+                    <span>{formatCurrency(stagedProduct.price_quality_1)}</span>
+                  </button>
+                ) : null}
+
+                {stagedProduct.price_quality_2 ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSetQualityPrice("q2")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      stagedSelectedQuality === "q2"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-white border border-border text-text-muted hover:bg-surface"
+                    }`}
+                  >
+                    <span>2. Kalite:</span>
+                    <span>{formatCurrency(stagedProduct.price_quality_2)}</span>
+                  </button>
+                ) : null}
+
+                {stagedProduct.price_commercial ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSetQualityPrice("commercial")}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 cursor-pointer ${
+                      stagedSelectedQuality === "commercial"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-white border border-border text-text-muted hover:bg-surface"
+                    }`}
+                  >
+                    <span>Ticari:</span>
+                    <span>{formatCurrency(stagedProduct.price_commercial)}</span>
+                  </button>
+                ) : null}
+
+                {stagedProduct.default_sale_price ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setStagedSelectedQuality("custom");
+                      setStagedPrice(stagedProduct.default_sale_price || 0);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium bg-white border border-border text-text hover:bg-surface cursor-pointer"
+                  >
+                    <span>Liste Fiyatı:</span>
+                    <span>{formatCurrency(stagedProduct.default_sale_price)}</span>
+                  </button>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Miktar, Birim Fiyat, İskonto ve Tutar Alanları */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-white p-3.5 rounded-xl border border-border items-end">
+              <div>
+                <label className="block text-xs font-bold text-text mb-1">
+                  Miktar ({stagedProduct.unit || "M2"}) *
+                </label>
+                <input
+                  type="number"
+                  min="0.01"
+                  step="any"
+                  value={stagedQty === 0 ? "" : stagedQty}
+                  placeholder="1"
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => setStagedQty(parseFloat(e.target.value) || 0)}
+                  className="w-full border-2 border-emerald-200 rounded-lg px-3 py-1.5 text-sm font-bold text-text outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-text mb-1">
+                  Birim Fiyat (₺) *
+                </label>
+                <input
+                  type="number"
+                  step="any"
+                  value={stagedPrice === 0 ? "" : stagedPrice}
+                  placeholder="0.00"
+                  onFocus={(e) => e.target.select()}
+                  onChange={(e) => {
+                    setStagedPrice(parseFloat(e.target.value) || 0);
+                    setStagedSelectedQuality("custom");
+                  }}
+                  className="w-full border-2 border-border rounded-lg px-3 py-1.5 text-sm font-bold text-text outline-none focus:border-emerald-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-text mb-1">Ürün İskontosu</label>
+                <div className="flex gap-1">
+                  <select
+                    value={stagedDiscountType}
+                    onChange={(e) => setStagedDiscountType(e.target.value as "percent" | "fixed")}
+                    className="border border-border rounded-lg px-2 py-1.5 text-xs bg-surface font-semibold outline-none cursor-pointer"
+                  >
+                    <option value="percent">%</option>
+                    <option value="fixed">₺</option>
+                  </select>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    value={stagedDiscountValue === 0 ? "" : stagedDiscountValue}
+                    placeholder="0"
+                    onFocus={(e) => e.target.select()}
+                    onChange={(e) => setStagedDiscountValue(parseFloat(e.target.value) || 0)}
+                    className="w-full border border-border rounded-lg px-2.5 py-1.5 text-xs font-bold text-right outline-none focus:border-emerald-500"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <span className="block text-[11px] text-text-muted mb-1">Kalem Toplamı</span>
+                <p className="text-base font-black text-emerald-700 py-1 tabular-nums">
+                  {formatCurrency(stagedLineTotal)}
+                  {stagedDiscountAmount > 0 && (
+                    <span className="block text-[11px] font-medium text-rose-600">
+                      (-{formatCurrency(stagedDiscountAmount)} iskonto)
+                    </span>
+                  )}
+                </p>
+              </div>
+            </div>
+
+            {/* STOK AŞIMI UYARISI */}
+            {stagedQty > (stagedProduct.stock_qty || 0) && (
+              <div className="bg-amber-50 border border-amber-300 rounded-lg p-2.5 flex items-center gap-2 text-xs text-amber-900">
+                <AlertTriangle className="text-amber-600 flex-shrink-0" size={16} />
+                <span>
+                  <strong>Dikkat:</strong> Girilen miktar ({stagedQty} {stagedProduct.unit || "M2"}), mevcut depo stokundan ({stagedProduct.stock_qty || 0} {stagedProduct.unit || "M2"}) fazladır.
+                  Stok açığı: <strong>{stagedQty - (stagedProduct.stock_qty || 0)} {stagedProduct.unit || "M2"}</strong>. Teklif güncellenebilir ancak teslimat için tedarik gerekecektir.
+                </span>
+              </div>
+            )}
+
+            {/* Buton */}
+            <div className="flex justify-end pt-1">
+              <button
+                type="button"
+                onClick={handleAddStagedItem}
+                className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-xl font-bold text-xs sm:text-sm flex items-center gap-2 shadow-sm transition active:scale-95 cursor-pointer"
+              >
+                <CheckCircle2 size={16} />
+                <span>✓ Kalemi Teklif Listesine Ekle</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* ──────────────────── 3. TEKLİF KALEMLERİ TABLOSU ──────────────────── */}
+      <div className="bg-white rounded-xl border border-border overflow-hidden shadow-xs">
+        <div className="p-4 border-b border-border bg-surface flex flex-wrap justify-between items-center gap-3">
+          <div className="flex items-center gap-2">
+            <PackageCheck className="text-brand-navy" size={17} />
+            <h2 className="text-xs font-bold text-text uppercase tracking-wide">
+              3. Teklif Kalemleri ({items.length} Kalem)
+            </h2>
+          </div>
+          <span className="text-xs font-semibold text-text-muted">
+            Ara Toplam: <strong className="text-text">{formatCurrency(totals.subtotal)}</strong>
+          </span>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full text-xs">
             <thead className="bg-surface border-b border-border text-text-muted">
               <tr>
-                <th className="text-left px-3 py-2.5 font-semibold">#</th>
-                <th className="text-left px-3 py-2.5 font-semibold min-w-[200px]">Ürün / Açıklama</th>
+                <th className="text-left px-3 py-2.5 font-semibold w-8">#</th>
+                <th className="text-left px-3 py-2.5 font-semibold min-w-[220px]">Ürün / Açıklama</th>
                 <th className="text-left px-3 py-2.5 font-semibold w-24">Kod</th>
-                <th className="text-right px-3 py-2.5 font-semibold w-24">Miktar</th>
+                <th className="text-right px-3 py-2.5 font-semibold w-20">Miktar</th>
                 <th className="text-left px-3 py-2.5 font-semibold w-20">Birim</th>
                 <th className="text-right px-3 py-2.5 font-semibold w-28">B. Fiyat (₺)</th>
-                <th className="text-right px-3 py-2.5 font-semibold w-24">İskonto (%)</th>
+                <th className="text-right px-3 py-2.5 font-semibold w-32">İskonto (% / ₺)</th>
+                <th className="text-right px-3 py-2.5 font-semibold w-24">İsk. Tutarı</th>
                 <th className="text-right px-3 py-2.5 font-semibold w-28">Satır Tutarı</th>
-                <th className="text-center px-3 py-2.5 font-semibold w-16">İşlem</th>
+                <th className="text-center px-3 py-2.5 font-semibold w-14">Sil</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-border">
               {items.map((item, idx) => {
                 const lineCalc = lines[idx];
+                const stock = item.stock_qty;
+                const hasStockInfo = stock !== null && stock !== undefined;
                 return (
-                  <tr key={item.id} className="hover:bg-surface/60">
-                    <td className="px-3 py-2 text-text-muted">{idx + 1}</td>
+                  <tr key={item.id} className="hover:bg-surface/60 transition">
+                    <td className="px-3 py-2 text-text-muted font-mono">{idx + 1}</td>
                     <td className="px-3 py-2">
                       <input
                         type="text"
                         value={item.product_name_snapshot}
                         onChange={(e) =>
-                          handleItemChange(idx, "product_name_snapshot", e.target.value)
+                          handleUpdateItem(item.id, { product_name_snapshot: e.target.value })
                         }
-                        className="w-full bg-surface border border-border rounded px-2 py-1 text-text font-medium"
+                        className="w-full bg-surface border border-border rounded px-2 py-1 text-text font-semibold text-xs"
                       />
+                      <div className="flex flex-wrap items-center gap-1.5 mt-1 text-[11px]">
+                        {item.brand && (
+                          <span className="text-text-muted">
+                            Marka: <strong className="text-text">{item.brand}</strong>
+                          </span>
+                        )}
+                        {item.series_name && (
+                          <span className="text-text-muted">
+                            Seri: <strong className="text-text">{item.series_name}</strong>
+                          </span>
+                        )}
+                        {item.size && (
+                          <span className="text-text-muted">
+                            Ebat: <strong className="text-text">{item.size}</strong>
+                          </span>
+                        )}
+                        {hasStockInfo && (
+                          <span
+                            className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                              stock >= item.quantity
+                                ? "bg-emerald-50 text-emerald-800 border border-emerald-300"
+                                : stock > 0
+                                ? "bg-amber-50 text-amber-900 border border-amber-300"
+                                : "bg-rose-50 text-rose-800 border border-rose-300"
+                            }`}
+                          >
+                            <span
+                              className={`w-1.5 h-1.5 rounded-full ${
+                                stock >= item.quantity
+                                  ? "bg-emerald-500"
+                                  : stock > 0
+                                  ? "bg-amber-500"
+                                  : "bg-rose-500"
+                              }`}
+                            ></span>
+                            {stock >= item.quantity
+                              ? `${stock} ${item.unit_snapshot} Stokta`
+                              : stock > 0
+                              ? `Depoda ${stock} var (${item.quantity - stock} eksik)`
+                              : "Stokta Yok"}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-2 font-mono text-text-muted">
                       <input
                         type="text"
                         value={item.product_code_snapshot}
                         onChange={(e) =>
-                          handleItemChange(idx, "product_code_snapshot", e.target.value)
+                          handleUpdateItem(item.id, { product_code_snapshot: e.target.value })
                         }
                         className="w-full bg-surface border border-border rounded px-2 py-1 font-mono text-xs"
                       />
@@ -610,20 +1208,22 @@ export function EditQuoteForm({
                         type="number"
                         step="any"
                         min="0.01"
-                        value={item.quantity}
+                        value={item.quantity === 0 ? "" : item.quantity}
+                        placeholder="1"
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) =>
-                          handleItemChange(idx, "quantity", parseFloat(e.target.value) || 0)
+                          handleUpdateItem(item.id, { quantity: parseFloat(e.target.value) || 0 })
                         }
-                        className="w-full bg-surface border border-border rounded px-2 py-1 text-right tabular-nums font-semibold"
+                        className="w-full bg-surface border border-border rounded px-2 py-1 text-right tabular-nums font-bold"
                       />
                     </td>
                     <td className="px-3 py-2">
                       <select
                         value={item.unit_snapshot}
                         onChange={(e) =>
-                          handleItemChange(idx, "unit_snapshot", e.target.value)
+                          handleUpdateItem(item.id, { unit_snapshot: e.target.value })
                         }
-                        className="w-full bg-surface border border-border rounded px-2 py-1 text-xs"
+                        className="w-full bg-surface border border-border rounded px-1.5 py-1 text-xs font-medium cursor-pointer"
                       >
                         <option value="M2">M2</option>
                         <option value="ADT">ADT</option>
@@ -638,11 +1238,13 @@ export function EditQuoteForm({
                         type="number"
                         step="0.01"
                         min="0"
-                        value={item.unit_price}
+                        value={item.unit_price === 0 ? "" : item.unit_price}
+                        placeholder="0.00"
+                        onFocus={(e) => e.target.select()}
                         onChange={(e) =>
-                          handleItemChange(idx, "unit_price", parseFloat(e.target.value) || 0)
+                          handleUpdateItem(item.id, { unit_price: parseFloat(e.target.value) || 0 })
                         }
-                        className="w-full bg-surface border border-border rounded px-2 py-1 text-right tabular-nums font-medium"
+                        className="w-full bg-surface border border-border rounded px-2 py-1 text-right tabular-nums font-semibold"
                       />
                     </td>
                     <td className="px-3 py-2 text-right">
@@ -651,9 +1253,9 @@ export function EditQuoteForm({
                           value={item.discount_type || "percent"}
                           onChange={(e) => {
                             const newType = e.target.value as "percent" | "fixed";
-                            handleItemChange(idx, "discount_type", newType);
+                            handleUpdateItem(item.id, { discount_type: newType });
                           }}
-                          className="border border-border rounded px-1 py-1 text-xs bg-surface font-semibold outline-none cursor-pointer"
+                          className="border border-border rounded px-1.5 py-1 text-xs bg-surface font-semibold outline-none cursor-pointer"
                         >
                           <option value="percent">%</option>
                           <option value="fixed">₺</option>
@@ -667,12 +1269,23 @@ export function EditQuoteForm({
                           onFocus={(e) => e.target.select()}
                           onChange={(e) => {
                             const val = parseFloat(e.target.value) || 0;
-                            handleItemChange(idx, "discount_value", val);
-                            handleItemChange(idx, "discount_type", item.discount_type || "percent");
+                            handleUpdateItem(item.id, {
+                              discount_value: val,
+                              discount_type: item.discount_type || "percent",
+                            });
                           }}
                           className="w-16 border border-border rounded px-2 py-1 text-xs text-right font-bold outline-none focus:border-brand-navy"
                         />
                       </div>
+                    </td>
+                    <td className="px-3 py-2 text-right">
+                      {lineCalc && lineCalc.discount_amount > 0 ? (
+                        <span className="font-semibold text-rose-600 tabular-nums">
+                          -{formatCurrency(lineCalc.discount_amount)}
+                        </span>
+                      ) : (
+                        <span className="text-text-muted">-</span>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right font-bold text-text tabular-nums">
                       {formatCurrency(lineCalc?.line_total || 0)}
@@ -682,7 +1295,7 @@ export function EditQuoteForm({
                         type="button"
                         onClick={() => handleRemoveItem(idx)}
                         title="Bu ürünü tekliften çıkar"
-                        className="p-1.5 rounded hover:bg-rose-50 text-rose-600 transition"
+                        className="p-1.5 rounded hover:bg-rose-50 text-rose-600 transition cursor-pointer"
                       >
                         <Trash2 size={15} />
                       </button>
@@ -695,9 +1308,9 @@ export function EditQuoteForm({
         </div>
       </div>
 
-      {/* Şartlar ve Toplamlar */}
+      {/* ──────────────────── 4. ŞARTLAR VE TOPLAMLAR ──────────────────── */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="bg-white p-5 rounded-xl border border-border space-y-4">
+        <div className="bg-white p-5 rounded-xl border border-border space-y-4 shadow-xs">
           <h3 className="text-xs font-semibold text-text uppercase tracking-wide">
             Notlar & Şartlar
           </h3>
@@ -714,12 +1327,37 @@ export function EditQuoteForm({
           </div>
           <div>
             <label className="block text-xs font-medium text-text-muted mb-1">
+              Teslimat Şartları
+            </label>
+            <input
+              type="text"
+              value={deliveryTerms}
+              onChange={(e) => setDeliveryTerms(e.target.value)}
+              placeholder="Örn: Şantiye teslim veya depodan teslim..."
+              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-text-muted mb-1">
+              Ödeme Şartları
+            </label>
+            <input
+              type="text"
+              value={paymentTerms}
+              onChange={(e) => setPaymentTerms(e.target.value)}
+              placeholder="Örn: Peşin havale veya 30 gün çek..."
+              className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs"
+            />
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-text-muted mb-1">
               Teklif Notları
             </label>
             <textarea
               rows={3}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
+              placeholder="Teklifle ilgili müşteri özel notları..."
               className="w-full bg-surface border border-border rounded-lg px-3 py-2 text-xs"
             />
           </div>

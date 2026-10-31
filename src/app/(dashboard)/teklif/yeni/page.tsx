@@ -26,7 +26,7 @@ export default async function NewQuotePage() {
   // İlk açılışta hızlı render için ilk müşteriler (canlı arama ile tüm 7,903 müşteri aranabilir)
   const { data: customersData } = await supabase
     .from("customers")
-    .select("id, company_name, contact_name, phone, type, tax_office, tax_number, address, email")
+    .select("id, company_name, contact_name, phone, type, tax_office, tax_number, address, email, notes")
     .eq("company_id", profile.company_id)
     .eq("is_active", true)
     .order("company_name", { ascending: true })

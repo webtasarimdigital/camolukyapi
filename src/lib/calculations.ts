@@ -62,18 +62,22 @@ export function calculateTotals(
   generalDiscountValue?: number | null
 ): QuoteTotals {
   const validLines = Array.isArray(lines) ? lines : [];
-  const subtotal = round2(validLines.reduce((s, l) => s + safeNum(l?.line_total), 0));
+  // Brüt Ara Toplam (iskonto öncesi)
+  const subtotal = round2(validLines.reduce((s, l) => s + safeNum(l?.line_subtotal), 0));
   const line_discount_total = round2(validLines.reduce((s, l) => s + safeNum(l?.discount_amount), 0));
+
+  // Satır iskontoları düşüldükten sonraki ara toplam
+  const afterLineDiscounts = round2(Math.max(0, subtotal - line_discount_total));
 
   let general_discount_amount = 0;
   const genDiscVal = safeNum(generalDiscountValue);
   if (generalDiscountType === "percent" && genDiscVal > 0) {
-    general_discount_amount = round2((subtotal * genDiscVal) / 100);
+    general_discount_amount = round2((afterLineDiscounts * genDiscVal) / 100);
   } else if (generalDiscountType === "fixed" && genDiscVal > 0) {
-    general_discount_amount = round2(Math.min(genDiscVal, subtotal));
+    general_discount_amount = round2(Math.min(genDiscVal, afterLineDiscounts));
   }
 
-  const net_total = round2(subtotal - general_discount_amount);
+  const net_total = round2(Math.max(0, afterLineDiscounts - general_discount_amount));
   const safeVatRate = safeNum(vatRate);
   const vat_total = round2((net_total * safeVatRate) / 100);
   const grand_total = round2(net_total + vat_total);

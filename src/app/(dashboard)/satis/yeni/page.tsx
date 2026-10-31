@@ -19,7 +19,7 @@ export default async function NewSalePage() {
   // Fetch active customers
   const { data: customersData } = await supabase
     .from("customers")
-    .select("id, company_name, contact_name, phone, type, tax_office, tax_number, address")
+    .select("id, company_name, contact_name, phone, type, tax_office, tax_number, address, notes")
     .eq("company_id", profile.company_id)
     .eq("is_active", true)
     .order("company_name", { ascending: true });

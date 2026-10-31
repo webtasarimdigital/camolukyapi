@@ -3,8 +3,21 @@
 import { useEffect } from "react";
 import { Printer, ArrowLeft } from "lucide-react";
 import Link from "next/link";
+import { WhatsAppQuoteModal } from "@/components/whatsapp/WhatsAppQuoteModal";
 
-export function PrintActions({ quoteId, quoteCode }: { quoteId: string; quoteCode: string }) {
+export function PrintActions({
+  quoteId,
+  quoteCode,
+  customerName,
+  customerPhone,
+  grandTotal,
+}: {
+  quoteId: string;
+  quoteCode: string;
+  customerName?: string;
+  customerPhone?: string | null;
+  grandTotal?: number;
+}) {
   useEffect(() => {
     if (typeof window !== "undefined" && window.location.search.includes("autoPrint=true")) {
       const timer = setTimeout(() => {
@@ -29,6 +42,16 @@ export function PrintActions({ quoteId, quoteCode }: { quoteId: string; quoteCod
         </span>
       </div>
       <div className="flex items-center gap-3">
+        {customerName && (
+          <WhatsAppQuoteModal
+            quoteId={quoteId}
+            quoteCode={quoteCode}
+            customerName={customerName}
+            customerPhone={customerPhone}
+            grandTotal={grandTotal}
+            variant="button"
+          />
+        )}
         <button
           onClick={() => window.print()}
           className="inline-flex items-center gap-1.5 sm:gap-2 bg-brand-navy hover:bg-black text-white px-3.5 sm:px-5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[11px] sm:text-xs font-bold transition shadow-sm cursor-pointer"

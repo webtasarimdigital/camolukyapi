@@ -9,6 +9,7 @@ import { getUploadedQuotes } from "./uploaded-quotes-actions";
 import { UploadedQuotesClient } from "./UploadedQuotesClient";
 import { TrashQuotesClient } from "./TrashQuotesClient";
 import { InteractiveTable } from "@/components/ui/InteractiveTable";
+import { WhatsAppQuoteModal } from "@/components/whatsapp/WhatsAppQuoteModal";
 import {
   FileText,
   TrendingUp,
@@ -20,6 +21,7 @@ import {
   Plus,
   Upload,
   Trash2,
+  User,
 } from "lucide-react";
 
 export default async function TekliflerPage({
@@ -80,7 +82,7 @@ export default async function TekliflerPage({
   // Tablo sorgusu (Bayi siparişleri hariç normal teklifler)
   let query = supabase
     .from("quotes")
-    .select("*, customer:customers(company_name, contact_name)")
+    .select("*, customer:customers(company_name, contact_name, phone)")
     .eq("company_id", profile.company_id)
     .or("delivery_terms.is.null,delivery_terms.neq.BAYI_SIPARISI")
     .is("deleted_at", null)
@@ -362,7 +364,7 @@ export default async function TekliflerPage({
                 Müşteri Adı
               </th>
               <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide">
-                Temsilci
+                İşlemi Yapan
               </th>
               <th className="text-right px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide">
                 Toplam Tutar
@@ -386,6 +388,15 @@ export default async function TekliflerPage({
                   quote.customer?.contact_name ||
                   "Müşterisiz";
 
+                const creatorFromNotes =
+                  quote.notes?.match(/\[Hazırlayan:\s*([^\]]+)\]/)?.[1] ||
+                  quote.notes?.match(/\[İşlem Yapan:\s*([^\]]+)\]/)?.[1];
+                const creatorName =
+                  (quote.created_by && profileMap.get(quote.created_by)) ||
+                  creatorFromNotes ||
+                  (quote.sales_rep_id && profileMap.get(quote.sales_rep_id)) ||
+                  "Yetkili";
+
                 return (
                   <tr key={quote.id} className="hover:bg-surface/80 transition">
                     <td className="px-4 py-3.5 font-mono text-xs font-bold text-text">
@@ -402,8 +413,11 @@ export default async function TekliflerPage({
                     <td className="px-4 py-3.5 font-medium text-text">
                       <div className="truncate max-w-xs">{customerName}</div>
                     </td>
-                    <td className="px-4 py-3.5 text-text-muted text-xs">
-                      {(profileMap.get(quote.created_by) || "Yetkili") || "-"}
+                    <td className="px-4 py-3.5 text-text-muted text-xs whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 font-semibold text-slate-800 border border-slate-200">
+                        <User size={12} className="text-brand-navy" />
+                        {creatorName}
+                      </span>
                     </td>
                     <td className="px-4 py-3.5 text-right tabular-nums font-bold text-text">
                       {formatCurrency(quote.grand_total || quote.total_amount)}
@@ -436,6 +450,20 @@ export default async function TekliflerPage({
                         >
                           <Printer size={14} />
                         </Link>
+                        <WhatsAppQuoteModal
+                          quoteId={quote.id}
+                          quoteCode={quote.quote_code}
+                          customerName={
+                            quote.customer_snapshot?.company_name ||
+                            quote.customer?.company_name ||
+                            quote.customer_snapshot?.contact_name ||
+                            quote.customer?.contact_name ||
+                            "Müşteri"
+                          }
+                          customerPhone={quote.customer?.phone || quote.customer_snapshot?.phone}
+                          grandTotal={quote.grand_total || quote.total_amount}
+                          variant="icon"
+                        />
                         <Link
                           href={`/teklifler/${quote.id}`}
                           className="bg-surface hover:bg-gray-200 text-text px-3 py-1.5 rounded-lg text-xs font-semibold border border-border transition"

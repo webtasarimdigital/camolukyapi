@@ -18,6 +18,8 @@ export interface ProcurementRecord {
   supplier_name: string;
   status: ProcurementStatus;
   notes?: string;
+  created_by_name?: string;
+  updated_by_name?: string;
   created_at: string;
   updated_at: string;
 }
@@ -36,6 +38,7 @@ export interface ConsolidatedPendingProduct {
     unit: string;
     supplier_name: string;
     status: ProcurementStatus;
+    created_by_name?: string;
     created_at: string;
   }>;
 }

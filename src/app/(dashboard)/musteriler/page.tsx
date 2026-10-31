@@ -12,7 +12,10 @@ import {
   Search,
   X,
   Users,
+  User,
+  Briefcase,
 } from "lucide-react";
+import { extractPlasiyer, KNOWN_PLASIYERS } from "@/lib/customer-helpers";
 
 export default async function MusterilerPage({
   searchParams,
@@ -21,6 +24,7 @@ export default async function MusterilerPage({
     q?: string;
     type?: string;
     status?: string;
+    plasiyer?: string;
     page?: string;
     pageSize?: string;
   }>;
@@ -40,9 +44,15 @@ export default async function MusterilerPage({
   const profile = profileData as { company_id: string; role: string } | null;
   if (!profile?.company_id) redirect("/login");
 
+  const { data: profilesData } = await supabase
+    .from("profiles")
+    .select("id, full_name");
+  const profileMap = new Map((profilesData || []).map((p: any) => [p.id, p.full_name]));
+
   const q = sp?.q?.trim() || "";
   const typeFilter = sp?.type || "";
   const statusFilter = sp?.status || "";
+  const plasiyerFilter = sp?.plasiyer || "";
 
   // Sayfalama parametreleri
   const rawPageSize = parseInt(sp?.pageSize || "50", 10);
@@ -57,7 +67,7 @@ export default async function MusterilerPage({
 
   if (q) {
     query = query.or(
-      `company_name.ilike.%${q}%,contact_name.ilike.%${q}%,phone.ilike.%${q}%`
+      `company_name.ilike.%${q}%,contact_name.ilike.%${q}%,phone.ilike.%${q}%,notes.ilike.%${q}%`
     );
   }
   if (typeFilter) {
@@ -65,6 +75,9 @@ export default async function MusterilerPage({
   }
   if (statusFilter) {
     query = query.eq("is_active", statusFilter === "aktif");
+  }
+  if (plasiyerFilter) {
+    query = query.ilike("notes", `%Plasiyer: ${plasiyerFilter}%`);
   }
 
   const from = (requestedPage - 1) * pageSize;
@@ -82,6 +95,7 @@ export default async function MusterilerPage({
     if (q) params.set("q", q);
     if (typeFilter) params.set("type", typeFilter);
     if (statusFilter) params.set("status", statusFilter);
+    if (plasiyerFilter) params.set("plasiyer", plasiyerFilter);
     const ps = targetPageSize || pageSize;
     if (ps !== 50) params.set("pageSize", String(ps));
     if (targetPage > 1) params.set("page", String(targetPage));
@@ -105,7 +119,7 @@ export default async function MusterilerPage({
   const paginationPages = getPaginationPages(currentPage, totalPages);
   const startItem = totalCount === 0 ? 0 : from + 1;
   const endItem = Math.min(from + (customers?.length || 0), totalCount);
-  const hasFilters = Boolean(q || typeFilter || statusFilter);
+  const hasFilters = Boolean(q || typeFilter || statusFilter || plasiyerFilter);
 
   return (
     <div className="space-y-6">
@@ -172,6 +186,22 @@ export default async function MusterilerPage({
             <option value="pasif">Pasif</option>
           </select>
 
+          <select
+            name="plasiyer"
+            defaultValue={plasiyerFilter}
+            className="border border-border rounded-lg px-3 py-2 text-sm bg-white focus:outline-none"
+          >
+            <option value="">Tüm Plasiyerler / Portföyler</option>
+            {KNOWN_PLASIYERS.map((p) => {
+              const shortName = p.replace(/-\[.*?\]$/, "");
+              return (
+                <option key={p} value={p}>
+                  👔 {shortName}
+                </option>
+              );
+            })}
+          </select>
+
           {pageSize !== 50 && (
             <input type="hidden" name="pageSize" value={pageSize} />
           )}
@@ -206,6 +236,9 @@ export default async function MusterilerPage({
                   Müşteri Adı / Ünvanı
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide">
+                  Plasiyer
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide">
                   İletişim Kişisi
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide">
@@ -216,6 +249,9 @@ export default async function MusterilerPage({
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide">
                   Tür
+                </th>
+                <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide">
+                  İşlemi Yapan
                 </th>
                 <th className="text-left px-4 py-3 text-xs font-semibold text-text-muted uppercase tracking-wide">
                   Durum
@@ -230,9 +266,27 @@ export default async function MusterilerPage({
                 customers.map((c) => (
                   <tr key={c.id} className="hover:bg-surface/50 transition">
                     <td className="px-4 py-3 font-medium text-text">
-                      {c.type === "kurumsal" && c.company_name
-                        ? c.company_name
-                        : c.contact_name || "—"}
+                      <Link href={`/musteriler/${c.id}`} className="hover:text-brand-navy hover:underline">
+                        {c.type === "kurumsal" && c.company_name
+                          ? c.company_name
+                          : c.contact_name || "—"}
+                      </Link>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {(() => {
+                        const plas = extractPlasiyer(c.notes);
+                        if (!plas) return <span className="text-text-muted text-xs">—</span>;
+                        const shortPlas = plas.replace(/-\[.*?\]$/, "");
+                        return (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200"
+                            title={plas}
+                          >
+                            <Briefcase size={11} className="text-amber-700" />
+                            {shortPlas}
+                          </span>
+                        );
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-text-muted">
                       {c.contact_name || "—"}
@@ -254,6 +308,21 @@ export default async function MusterilerPage({
                         </span>
                       )}
                     </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      {(() => {
+                        const creatorFromNotes = c.notes?.match(/\[(?:Ekleyen|İşlem Yapan):\s*([^\]]+)\]/)?.[1];
+                        const creatorName =
+                          (c.created_by && profileMap.get(c.created_by)) ||
+                          creatorFromNotes ||
+                          "Yetkili";
+                        return (
+                          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-slate-100 font-semibold text-slate-800 border border-slate-200 text-xs">
+                            <User size={11} className="text-brand-navy" />
+                            {creatorName}
+                          </span>
+                        );
+                      })()}
+                    </td>
                     <td className="px-4 py-3">
                       {c.is_active ? (
                         <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-700">
@@ -272,7 +341,7 @@ export default async function MusterilerPage({
                 ))
               ) : (
                 <tr>
-                  <td colSpan={7} className="px-4 py-12 text-center text-text-muted">
+                  <td colSpan={9} className="px-4 py-12 text-center text-text-muted">
                     {hasFilters ? (
                       <div className="flex flex-col items-center gap-2">
                         <p className="font-medium text-text">Aradığınız kriterlere uygun müşteri bulunamadı.</p>

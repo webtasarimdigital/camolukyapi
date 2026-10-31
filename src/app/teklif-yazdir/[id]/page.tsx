@@ -144,7 +144,13 @@ export default async function PrintQuotePage({
         }
       `}} />
 
-      <PrintActions quoteId={quote.id} quoteCode={displayQuoteNo} />
+      <PrintActions
+        quoteId={quote.id}
+        quoteCode={displayQuoteNo}
+        customerName={customerName}
+        customerPhone={customerPhone !== "-" ? customerPhone : undefined}
+        grandTotal={quote.grand_total || quote.total_amount}
+      />
 
       {/* A4 PROPOSAL DOCUMENT - Temiz, bağımsız A4 şablonu */}
       <div className="print-clean w-full max-w-[210mm] mx-auto bg-white p-4 sm:p-5 md:p-6 text-[10px] leading-tight text-neutral-800 shadow-md border border-neutral-200 rounded-xl space-y-2.5">
@@ -278,10 +284,14 @@ export default async function PrintQuotePage({
                       {formatCurrency(item.unit_price)}
                     </td>
                     <td className="py-1.5 px-2 border-r border-neutral-200 text-center tabular-nums text-neutral-700">
-                      {Number(item.discount_value) > 0 ? `%${Number(item.discount_value).toFixed(2)}` : "%0,00"}
+                      {Number(item.discount_amount) > 0
+                        ? item.discount_type === "fixed"
+                          ? formatCurrency(item.discount_value)
+                          : `%${Number(item.discount_value)}`
+                        : "-"}
                     </td>
                     <td className="py-1.5 px-2 border-r border-neutral-200 text-right tabular-nums text-neutral-600">
-                      {formatCurrency(item.discount_amount || 0)}
+                      {Number(item.discount_amount) > 0 ? `-${formatCurrency(item.discount_amount)}` : "-"}
                     </td>
                     <td className="py-1.5 px-2.5 text-right font-bold text-neutral-900 tabular-nums">
                       {formatCurrency(item.line_total || item.line_subtotal)}
@@ -368,10 +378,18 @@ export default async function PrintQuotePage({
                 <span>ARA TOPLAM</span>
                 <span className="font-semibold text-neutral-900 tabular-nums">{formatCurrency(quote.subtotal)}</span>
               </div>
-              <div className="flex justify-between items-center text-neutral-600">
-                <span>GENEL İSKONTO</span>
-                <span className="font-semibold text-rose-700 tabular-nums">-{formatCurrency(quote.general_discount_amount || 0)}</span>
-              </div>
+              {Number(quote.line_discount_total) > 0 && (
+                <div className="flex justify-between items-center text-rose-700">
+                  <span>SATIR İSKONTOLARI</span>
+                  <span className="font-semibold tabular-nums">-{formatCurrency(quote.line_discount_total)}</span>
+                </div>
+              )}
+              {Number(quote.general_discount_amount) > 0 && (
+                <div className="flex justify-between items-center text-neutral-600">
+                  <span>GENEL İSKONTO</span>
+                  <span className="font-semibold text-rose-700 tabular-nums">-{formatCurrency(quote.general_discount_amount)}</span>
+                </div>
+              )}
               <div className="flex justify-between items-center text-neutral-800 font-medium">
                 <span>NET TUTAR</span>
                 <span className="font-bold tabular-nums">{formatCurrency(quote.net_total || quote.subtotal)}</span>

@@ -6,6 +6,7 @@ import { redirect } from "next/navigation";
 import { ConvertQuoteButton } from "./ConvertQuoteButton";
 import { DeleteQuoteButton } from "../DeleteQuoteButton";
 import { DeletedQuoteBanner } from "./DeletedQuoteBanner";
+import { WhatsAppQuoteModal } from "@/components/whatsapp/WhatsAppQuoteModal";
 import { ArrowLeft, Printer, Edit3 } from "lucide-react";
 
 export default async function QuoteDetailPage({
@@ -121,6 +122,24 @@ export default async function QuoteDetailPage({
           >
             <Printer size={15} /> Yazdır / A4 Çıktı
           </Link>
+
+          {!isDeleted && (
+            <WhatsAppQuoteModal
+              quoteId={quote.id}
+              quoteCode={quote.quote_code}
+              customerName={
+                quote.customer?.company_name ||
+                quote.customer?.contact_name ||
+                quote.customer_snapshot?.company_name ||
+                quote.customer_snapshot?.contact_name ||
+                "Müşteri"
+              }
+              customerPhone={quote.customer?.phone || quote.customer_snapshot?.phone}
+              grandTotal={quote.grand_total || quote.total_amount}
+              itemsCount={quote.items?.length || 0}
+              variant="button"
+            />
+          )}
 
           {!isDeleted && (
             <>
@@ -254,9 +273,19 @@ export default async function QuoteDetailPage({
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums font-semibold">{item.quantity}</td>
                 <td className="px-4 py-3 text-text-muted">{item.unit_snapshot || "M2"}</td>
-                <td className="px-4 py-3 text-right tabular-nums">{formatCurrency(item.unit_price)}</td>
-                <td className="px-4 py-3 text-right tabular-nums text-text-muted">
-                  {formatCurrency(item.discount_amount)}
+                <td className="px-4 py-3 text-right tabular-nums font-semibold text-text">
+                  {formatCurrency(item.unit_price)}
+                </td>
+                <td className="px-4 py-3 text-right tabular-nums">
+                  {Number(item.discount_amount) > 0 ? (
+                    <span className="inline-flex items-center gap-1 font-semibold text-rose-600 bg-rose-50 px-2 py-0.5 rounded text-xs">
+                      {item.discount_type === "fixed"
+                        ? `-${formatCurrency(item.discount_amount)}`
+                        : `%${Number(item.discount_value)} (-${formatCurrency(item.discount_amount)})`}
+                    </span>
+                  ) : (
+                    <span className="text-text-muted">-</span>
+                  )}
                 </td>
                 <td className="px-4 py-3 text-right tabular-nums font-bold text-text">
                   {formatCurrency(item.line_total)}

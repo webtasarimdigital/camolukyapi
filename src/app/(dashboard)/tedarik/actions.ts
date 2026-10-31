@@ -82,6 +82,8 @@ export async function getProcurementRecords(): Promise<ProcurementRecord[]> {
         supplier_name: rd.supplier_name || "",
         status: (rd.status as ProcurementStatus) || "bekliyor",
         notes: rd.notes || "",
+        created_by_name: rd.created_by_name || "Admin",
+        updated_by_name: rd.updated_by_name || null,
         created_at: rd.created_at || row.created_at,
         updated_at: rd.updated_at || row.created_at,
       };
@@ -131,6 +133,8 @@ export async function getSaleProcurementItems(saleId: string): Promise<Procureme
         supplier_name: rd.supplier_name || "",
         status: (rd.status as ProcurementStatus) || "bekliyor",
         notes: rd.notes || "",
+        created_by_name: rd.created_by_name || "Admin",
+        updated_by_name: rd.updated_by_name || null,
         created_at: rd.created_at || row.created_at,
         updated_at: rd.updated_at || row.created_at,
       };
@@ -152,7 +156,7 @@ export async function sendItemsToProcurement(
       return { success: false, error: "Gönderilecek ürün seçilmedi." };
     }
 
-    const { service, companyId } = await getCompanyAndUser();
+    const { service, companyId, userName } = await getCompanyAndUser();
     const now = new Date().toISOString();
 
     const rowsToInsert = items.map((item) => ({
@@ -173,6 +177,7 @@ export async function sendItemsToProcurement(
         supplier_name: "",
         status: "bekliyor",
         notes: item.notes || "",
+        created_by_name: userName,
         created_at: now,
         updated_at: now,
       },
@@ -205,7 +210,7 @@ export async function updateProcurementSupplier(
   supplierName: string
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { service, companyId } = await getCompanyAndUser();
+    const { service, companyId, userName } = await getCompanyAndUser();
 
     const { data: row, error: fetchErr } = await (service
       .from("camlica_firca_rows") as any)
@@ -222,6 +227,7 @@ export async function updateProcurementSupplier(
     const updatedData = {
       ...rowData,
       supplier_name: (supplierName || "").trim(),
+      updated_by_name: userName,
       updated_at: new Date().toISOString(),
     };
 
@@ -254,7 +260,7 @@ export async function updateProcurementStatus(
   status: ProcurementStatus
 ): Promise<{ success: boolean; error?: string }> {
   try {
-    const { service, companyId } = await getCompanyAndUser();
+    const { service, companyId, userName } = await getCompanyAndUser();
 
     const { data: row, error: fetchErr } = await (service
       .from("camlica_firca_rows") as any)
@@ -271,6 +277,7 @@ export async function updateProcurementStatus(
     const updatedData = {
       ...rowData,
       status,
+      updated_by_name: userName,
       updated_at: new Date().toISOString(),
     };
 
@@ -352,7 +359,7 @@ export async function createManualProcurementItem(
       return { success: false, error: "Geçerli bir miktar giriniz." };
     }
 
-    const { service, companyId } = await getCompanyAndUser();
+    const { service, companyId, userName } = await getCompanyAndUser();
     const now = new Date().toISOString();
 
     const row_data = {
@@ -370,6 +377,7 @@ export async function createManualProcurementItem(
       supplier_name: input.supplier_name?.trim() || "",
       status: input.status || "bekliyor",
       notes: input.notes?.trim() || "",
+      created_by_name: userName,
       created_at: now,
       updated_at: now,
     };

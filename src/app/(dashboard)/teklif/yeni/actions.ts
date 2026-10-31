@@ -261,7 +261,7 @@ export async function searchCustomersLive(query: string) {
   if (!cleanQ) {
     const { data } = await supabase
       .from("customers")
-      .select("id, company_name, contact_name, phone, email, address, tax_office, tax_number, type")
+      .select("id, company_name, contact_name, phone, email, address, tax_office, tax_number, type, notes")
       .eq("company_id", companyId)
       .eq("is_active", true)
       .order("company_name", { ascending: true })
@@ -271,10 +271,10 @@ export async function searchCustomersLive(query: string) {
 
   const { data } = await supabase
     .from("customers")
-    .select("id, company_name, contact_name, phone, email, address, tax_office, tax_number, type")
+    .select("id, company_name, contact_name, phone, email, address, tax_office, tax_number, type, notes")
     .eq("company_id", companyId)
     .eq("is_active", true)
-    .or(`company_name.ilike.%${cleanQ}%,contact_name.ilike.%${cleanQ}%,phone.ilike.%${cleanQ}%,tax_number.ilike.%${cleanQ}%,address.ilike.%${cleanQ}%`)
+    .or(`company_name.ilike.%${cleanQ}%,contact_name.ilike.%${cleanQ}%,phone.ilike.%${cleanQ}%,tax_number.ilike.%${cleanQ}%,address.ilike.%${cleanQ}%,notes.ilike.%${cleanQ}%`)
     .order("company_name", { ascending: true })
     .limit(50);
 

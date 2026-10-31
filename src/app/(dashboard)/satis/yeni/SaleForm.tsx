@@ -25,8 +25,10 @@ import {
   Tag,
   ArrowRight,
   PackageCheck,
-  X
+  X,
+  Briefcase
 } from "lucide-react";
+import { extractPlasiyer } from "@/lib/customer-helpers";
 
 interface CustomerOption {
   id: string;
@@ -37,6 +39,7 @@ interface CustomerOption {
   tax_office?: string | null;
   tax_number?: string | null;
   address?: string | null;
+  notes?: string | null;
 }
 
 interface ProductOption {
@@ -140,13 +143,14 @@ export function SaleForm({
 
   // Filtered customers for search
   const filteredCustomers = useMemo(() => {
-    if (!customerSearch.trim()) return customerList.slice(0, 10);
+    if (!customerSearch.trim()) return customerList.slice(0, 15);
     const q = customerSearch.toLowerCase();
     return customerList.filter(c => 
       (c.company_name && c.company_name.toLowerCase().includes(q)) ||
       (c.contact_name && c.contact_name.toLowerCase().includes(q)) ||
-      (c.phone && c.phone.includes(q))
-    ).slice(0, 10);
+      (c.phone && c.phone.includes(q)) ||
+      (c.notes && c.notes.toLowerCase().includes(q))
+    ).slice(0, 30);
   }, [customerList, customerSearch]);
 
   // Filtered products for quick picker across all 936 items
@@ -510,7 +514,7 @@ export function SaleForm({
                 </label>
                 <input
                   type="text"
-                  placeholder="Müşteri veya firma adı ile filtrele..."
+                  placeholder="Müşteri, firma adı veya plasiyer ile filtrele..."
                   value={customerSearch}
                   onChange={(e) => setCustomerSearch(e.target.value)}
                   className="w-full border border-border rounded-xl px-3.5 py-2 text-sm bg-surface/50 mb-2 focus:bg-white transition outline-none focus:border-brand-navy"
@@ -521,16 +525,20 @@ export function SaleForm({
                   className="w-full border border-border rounded-xl px-3.5 py-2.5 text-sm bg-white font-medium text-text outline-none focus:border-brand-navy"
                 >
                   <option value="">-- Müşteri Seçiniz --</option>
-                  {filteredCustomers.map((c) => (
-                    <option key={c.id} value={c.id}>
-                      {c.company_name || c.contact_name} {c.phone ? `(${c.phone})` : ""}
-                    </option>
-                  ))}
+                  {filteredCustomers.map((c) => {
+                    const plas = extractPlasiyer(c.notes);
+                    const plasTag = plas ? ` [${plas.replace(/-\[.*?\]$/, "")}]` : "";
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.company_name || c.contact_name}{plasTag} {c.phone ? `(${c.phone})` : ""}
+                      </option>
+                    );
+                  })}
                 </select>
               </div>
 
               {selectedCustomerObj ? (
-                <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3.5 text-xs space-y-1">
+                <div className="bg-emerald-50/60 border border-emerald-200 rounded-xl p-3.5 text-xs space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-emerald-900 text-sm">
                       {selectedCustomerObj.company_name || selectedCustomerObj.contact_name}
@@ -539,6 +547,12 @@ export function SaleForm({
                       {selectedCustomerObj.type || "Kayıtlı"}
                     </span>
                   </div>
+                  {extractPlasiyer(selectedCustomerObj.notes) && (
+                    <p className="text-amber-800 font-bold bg-amber-100/80 border border-amber-200 px-2 py-0.5 rounded text-[11px] inline-flex items-center gap-1">
+                      <Briefcase size={12} className="text-amber-700" />
+                      Plasiyer: {extractPlasiyer(selectedCustomerObj.notes)}
+                    </p>
+                  )}
                   <p className="text-emerald-700">📞 {selectedCustomerObj.phone || "Telefon yok"}</p>
                   {selectedCustomerObj.address && (
                     <p className="text-emerald-700">📍 {selectedCustomerObj.address}</p>

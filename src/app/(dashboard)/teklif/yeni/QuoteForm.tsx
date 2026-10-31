@@ -9,8 +9,9 @@ import { toast } from "sonner";
 import {
   Loader2, FileCheck, Printer, Search, X, CheckCircle2, UserPlus,
   Building2, User, Tag, Trash2, PackageCheck, AlertTriangle,
-  Phone, Mail, MapPin, FileText
+  Phone, Mail, MapPin, FileText, Briefcase
 } from "lucide-react";
+import { extractPlasiyer } from "@/lib/customer-helpers";
 
 export interface CustomerOption {
   id: string;
@@ -22,6 +23,7 @@ export interface CustomerOption {
   tax_number?: string | null;
   address?: string | null;
   email?: string | null;
+  notes?: string | null;
 }
 
 export interface ProductOption {
@@ -550,10 +552,15 @@ export function QuoteForm({
                           className="p-3.5 hover:bg-emerald-50/60 cursor-pointer transition flex items-center justify-between gap-4 group"
                         >
                           <div className="min-w-0 flex-1">
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center gap-2">
                               <span className="font-bold text-text text-sm group-hover:text-emerald-700">
                                 {c.company_name || c.contact_name || "İsimsiz Müşteri"}
                               </span>
+                              {extractPlasiyer(c.notes) && (
+                                <span className="bg-amber-50 border border-amber-200 text-amber-800 px-2 py-0.5 rounded text-[10px] font-bold">
+                                  👔 {extractPlasiyer(c.notes)?.replace(/-\[.*?\]$/, "")}
+                                </span>
+                              )}
                               {c.type && (
                                 <span className="bg-surface border border-border text-text-muted px-2 py-0.5 rounded text-[10px] font-semibold uppercase">
                                   {c.type}
@@ -635,6 +642,15 @@ export function QuoteForm({
                       {selectedCustomer.contact_name || "-"}
                     </p>
                   </div>
+                  {extractPlasiyer(selectedCustomer.notes) && (
+                    <div>
+                      <span className="block text-text-muted text-[11px] font-semibold mb-0.5">Plasiyer / Temsilci:</span>
+                      <p className="font-bold text-amber-800 flex items-center gap-1.5">
+                        <Briefcase size={13} className="text-amber-600" />
+                        {extractPlasiyer(selectedCustomer.notes)}
+                      </p>
+                    </div>
+                  )}
                   <div>
                     <span className="block text-text-muted text-[11px] font-semibold mb-0.5">Telefon:</span>
                     <p className="font-semibold text-text flex items-center gap-1.5">

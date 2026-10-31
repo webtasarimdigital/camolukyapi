@@ -25,6 +25,7 @@ import {
   User,
 } from "lucide-react";
 import { toast } from "sonner";
+import { WhatsAppTedarikModal } from "@/components/whatsapp/WhatsAppTedarikModal";
 import type {
   ProcurementRecord,
   ProcurementStatus,
@@ -234,6 +235,7 @@ export default function TedarikClient({
           unit: r.unit,
           supplier_name: r.supplier_name,
           status: r.status,
+          created_by_name: r.created_by_name,
           created_at: r.created_at,
         });
       } else {
@@ -252,6 +254,7 @@ export default function TedarikClient({
               unit: r.unit,
               supplier_name: r.supplier_name,
               status: r.status,
+              created_by_name: r.created_by_name,
               created_at: r.created_at,
             },
           ],
@@ -369,11 +372,20 @@ export default function TedarikClient({
           </p>
         </div>
 
-        <div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <WhatsAppTedarikModal
+            items={consolidatedProducts.map((p) => ({
+              product_name: p.product_name,
+              total_quantity: p.total_pending_quantity,
+              unit: p.unit || "Adet",
+            }))}
+            variant="header"
+            title="Tedarik Edilecek Ürünler Listesi"
+          />
           <button
             type="button"
             onClick={() => setIsNewModalOpen(true)}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-sm transition-all"
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold bg-amber-600 text-white hover:bg-amber-700 shadow-sm transition-all cursor-pointer"
           >
             <Plus size={16} />
             + Yeni Tedarik Ekle (Müşteri Bazlı)
@@ -534,6 +546,7 @@ export default function TedarikClient({
                     <th className="py-3 px-4 text-left min-w-[200px]">
                       Tedarikçi Firma (Elle Giriniz)
                     </th>
+                    <th className="py-3 px-3 text-left min-w-[130px]">İşlemi Yapan</th>
                     <th className="py-3 px-4 text-left min-w-[160px]">Statü</th>
                     <th className="py-3 px-3 text-center w-12">İşlem</th>
                   </tr>
@@ -651,6 +664,23 @@ export default function TedarikClient({
                           )}
                         </td>
 
+                        {/* İşlemi Yapan */}
+                        <td className="py-3 px-3 whitespace-nowrap">
+                          <div className="flex flex-col">
+                            <span className="inline-flex items-center gap-1.5 font-semibold text-text text-xs">
+                              <span className="w-5 h-5 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0">
+                                <User size={11} className="text-brand-navy" />
+                              </span>
+                              <span>{r.created_by_name || "Admin"}</span>
+                            </span>
+                            {r.updated_by_name && (
+                              <span className="text-[10px] text-text-muted pl-6">
+                                Son: {r.updated_by_name}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+
                         {/* Statü Değiştirici */}
                         <td className="py-3 px-4 whitespace-nowrap">
                           <select
@@ -667,16 +697,30 @@ export default function TedarikClient({
                           </select>
                         </td>
 
-                        {/* Silme */}
-                        <td className="py-3 px-3 text-center">
-                          <button
-                            onClick={() => handleDelete(r.id)}
-                            disabled={deletingId === r.id}
-                            className="p-1.5 rounded-lg text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50"
-                            title="Tedarik kaydını sil"
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                        {/* İşlemler */}
+                        <td className="py-3 px-3 text-center whitespace-nowrap">
+                          <div className="flex items-center justify-center gap-1.5">
+                            <WhatsAppTedarikModal
+                              items={[
+                                {
+                                  product_name: r.product_name,
+                                  total_quantity: r.quantity,
+                                  unit: r.unit || "Adet",
+                                },
+                              ]}
+                              supplierName={r.supplier_name || ""}
+                              variant="item"
+                              title={`${r.product_name} Tedarik`}
+                            />
+                            <button
+                              onClick={() => handleDelete(r.id)}
+                              disabled={deletingId === r.id}
+                              className="p-1.5 rounded-lg text-text-muted hover:text-rose-600 hover:bg-rose-50 transition-colors disabled:opacity-50 cursor-pointer"
+                              title="Tedarik kaydını sil"
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     );
@@ -767,6 +811,20 @@ export default function TedarikClient({
                           </span>
                         </div>
 
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <WhatsAppTedarikModal
+                            items={[
+                              {
+                                product_name: p.product_name,
+                                total_quantity: p.total_pending_quantity,
+                                unit: p.unit || "Adet",
+                              },
+                            ]}
+                            variant="button"
+                            title={`${p.product_name} Toplu Tedarik`}
+                          />
+                        </div>
+
                         <button className="p-1.5 rounded-lg text-text-muted hover:text-text">
                           {isExpanded ? <ChevronDown size={18} /> : <ChevronRight size={18} />}
                         </button>
@@ -783,6 +841,7 @@ export default function TedarikClient({
                               <th className="py-2.5 px-4 text-left">Müşteri</th>
                               <th className="py-2.5 px-3 text-center">İstenen Miktar</th>
                               <th className="py-2.5 px-4 text-left">Tedarikçi Firma</th>
+                              <th className="py-2.5 px-3 text-left">İşlemi Yapan</th>
                               <th className="py-2.5 px-4 text-left">Mevcut Durum</th>
                               <th className="py-2.5 px-4 text-right">Hızlı Tamamla</th>
                             </tr>
@@ -836,6 +895,14 @@ export default function TedarikClient({
                                         Tedarikçi Belirtilmemiş
                                       </span>
                                     )}
+                                  </td>
+
+                                  {/* İşlemi Yapan */}
+                                  <td className="py-2.5 px-3 whitespace-nowrap">
+                                    <span className="inline-flex items-center gap-1 font-medium text-text text-xs">
+                                      <User size={11} className="text-brand-navy shrink-0" />
+                                      {order.created_by_name || "Admin"}
+                                    </span>
                                   </td>
 
                                   {/* Statü */}
