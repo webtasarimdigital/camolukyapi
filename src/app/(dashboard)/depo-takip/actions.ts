@@ -12,7 +12,14 @@ export interface WarehouseBrokenRecord {
   broken_date: string;
   customer_id?: string;
   customer_name?: string;
+  product_id?: string;
+  product_code?: string;
   product_name?: string;
+  quantity?: number;
+  unit?: string;
+  unit_price?: number;
+  total_price?: number; // Zarar tutarı
+  price?: number; // Geriye dönük uyumluluk
   reported_by?: string;
   notes?: string;
   custom_fields?: Record<string, any>;
@@ -149,6 +156,8 @@ export async function getWarehousePageData(): Promise<{
         created_at: c.created_at,
       }));
 
+    const today = new Date().toISOString().slice(0, 10);
+
     // 3. Kırıklar Kayıtlarını Çek
     const { data: brokenRows, error: brokenErr } = await service
       .from("camlica_firca_rows")
@@ -162,16 +171,28 @@ export async function getWarehousePageData(): Promise<{
     const brokenRecords: WarehouseBrokenRecord[] = (brokenRows || []).map((r: any) => {
       const data = r.row_data || {};
       const imgs = sortImagesNewestFirst(data.images || (data.image_url ? [data.image_url] : []));
+      const createdDay = r.created_at ? new Date(r.created_at).toISOString().slice(0, 10) : today;
+      const totalPrice = Number(data.total_price ?? data.price ?? 0);
+      const unitPrice = Number(data.unit_price ?? 0);
+      const quantity = Number(data.quantity ?? 1);
+
       return {
         id: r.id,
         company_id: r.company_id,
         image_url: imgs[0] || "",
         images: imgs,
         reason: data.reason || "",
-        broken_date: data.broken_date || r.created_at?.slice(0, 10) || "",
+        broken_date: data.broken_date || createdDay,
         customer_id: data.customer_id || undefined,
         customer_name: data.customer_name || "",
+        product_id: data.product_id || undefined,
+        product_code: data.product_code || "",
         product_name: data.product_name || "",
+        quantity: quantity,
+        unit: data.unit || "Adet",
+        unit_price: unitPrice,
+        total_price: totalPrice,
+        price: totalPrice,
         reported_by: data.reported_by || "",
         notes: data.notes || "",
         custom_fields: data.custom_fields || {},
@@ -210,25 +231,37 @@ export async function getWarehousePageData(): Promise<{
 
       const received_images = sortImagesNewestFirst(rawRecImgs);
       const delivered_images = sortImagesNewestFirst(rawDelImgs);
+      const createdDay = r.created_at ? new Date(r.created_at).toISOString().slice(0, 10) : today;
+
+      // Tarih boşsa kayıt atıldığı gün otomatik atanır
+      const recDate =
+        data.received_date ||
+        (isDepoya && data.delivery_date ? data.delivery_date : "") ||
+        (isDepoya || received_images.length > 0 ? createdDay : "");
+
+      const delDate =
+        data.delivered_date ||
+        (!isDepoya && data.delivery_date ? data.delivery_date : "") ||
+        (!isDepoya || delivered_images.length > 0 ? createdDay : "");
 
       return {
         id: r.id,
         company_id: r.company_id,
-        delivery_type: (data.delivery_type as DeliveryType) || (received_images.length > 0 || data.received_date ? "depoya_teslim_edilen" : "depodan_teslim_alinan"),
+        delivery_type: (data.delivery_type as DeliveryType) || (received_images.length > 0 || recDate ? "depoya_teslim_edilen" : "depodan_teslim_alinan"),
         customer_id: data.customer_id || undefined,
         customer_name: data.customer_name || "",
         // Depoya Teslim Edilen
-        received_date: data.received_date || (isDepoya && data.delivery_date ? data.delivery_date : "") || "",
+        received_date: recDate,
         received_by: data.received_by || (isDepoya && data.delivered_by ? data.delivered_by : "") || "",
         received_image_url: received_images[0] || "",
         received_images,
         // Depodan Teslim Alınan
-        delivered_date: data.delivered_date || (!isDepoya && data.delivery_date ? data.delivery_date : "") || "",
+        delivered_date: delDate,
         delivered_by: data.delivered_by || (!isDepoya && data.delivered_by ? data.delivered_by : "") || "",
         delivered_image_url: delivered_images[0] || "",
         delivered_images,
         // Geriye dönük uyumluluk
-        delivery_date: data.delivery_date || data.received_date || data.delivered_date || r.created_at?.slice(0, 10) || "",
+        delivery_date: data.delivery_date || recDate || delDate || createdDay,
         delivered_by_legacy: data.delivered_by || "",
         receipt_image_url: received_images[0] || delivered_images[0] || "",
         receipt_images: [...received_images, ...delivered_images],
@@ -282,7 +315,14 @@ export async function saveBrokenRecord(record: {
   broken_date: string;
   customer_id?: string;
   customer_name?: string;
+  product_id?: string;
+  product_code?: string;
   product_name?: string;
+  quantity?: number;
+  unit?: string;
+  unit_price?: number;
+  total_price?: number;
+  price?: number;
   reported_by?: string;
   notes?: string;
   custom_fields?: Record<string, any>;
@@ -299,15 +339,36 @@ export async function saveBrokenRecord(record: {
         : []
     );
 
+    const today = new Date().toISOString().slice(0, 10);
+    const brokenDate = record.broken_date?.trim() || today;
+
+    const qty = Number(record.quantity) || 1;
+    const uPrice = Number(record.unit_price) || 0;
+    const calculatedTotal =
+      record.total_price !== undefined && record.total_price !== null && !isNaN(Number(record.total_price))
+        ? Number(record.total_price)
+        : record.price !== undefined && record.price !== null && !isNaN(Number(record.price))
+        ? Number(record.price)
+        : uPrice > 0
+        ? qty * uPrice
+        : 0;
+
     const rowData = {
       _module: "depo_kiriklar",
       image_url: sortedImages[0] || "",
       images: sortedImages,
       reason: record.reason,
-      broken_date: record.broken_date,
+      broken_date: brokenDate,
       customer_id: record.customer_id || null,
       customer_name: record.customer_name || "",
+      product_id: record.product_id || null,
+      product_code: record.product_code || "",
       product_name: record.product_name || "",
+      quantity: qty,
+      unit: record.unit || "Adet",
+      unit_price: uPrice,
+      total_price: calculatedTotal,
+      price: calculatedTotal,
       reported_by: record.reported_by || "",
       notes: record.notes || "",
       custom_fields: record.custom_fields || {},
@@ -328,6 +389,7 @@ export async function saveBrokenRecord(record: {
 
       if (error) throw error;
       revalidatePath("/depo-takip");
+      revalidatePath("/kiriklar");
       return { success: true, data };
     } else {
       // Ekle
@@ -343,10 +405,86 @@ export async function saveBrokenRecord(record: {
 
       if (error) throw error;
       revalidatePath("/depo-takip");
+      revalidatePath("/kiriklar");
       return { success: true, data };
     }
   } catch (err: any) {
     console.error("saveBrokenRecord error:", err);
+    return { success: false, error: err.message };
+  }
+}
+
+// -------------------------------------------------------------
+// Kırıklar Hızlı Fiyat / Zarar Belirleme (Admin)
+// -------------------------------------------------------------
+export async function saveBrokenRecordPrice(
+  id: string,
+  priceData: {
+    product_id?: string;
+    product_code?: string;
+    product_name?: string;
+    quantity?: number;
+    unit?: string;
+    unit_price?: number;
+    total_price: number;
+    notes?: string;
+  }
+): Promise<{ success: boolean; data?: any; error?: string }> {
+  try {
+    const companyId = await getCompanyId();
+    const service: any = await createServiceClient();
+
+    const { data: existingRow, error: fetchErr } = await service
+      .from("camlica_firca_rows")
+      .select("*")
+      .eq("company_id", companyId)
+      .eq("id", id)
+      .single();
+
+    if (fetchErr || !existingRow) {
+      throw new Error("Kırık kaydı bulunamadı.");
+    }
+
+    const currentData = existingRow.row_data || {};
+    const qty = Number(priceData.quantity) || (currentData.quantity ?? 1);
+    const uPrice = Number(priceData.unit_price) || 0;
+    const finalTotal =
+      priceData.total_price !== undefined && !isNaN(Number(priceData.total_price))
+        ? Number(priceData.total_price)
+        : uPrice > 0
+        ? qty * uPrice
+        : 0;
+
+    const updatedRowData = {
+      ...currentData,
+      product_id: priceData.product_id !== undefined ? priceData.product_id : currentData.product_id,
+      product_code: priceData.product_code !== undefined ? priceData.product_code : currentData.product_code,
+      product_name: priceData.product_name !== undefined ? priceData.product_name : currentData.product_name,
+      quantity: qty,
+      unit: priceData.unit || currentData.unit || "Adet",
+      unit_price: uPrice,
+      total_price: finalTotal,
+      price: finalTotal,
+      notes: priceData.notes !== undefined ? priceData.notes : currentData.notes,
+    };
+
+    const { data, error } = await service
+      .from("camlica_firca_rows")
+      .update({
+        row_data: updatedRowData,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("company_id", companyId)
+      .eq("id", id)
+      .select()
+      .single();
+
+    if (error) throw error;
+    revalidatePath("/depo-takip");
+    revalidatePath("/kiriklar");
+    return { success: true, data };
+  } catch (err: any) {
+    console.error("saveBrokenRecordPrice error:", err);
     return { success: false, error: err.message };
   }
 }
@@ -429,29 +567,47 @@ export async function saveDeliveryRecord(record: {
         : prevData.delivered_images || (prevData.delivered_image_url ? [prevData.delivered_image_url] : [])
     );
 
+    const today = new Date().toISOString().slice(0, 10);
+    let receivedDate = record.received_date !== undefined ? record.received_date.trim() : (prevData.received_date || "");
+    let deliveredDate = record.delivered_date !== undefined ? record.delivered_date.trim() : (prevData.delivered_date || "");
+
+    // Eğer tarih yoksa kayıt atıldığı gün otomatik atanır
+    if (finalDeliveryType === "depoya_teslim_edilen" && !receivedDate) {
+      receivedDate = today;
+    }
+    if (finalDeliveryType === "depodan_teslim_alinan" && !deliveredDate) {
+      deliveredDate = today;
+    }
+    if (recImgs.length > 0 && !receivedDate) {
+      receivedDate = today;
+    }
+    if (delImgs.length > 0 && !deliveredDate) {
+      deliveredDate = today;
+    }
+
+    const legacyDate =
+      (finalDeliveryType === "depoya_teslim_edilen" ? receivedDate : deliveredDate) ||
+      record.delivery_date?.trim() ||
+      prevData.delivery_date ||
+      today;
+
     const rowData = {
       _module: "depo_teslimi",
       delivery_type: finalDeliveryType,
       customer_id: record.customer_id !== undefined ? record.customer_id : (prevData.customer_id || null),
       customer_name: record.customer_name || prevData.customer_name || "",
       // Depoya Teslim Edilen (Giriş) - Yalnızca kendi verisi
-      received_date: record.received_date !== undefined ? record.received_date : (prevData.received_date || ""),
+      received_date: receivedDate,
       received_by: record.received_by !== undefined ? record.received_by : (prevData.received_by || ""),
       received_image_url: recImgs[0] || "",
       received_images: recImgs,
       // Depodan Teslim Alınan (Çıkış) - Yalnızca kendi verisi
-      delivered_date: record.delivered_date !== undefined ? record.delivered_date : (prevData.delivered_date || ""),
+      delivered_date: deliveredDate,
       delivered_by: record.delivered_by !== undefined ? record.delivered_by : (prevData.delivered_by || ""),
       delivered_image_url: delImgs[0] || "",
       delivered_images: delImgs,
       // Geriye dönük alanlar - Kesinlikle birbirine sızdırma!
-      delivery_date:
-        (finalDeliveryType === "depoya_teslim_edilen"
-          ? (record.received_date || prevData.received_date)
-          : (record.delivered_date || prevData.delivered_date)) ||
-        record.delivery_date ||
-        prevData.delivery_date ||
-        "",
+      delivery_date: legacyDate,
       receipt_image_url:
         finalDeliveryType === "depoya_teslim_edilen"
           ? (recImgs[0] || "")
@@ -614,8 +770,12 @@ export async function updateWarehouseCell(
     const customFields = rowData.custom_fields || {};
 
     let updatedRowData: Record<string, any>;
-    if (["reason", "broken_date", "product_name", "reported_by", "notes", "customer_name", "delivery_date", "delivered_by", "delivery_type"].includes(columnKey)) {
-      updatedRowData = { ...rowData, [columnKey]: value };
+    if (["reason", "broken_date", "product_name", "reported_by", "notes", "customer_name", "delivery_date", "delivered_by", "delivery_type", "received_date", "delivered_date"].includes(columnKey)) {
+      let finalVal = value;
+      if (["broken_date", "delivery_date", "received_date", "delivered_date"].includes(columnKey) && (!finalVal || !String(finalVal).trim())) {
+        finalVal = row.created_at ? new Date(row.created_at).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10);
+      }
+      updatedRowData = { ...rowData, [columnKey]: finalVal };
     } else {
       updatedRowData = {
         ...rowData,
@@ -655,7 +815,7 @@ export async function quickAddPhotoToDelivery(
 
     const { data: existing } = await service
       .from("camlica_firca_rows")
-      .select("row_data")
+      .select("row_data, created_at")
       .eq("company_id", companyId)
       .eq("id", recordId)
       .single();
@@ -711,7 +871,7 @@ export async function quickAddPhotoToBroken(
 
     const { data: existing } = await service
       .from("camlica_firca_rows")
-      .select("row_data")
+      .select("row_data, created_at")
       .eq("company_id", companyId)
       .eq("id", recordId)
       .single();
@@ -719,10 +879,12 @@ export async function quickAddPhotoToBroken(
     if (!existing?.row_data) throw new Error("Kayıt bulunamadı.");
 
     const rowData = { ...existing.row_data };
+    const today = new Date().toISOString().slice(0, 10);
     const curImages = rowData.images || (rowData.image_url ? [rowData.image_url] : []);
     const sortedImages = sortImagesNewestFirst([photoUrl, ...curImages]);
     rowData.images = sortedImages;
     rowData.image_url = sortedImages[0] || "";
+    if (!rowData.broken_date) rowData.broken_date = today;
 
     const { data, error } = await service
       .from("camlica_firca_rows")

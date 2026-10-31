@@ -6,7 +6,14 @@ import { DepoTakipClient } from "./DepoTakipClient";
 
 export const dynamic = "force-dynamic";
 
-export default async function DepoTakipPage() {
+export default async function DepoTakipPage({
+  searchParams,
+}: {
+  searchParams?: Promise<{ tab?: string }>;
+}) {
+  const resolvedSearchParams = searchParams ? await searchParams : undefined;
+  const initialTab = resolvedSearchParams?.tab === "kiriklar" ? "kiriklar" : "teslimat";
+
   let userRole = "staff";
   let userName = "Depo Sorumlusu";
 
@@ -65,6 +72,7 @@ export default async function DepoTakipPage() {
       customers={customers}
       userRole={userRole}
       userName={userName}
+      initialTab={initialTab}
     />
   );
 }

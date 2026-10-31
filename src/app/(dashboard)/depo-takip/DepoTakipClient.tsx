@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import Image from "next/image";
 import { toast } from "sonner";
 import {
@@ -28,8 +28,19 @@ import {
   CheckCircle2,
   RefreshCw,
   UploadCloud,
+  Coins,
+  DollarSign,
+  CalendarDays,
+  TrendingDown,
+  BarChart3,
+  AlertCircle,
+  Tag,
+  Layers,
+  Check,
 } from "lucide-react";
 import { uploadToStorage } from "@/lib/storage-upload";
+import { formatCurrency, formatDate } from "@/lib/formatters";
+import { searchProductsLive } from "@/app/(dashboard)/teklif/yeni/actions";
 import {
   WarehouseBrokenRecord,
   WarehouseDeliveryRecord,
@@ -37,6 +48,7 @@ import {
   CustomerOption,
   DeliveryType,
   saveBrokenRecord,
+  saveBrokenRecordPrice,
   deleteBrokenRecord,
   saveDeliveryRecord,
   deleteDeliveryRecord,
@@ -67,6 +79,7 @@ interface Props {
   customers: CustomerOption[];
   userRole: string;
   userName: string;
+  initialTab?: "teslimat" | "kiriklar";
 }
 
 export function DepoTakipClient({
@@ -77,9 +90,11 @@ export function DepoTakipClient({
   customers,
   userRole,
   userName,
+  initialTab,
 }: Props) {
   // 1. Sekme: "teslimat" (varsayılan) | "kiriklar"
-  const [activeTab, setActiveTab] = useState<"teslimat" | "kiriklar">("teslimat");
+  const [activeTab, setActiveTab] = useState<"teslimat" | "kiriklar">(initialTab || "teslimat");
+  const isAdmin = userRole === "admin";
 
   // State
   const [brokenRecords, setBrokenRecords] = useState<WarehouseBrokenRecord[]>(initialBrokenRecords);
@@ -107,12 +122,120 @@ export function DepoTakipClient({
     broken_date: new Date().toISOString().slice(0, 10),
     customer_id: "",
     customer_name: "",
+    product_id: "",
+    product_code: "",
     product_name: "",
+    quantity: 1 as number | string,
+    unit: "Adet",
+    unit_price: "" as number | string,
+    total_price: "" as number | string,
     reported_by: userName || "Depo Sorumlusu",
     notes: "",
     custom_fields: {} as Record<string, any>,
   });
   const [uploadingBrokenImg, setUploadingBrokenImg] = useState(false);
+
+  // Hızlı Fiyat / Zarar Belirleme Modalı (Admin'e Özel)
+  const [quickPriceRecord, setQuickPriceRecord] = useState<WarehouseBrokenRecord | null>(null);
+  const [quickPriceForm, setQuickPriceForm] = useState({
+    product_id: "",
+    product_code: "",
+    product_name: "",
+    quantity: 1 as number | string,
+    unit: "Adet",
+    unit_price: "" as number | string,
+    total_price: "" as number | string,
+    notes: "",
+  });
+
+  // Canlı Ürün Arama State
+  const [productSearchQuery, setProductSearchQuery] = useState("");
+  const [productSearchResults, setProductSearchResults] = useState<any[]>([]);
+  const [isSearchingProducts, setIsSearchingProducts] = useState(false);
+  const [showProductDropdown, setShowProductDropdown] = useState(false);
+
+  // Kırıklar Filtresi (Tümü, Bu Ay, Bu Yıl, Fiyat Bekleyenler, Fiyatı Girilmişler)
+  const [brokenLossFilter, setBrokenLossFilter] = useState<
+    "all" | "this_month" | "this_year" | "unpriced" | "priced"
+  >("all");
+
+  // Canlı Ürün Arama Debounce Effect
+  useEffect(() => {
+    if (!productSearchQuery.trim()) {
+      setProductSearchResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      setIsSearchingProducts(true);
+      try {
+        const results = await searchProductsLive(productSearchQuery);
+        setProductSearchResults(results || []);
+      } catch (err) {
+        console.error("Product search error:", err);
+      } finally {
+        setIsSearchingProducts(false);
+      }
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [productSearchQuery]);
+
+  // Yönetici Zarar Takip Metrikleri (Aylık & Yıllık)
+  const lossMetrics = useMemo(() => {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth();
+    const currentMonthStr = `${currentYear}-${String(currentMonth + 1).padStart(2, "0")}`;
+    const currentYearStr = String(currentYear);
+
+    const monthNames = [
+      "Ocak", "Şubat", "Mart", "Nisan", "Mayıs", "Haziran",
+      "Temmuz", "Ağustos", "Eylül", "Ekim", "Kasım", "Aralık"
+    ];
+    const currentMonthName = monthNames[currentMonth];
+
+    let monthlyLoss = 0;
+    let monthlyCount = 0;
+    let yearlyLoss = 0;
+    let yearlyCount = 0;
+    let totalAllLoss = 0;
+    let unpricedCount = 0;
+    let pricedCount = 0;
+
+    brokenRecords.forEach((r) => {
+      const dateStr = (r.broken_date || r.created_at || "").slice(0, 10);
+      const loss = Number(r.total_price || r.price || 0);
+
+      if (loss > 0) {
+        pricedCount++;
+        totalAllLoss += loss;
+      } else {
+        unpricedCount++;
+      }
+
+      if (dateStr.startsWith(currentMonthStr)) {
+        monthlyLoss += loss;
+        monthlyCount++;
+      }
+
+      if (dateStr.startsWith(currentYearStr)) {
+        yearlyLoss += loss;
+        yearlyCount++;
+      }
+    });
+
+    return {
+      currentYear,
+      currentMonthName,
+      monthlyLoss,
+      monthlyCount,
+      yearlyLoss,
+      yearlyCount,
+      totalAllLoss,
+      unpricedCount,
+      pricedCount,
+      totalCount: brokenRecords.length,
+    };
+  }, [brokenRecords]);
 
   // Teslimat Modalları
   const [isDeliveryModalOpen, setIsDeliveryModalOpen] = useState(false);
@@ -171,7 +294,7 @@ export function DepoTakipClient({
     if (r.delivery_type === "depodan_teslim_alinan") return true;
     if (r.delivered_images && r.delivered_images.length > 0) return true;
     if (r.delivered_image_url) return true;
-    if (r.delivered_date && r.delivery_type !== "depoya_teslim_edilen") return true;
+    if (r.delivered_date && (r.delivery_type as string) !== "depoya_teslim_edilen") return true;
     return false;
   };
 
@@ -179,21 +302,44 @@ export function DepoTakipClient({
   // Filtrelenmiş Kırıklar (EN YENİDEN ESKİYE)
   // -------------------------------------------------------------
   const filteredBrokenRecords = useMemo(() => {
-    let list = [...brokenRecords];
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      list = list.filter((r) => {
-        const inCust = r.customer_name?.toLowerCase().includes(q);
-        const inReason = r.reason.toLowerCase().includes(q);
-        const inProd = r.product_name?.toLowerCase().includes(q);
-        const inReported = r.reported_by?.toLowerCase().includes(q);
-        const inDate = r.broken_date.includes(q);
-        const inCustom = Object.values(r.custom_fields || {}).some((v) =>
+    const now = new Date();
+    const currentYearStr = String(now.getFullYear());
+    const currentMonthStr = `${currentYearStr}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+
+    let list = brokenRecords.filter((item) => {
+      // 1. Loss filter
+      if (brokenLossFilter === "this_month") {
+        const d = (item.broken_date || item.created_at || "").slice(0, 10);
+        if (!d.startsWith(currentMonthStr)) return false;
+      } else if (brokenLossFilter === "this_year") {
+        const d = (item.broken_date || item.created_at || "").slice(0, 10);
+        if (!d.startsWith(currentYearStr)) return false;
+      } else if (brokenLossFilter === "unpriced") {
+        const loss = Number(item.total_price || item.price || 0);
+        if (loss > 0) return false;
+      } else if (brokenLossFilter === "priced") {
+        const loss = Number(item.total_price || item.price || 0);
+        if (loss <= 0) return false;
+      }
+
+      // 2. Search query
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        const inCust = (item.customer_name || "").toLowerCase().includes(q);
+        const inReason = (item.reason || "").toLowerCase().includes(q);
+        const inProd =
+          (item.product_name || "").toLowerCase().includes(q) ||
+          (item.product_code || "").toLowerCase().includes(q);
+        const inReported = (item.reported_by || "").toLowerCase().includes(q);
+        const inDate = (item.broken_date || "").includes(q);
+        const inCustom = Object.values(item.custom_fields || {}).some((v) =>
           String(v).toLowerCase().includes(q)
         );
         return inCust || inReason || inProd || inReported || inDate || inCustom;
-      });
-    }
+      }
+
+      return true;
+    });
 
     // Sıralama EN YENİDEN ESKİYE (Newest First)
     list.sort((a, b) => {
@@ -203,7 +349,7 @@ export function DepoTakipClient({
     });
 
     return list;
-  }, [brokenRecords, searchQuery]);
+  }, [brokenRecords, brokenLossFilter, searchQuery]);
 
   // -------------------------------------------------------------
   // Filtrelenmiş Teslimatlar (EN YENİDEN ESKİYE)
@@ -437,14 +583,23 @@ export function DepoTakipClient({
   const openNewBrokenModal = () => {
     setEditingBroken(null);
     setBrokenCustomerSearch("");
+    setProductSearchQuery("");
+    setShowProductDropdown(false);
+    const today = new Date().toISOString().slice(0, 10);
     setBrokenForm({
       image_url: "",
       images: [],
       reason: "",
-      broken_date: new Date().toISOString().slice(0, 10),
+      broken_date: today,
       customer_id: "",
       customer_name: "",
+      product_id: "",
+      product_code: "",
       product_name: "",
+      quantity: 1,
+      unit: "Adet",
+      unit_price: "",
+      total_price: "",
       reported_by: userName || "Depo Sorumlusu",
       notes: "",
       custom_fields: {},
@@ -455,15 +610,25 @@ export function DepoTakipClient({
   const openEditBrokenModal = (r: WarehouseBrokenRecord) => {
     setEditingBroken(r);
     setBrokenCustomerSearch(r.customer_name || "");
+    setProductSearchQuery(r.product_name || "");
+    setShowProductDropdown(false);
+    const today = new Date().toISOString().slice(0, 10);
+    const createdDay = r.created_at?.slice(0, 10) || today;
     const imgList = r.images && r.images.length > 0 ? r.images : r.image_url ? [r.image_url] : [];
     setBrokenForm({
       image_url: r.image_url || imgList[0] || "",
       images: imgList,
       reason: r.reason,
-      broken_date: r.broken_date,
+      broken_date: r.broken_date || createdDay,
       customer_id: r.customer_id || "",
       customer_name: r.customer_name || "",
+      product_id: r.product_id || "",
+      product_code: r.product_code || "",
       product_name: r.product_name || "",
+      quantity: r.quantity || 1,
+      unit: r.unit || "Adet",
+      unit_price: r.unit_price || "",
+      total_price: r.total_price || r.price || "",
       reported_by: r.reported_by || userName || "Depo Sorumlusu",
       notes: r.notes || "",
       custom_fields: { ...(r.custom_fields || {}) },
@@ -471,9 +636,77 @@ export function DepoTakipClient({
     setIsBrokenModalOpen(true);
   };
 
+  // Hızlı Fiyat / Zarar Belirleme (Admin)
+  const openQuickPriceModal = (item: WarehouseBrokenRecord) => {
+    setQuickPriceRecord(item);
+    setQuickPriceForm({
+      product_id: item.product_id || "",
+      product_code: item.product_code || "",
+      product_name: item.product_name || "",
+      quantity: item.quantity || 1,
+      unit: item.unit || "Adet",
+      unit_price: item.unit_price || "",
+      total_price: item.total_price || item.price || "",
+      notes: item.notes || "",
+    });
+    setProductSearchQuery(item.product_name || "");
+    setShowProductDropdown(false);
+  };
+
+  const handleSaveQuickPrice = async () => {
+    if (!quickPriceRecord) return;
+    const qty = Number(quickPriceForm.quantity) || 1;
+    const uPrice = Number(quickPriceForm.unit_price) || 0;
+    const total =
+      quickPriceForm.total_price !== "" && !isNaN(Number(quickPriceForm.total_price))
+        ? Number(quickPriceForm.total_price)
+        : uPrice > 0
+        ? qty * uPrice
+        : 0;
+
+    startTransition(async () => {
+      const res = await saveBrokenRecordPrice(quickPriceRecord.id, {
+        product_id: quickPriceForm.product_id || undefined,
+        product_code: quickPriceForm.product_code || undefined,
+        product_name: quickPriceForm.product_name || undefined,
+        quantity: qty,
+        unit: quickPriceForm.unit || "Adet",
+        unit_price: uPrice,
+        total_price: total,
+        notes: quickPriceForm.notes || undefined,
+      });
+
+      if (res.success) {
+        toast.success("Kırık zarar tutarı başarıyla kaydedildi!");
+        setBrokenRecords((prev) =>
+          prev.map((r) =>
+            r.id === quickPriceRecord.id
+              ? {
+                  ...r,
+                  product_id: quickPriceForm.product_id || undefined,
+                  product_code: quickPriceForm.product_code || undefined,
+                  product_name: quickPriceForm.product_name || undefined,
+                  quantity: qty,
+                  unit: quickPriceForm.unit || "Adet",
+                  unit_price: uPrice,
+                  total_price: total,
+                  price: total,
+                  notes: quickPriceForm.notes || r.notes,
+                }
+              : r
+          )
+        );
+        setQuickPriceRecord(null);
+      } else {
+        toast.error("Hata: " + res.error);
+      }
+    });
+  };
+
   const handleSaveBroken = async (saveAndNew: boolean = false) => {
     const primaryImg = brokenForm.images[0] || brokenForm.image_url;
-    if (!primaryImg) {
+    // Sadece admin ise fotoğrafsız ürün kırığı girişine izin ver, diğer roller için fotoğraf zorunlu
+    if (!primaryImg && !isAdmin) {
       toast.error("Lütfen en az bir kırık / hasar fotoğrafı yükleyiniz.");
       return;
     }
@@ -482,16 +715,34 @@ export function DepoTakipClient({
       return;
     }
 
+    const today = new Date().toISOString().slice(0, 10);
+    const finalBrokenDate = brokenForm.broken_date?.trim() || today;
+    const finalQty = Number(brokenForm.quantity) || 1;
+    const finalUPrice = Number(brokenForm.unit_price) || 0;
+    const finalTotalPrice =
+      brokenForm.total_price !== "" && !isNaN(Number(brokenForm.total_price))
+        ? Number(brokenForm.total_price)
+        : finalUPrice > 0
+        ? finalQty * finalUPrice
+        : 0;
+
     startTransition(async () => {
       const res = await saveBrokenRecord({
         id: editingBroken?.id,
-        image_url: primaryImg,
-        images: brokenForm.images.length > 0 ? brokenForm.images : [primaryImg],
+        image_url: primaryImg || "",
+        images: brokenForm.images.length > 0 ? brokenForm.images : primaryImg ? [primaryImg] : [],
         reason: brokenForm.reason,
-        broken_date: brokenForm.broken_date,
+        broken_date: finalBrokenDate,
         customer_id: brokenForm.customer_id || undefined,
         customer_name: brokenForm.customer_name || undefined,
+        product_id: brokenForm.product_id || undefined,
+        product_code: brokenForm.product_code || undefined,
         product_name: brokenForm.product_name || undefined,
+        quantity: finalQty,
+        unit: brokenForm.unit || "Adet",
+        unit_price: finalUPrice,
+        total_price: finalTotalPrice,
+        price: finalTotalPrice,
         reported_by: brokenForm.reported_by || undefined,
         notes: brokenForm.notes || undefined,
         custom_fields: brokenForm.custom_fields,
@@ -505,13 +756,20 @@ export function DepoTakipClient({
               r.id === editingBroken.id
                 ? {
                     ...r,
-                    image_url: primaryImg,
+                    image_url: primaryImg || "",
                     images: brokenForm.images,
                     reason: brokenForm.reason,
-                    broken_date: brokenForm.broken_date,
+                    broken_date: finalBrokenDate,
                     customer_id: brokenForm.customer_id || undefined,
                     customer_name: brokenForm.customer_name || undefined,
+                    product_id: brokenForm.product_id || undefined,
+                    product_code: brokenForm.product_code || undefined,
                     product_name: brokenForm.product_name || undefined,
+                    quantity: finalQty,
+                    unit: brokenForm.unit || "Adet",
+                    unit_price: finalUPrice,
+                    total_price: finalTotalPrice,
+                    price: finalTotalPrice,
                     reported_by: brokenForm.reported_by || undefined,
                     notes: brokenForm.notes || undefined,
                     custom_fields: brokenForm.custom_fields,
@@ -522,13 +780,20 @@ export function DepoTakipClient({
         } else if (res.data) {
           const newRow: WarehouseBrokenRecord = {
             id: res.data.id,
-            image_url: primaryImg,
+            image_url: primaryImg || "",
             images: brokenForm.images,
             reason: brokenForm.reason,
-            broken_date: brokenForm.broken_date,
+            broken_date: finalBrokenDate,
             customer_id: brokenForm.customer_id || undefined,
             customer_name: brokenForm.customer_name || undefined,
+            product_id: brokenForm.product_id || undefined,
+            product_code: brokenForm.product_code || undefined,
             product_name: brokenForm.product_name || undefined,
+            quantity: finalQty,
+            unit: brokenForm.unit || "Adet",
+            unit_price: finalUPrice,
+            total_price: finalTotalPrice,
+            price: finalTotalPrice,
             reported_by: brokenForm.reported_by || undefined,
             notes: brokenForm.notes || undefined,
             custom_fields: brokenForm.custom_fields,
@@ -568,18 +833,17 @@ export function DepoTakipClient({
     setCustomerSearch("");
     const today = new Date().toISOString().slice(0, 10);
     const chosenType = defaultType || "depoya_teslim_edilen";
-    const isEdilen = chosenType === "depoya_teslim_edilen";
 
     setDeliveryForm({
       activeSection: chosenType,
       customer_id: "",
       customer_name: "",
-      received_date: isEdilen ? today : "",
-      received_by: isEdilen ? (userName || "Depo Sorumlusu") : "",
+      received_date: today,
+      received_by: userName || "Depo Sorumlusu",
       received_image_url: "",
       received_images: [],
-      delivered_date: !isEdilen ? today : "",
-      delivered_by: !isEdilen ? (userName || "Depo Sorumlusu") : "",
+      delivered_date: today,
+      delivered_by: userName || "Depo Sorumlusu",
       delivered_image_url: "",
       delivered_images: [],
       notes: "",
@@ -592,6 +856,7 @@ export function DepoTakipClient({
     setEditingDelivery(r);
     setCustomerSearch(r.customer_name);
     const today = new Date().toISOString().slice(0, 10);
+    const createdDay = r.created_at?.slice(0, 10) || today;
     const recImgs = sortImagesNewestFirst(
       r.received_images && r.received_images.length > 0
         ? r.received_images
@@ -615,11 +880,11 @@ export function DepoTakipClient({
       activeSection: isEdilen ? "depoya_teslim_edilen" : "depodan_teslim_alinan",
       customer_id: r.customer_id || "",
       customer_name: r.customer_name,
-      received_date: r.received_date || (isEdilen ? today : ""),
+      received_date: r.received_date || (isEdilen ? createdDay : ""),
       received_by: r.received_by || (isEdilen ? (userName || "Depo Sorumlusu") : ""),
       received_image_url: recImgs[0] || "",
       received_images: recImgs,
-      delivered_date: r.delivered_date || (!isEdilen ? today : ""),
+      delivered_date: r.delivered_date || (!isEdilen ? createdDay : ""),
       delivered_by: r.delivered_by || (!isEdilen ? (userName || "Depo Sorumlusu") : ""),
       delivered_image_url: delImgs[0] || "",
       delivered_images: delImgs,
@@ -636,22 +901,31 @@ export function DepoTakipClient({
     }
 
     startTransition(async () => {
+      const today = new Date().toISOString().slice(0, 10);
       const isEdilen = deliveryForm.activeSection === "depoya_teslim_edilen";
       const recImgs = sortImagesNewestFirst(deliveryForm.received_images);
       const delImgs = sortImagesNewestFirst(deliveryForm.delivered_images);
       const recPrimary = recImgs[0] || deliveryForm.received_image_url || "";
       const delPrimary = delImgs[0] || deliveryForm.delivered_image_url || "";
 
+      // Tarih girilmemişse kayıt atıldığı günü (bugün) otomatik atasın
+      const finalRecDate =
+        deliveryForm.received_date?.trim() ||
+        (isEdilen || recImgs.length > 0 ? today : "");
+      const finalDelDate =
+        deliveryForm.delivered_date?.trim() ||
+        (!isEdilen || delImgs.length > 0 ? today : "");
+
       const res = await saveDeliveryRecord({
         id: editingDelivery?.id,
         delivery_type: deliveryForm.activeSection,
         customer_id: deliveryForm.customer_id || undefined,
         customer_name: deliveryForm.customer_name.trim(),
-        received_date: deliveryForm.received_date,
+        received_date: finalRecDate,
         received_by: deliveryForm.received_by,
         received_image_url: recPrimary,
         received_images: recImgs,
-        delivered_date: deliveryForm.delivered_date,
+        delivered_date: finalDelDate,
         delivered_by: deliveryForm.delivered_by,
         delivered_image_url: delPrimary,
         delivered_images: delImgs,
@@ -670,17 +944,18 @@ export function DepoTakipClient({
                     delivery_type: deliveryForm.activeSection,
                     customer_id: deliveryForm.customer_id || undefined,
                     customer_name: deliveryForm.customer_name,
-                    received_date: deliveryForm.received_date,
+                    received_date: finalRecDate,
                     received_by: deliveryForm.received_by,
                     received_image_url: recPrimary,
                     received_images: recImgs,
-                    delivered_date: deliveryForm.delivered_date,
+                    delivered_date: finalDelDate,
                     delivered_by: deliveryForm.delivered_by,
                     delivered_image_url: delPrimary,
                     delivered_images: delImgs,
                     delivery_date:
-                      (isEdilen ? deliveryForm.received_date : deliveryForm.delivered_date) ||
-                      r.delivery_date,
+                      (isEdilen ? finalRecDate : finalDelDate) ||
+                      r.delivery_date ||
+                      today,
                     receipt_image_url: isEdilen ? recPrimary : delPrimary,
                     notes: deliveryForm.notes,
                     custom_fields: deliveryForm.custom_fields,
@@ -694,15 +969,15 @@ export function DepoTakipClient({
             delivery_type: deliveryForm.activeSection,
             customer_id: deliveryForm.customer_id || undefined,
             customer_name: deliveryForm.customer_name,
-            received_date: deliveryForm.received_date,
+            received_date: finalRecDate,
             received_by: deliveryForm.received_by,
             received_image_url: recPrimary,
             received_images: recImgs,
-            delivered_date: deliveryForm.delivered_date,
+            delivered_date: finalDelDate,
             delivered_by: deliveryForm.delivered_by,
             delivered_image_url: delPrimary,
             delivered_images: delImgs,
-            delivery_date: isEdilen ? deliveryForm.received_date : deliveryForm.delivered_date,
+            delivery_date: (isEdilen ? finalRecDate : finalDelDate) || today,
             receipt_image_url: isEdilen ? recPrimary : delPrimary,
             notes: deliveryForm.notes,
             custom_fields: deliveryForm.custom_fields,
@@ -831,7 +1106,7 @@ export function DepoTakipClient({
                     className="flex items-center gap-1 px-3 py-2 bg-indigo-600 active:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs"
                   >
                     <Plus className="w-4 h-4" />
-                    + Teslimat
+                    + Yeni Teslimat
                   </button>
                 ) : (
                   <button
@@ -898,7 +1173,7 @@ export function DepoTakipClient({
       {/* ========================================================= */}
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 mt-3 sm:mt-5">
         {/* Arama & Aksiyonlar Araç Çubuğu */}
-        <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-xs mb-3">
+        <div className="bg-white rounded-2xl p-3 sm:p-4 border border-slate-200/80 shadow-xs mb-3 space-y-2.5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
             {/* Arama Kutusu */}
             <div className="relative flex-1">
@@ -940,31 +1215,88 @@ export function DepoTakipClient({
                   <button
                     type="button"
                     onClick={() => openNewDeliveryModal("depoya_teslim_edilen")}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Yeni Teslimat Ekle</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => openNewDeliveryModal("depoya_teslim_edilen")}
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-sky-600 hover:bg-sky-700 active:scale-98 text-white text-xs font-bold rounded-xl shadow-xs transition"
                   >
                     <ArrowDownLeft className="w-4 h-4" />
-                    <span>+ Depoya Teslim Girişi</span>
+                    <span>+ Depoya Giriş</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => openNewDeliveryModal("depodan_teslim_alinan")}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                    className="flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white text-xs font-bold rounded-xl shadow-xs transition"
                   >
                     <ArrowUpRight className="w-4 h-4" />
-                    <span>+ Depodan Teslim Çıkışı</span>
+                    <span>+ Depodan Çıkış</span>
                   </button>
                 </>
               ) : (
                 <button
                   type="button"
                   onClick={openNewBrokenModal}
-                  className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                  className="flex items-center gap-1.5 px-4 py-2 bg-rose-600 hover:bg-rose-700 active:scale-98 text-white text-xs font-bold rounded-xl shadow-xs transition"
                 >
                   <Plus className="w-4 h-4" />
                   <span>+ Yeni Kırık Ürün Bildir</span>
                 </button>
               )}
             </div>
+          </div>
+
+          {/* Mobilde Arama Altı Hızlı Butonlar */}
+          <div className="flex sm:hidden items-center gap-1.5 pt-2 border-t border-slate-100 overflow-x-auto no-scrollbar">
+            <button
+              type="button"
+              onClick={() => setIsColumnModalOpen(true)}
+              className="flex items-center gap-1 px-2.5 py-1.5 bg-slate-100 text-slate-700 text-xs font-semibold rounded-lg shrink-0"
+            >
+              <Columns className="w-3.5 h-3.5 text-slate-500" />
+              <span>+ Sütun</span>
+            </button>
+            {activeTab === "teslimat" ? (
+              <>
+                <button
+                  type="button"
+                  onClick={() => openNewDeliveryModal("depoya_teslim_edilen")}
+                  className="flex items-center gap-1 px-3 py-1.5 bg-indigo-600 text-white text-xs font-bold rounded-lg shrink-0 shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>+ Yeni Teslimat</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openNewDeliveryModal("depoya_teslim_edilen")}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-sky-600 text-white text-xs font-bold rounded-lg shrink-0 shadow-xs"
+                >
+                  <ArrowDownLeft className="w-3.5 h-3.5" />
+                  <span>+ Giriş</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => openNewDeliveryModal("depodan_teslim_alinan")}
+                  className="flex items-center gap-1 px-2.5 py-1.5 bg-emerald-600 text-white text-xs font-bold rounded-lg shrink-0 shadow-xs"
+                >
+                  <ArrowUpRight className="w-3.5 h-3.5" />
+                  <span>+ Çıkış</span>
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={openNewBrokenModal}
+                className="flex items-center gap-1 px-3 py-1.5 bg-rose-600 text-white text-xs font-bold rounded-lg shrink-0 shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>+ Kırık Ekle</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -1028,15 +1360,24 @@ export function DepoTakipClient({
                 <div className="flex flex-wrap items-center justify-center gap-2">
                   <button
                     onClick={() => openNewDeliveryModal("depoya_teslim_edilen")}
-                    className="px-4 py-2.5 bg-sky-600 text-white text-xs font-bold rounded-xl shadow-xs"
+                    className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-1.5"
                   >
-                    + Depoya Teslim Girişi
+                    <Plus className="w-4 h-4" />
+                    <span>+ Yeni Teslimat Ekle</span>
+                  </button>
+                  <button
+                    onClick={() => openNewDeliveryModal("depoya_teslim_edilen")}
+                    className="px-4 py-2.5 bg-sky-600 hover:bg-sky-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-1.5"
+                  >
+                    <ArrowDownLeft className="w-4 h-4" />
+                    <span>+ Depoya Teslim Girişi</span>
                   </button>
                   <button
                     onClick={() => openNewDeliveryModal("depodan_teslim_alinan")}
-                    className="px-4 py-2.5 bg-emerald-600 text-white text-xs font-bold rounded-xl shadow-xs"
+                    className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-xs transition flex items-center gap-1.5"
                   >
-                    + Depodan Teslim Çıkışı
+                    <ArrowUpRight className="w-4 h-4" />
+                    <span>+ Depodan Teslim Çıkışı</span>
                   </button>
                 </div>
               </div>
@@ -1119,14 +1460,12 @@ export function DepoTakipClient({
                           </div>
 
                           {/* Tarih & Kişi */}
-                          {item.received_date || item.received_by ? (
+                          {item.received_date || item.received_by || receivedImgs.length > 0 ? (
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-600">
-                              {item.received_date && (
-                                <span className="flex items-center gap-1 font-semibold text-slate-800">
-                                  <Calendar className="w-3 h-3 text-sky-600" />
-                                  {item.received_date}
-                                </span>
-                              )}
+                              <span className="flex items-center gap-1 font-semibold text-slate-800">
+                                <Calendar className="w-3 h-3 text-sky-600" />
+                                {item.received_date || item.created_at?.slice(0, 10)}
+                              </span>
                               {item.received_by && (
                                 <span className="flex items-center gap-1 text-slate-600">
                                   <User className="w-3 h-3 text-slate-400" />
@@ -1215,14 +1554,12 @@ export function DepoTakipClient({
                           </div>
 
                           {/* Tarih & Kişi */}
-                          {item.delivered_date || item.delivered_by ? (
+                          {item.delivered_date || item.delivered_by || deliveredImgs.length > 0 ? (
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] text-slate-600">
-                              {item.delivered_date && (
-                                <span className="flex items-center gap-1 font-semibold text-slate-800">
-                                  <Calendar className="w-3 h-3 text-emerald-600" />
-                                  {item.delivered_date}
-                                </span>
-                              )}
+                              <span className="flex items-center gap-1 font-semibold text-slate-800">
+                                <Calendar className="w-3 h-3 text-emerald-600" />
+                                {item.delivered_date || item.created_at?.slice(0, 10)}
+                              </span>
                               {item.delivered_by && (
                                 <span className="flex items-center gap-1 text-slate-600">
                                   <User className="w-3 h-3 text-slate-400" />
@@ -1296,6 +1633,36 @@ export function DepoTakipClient({
                       </div>
                     );
                   })}
+
+                  {/* Mobilde Liste Altı Ekleme Butonları */}
+                  <div className="pt-2 flex flex-col sm:flex-row gap-2">
+                    <button
+                      type="button"
+                      onClick={() => openNewDeliveryModal("depoya_teslim_edilen")}
+                      className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white text-xs font-bold rounded-2xl shadow-sm flex items-center justify-center gap-2 transition"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>+ Yeni Teslimat Kaydı Ekle</span>
+                    </button>
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        type="button"
+                        onClick={() => openNewDeliveryModal("depoya_teslim_edilen")}
+                        className="py-2.5 bg-sky-600 hover:bg-sky-700 active:scale-98 text-white text-xs font-bold rounded-xl shadow-xs flex items-center justify-center gap-1 transition"
+                      >
+                        <ArrowDownLeft className="w-3.5 h-3.5" />
+                        <span>+ Giriş Ekle</span>
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => openNewDeliveryModal("depodan_teslim_alinan")}
+                        className="py-2.5 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white text-xs font-bold rounded-xl shadow-xs flex items-center justify-center gap-1 transition"
+                      >
+                        <ArrowUpRight className="w-3.5 h-3.5" />
+                        <span>+ Çıkış Ekle</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
 
                 {/* --------------------------------------------------------- */}
@@ -1407,14 +1774,12 @@ export function DepoTakipClient({
                                     </button>
                                   )}
                                   <div className="min-w-0">
-                                    {item.received_date || item.received_by ? (
+                                    {item.received_date || item.received_by || receivedImgs.length > 0 ? (
                                       <>
-                                        {item.received_date && (
-                                          <div className="flex items-center gap-1 text-slate-700 font-semibold text-xs whitespace-nowrap">
-                                            <Calendar className="w-3 h-3 text-sky-600 shrink-0" />
-                                            <span>{item.received_date}</span>
-                                          </div>
-                                        )}
+                                        <div className="flex items-center gap-1 text-slate-700 font-semibold text-xs whitespace-nowrap">
+                                          <Calendar className="w-3 h-3 text-sky-600 shrink-0" />
+                                          <span>{item.received_date || item.created_at?.slice(0, 10)}</span>
+                                        </div>
                                         {item.received_by && (
                                           <div className="flex items-center gap-1 text-slate-500 text-[11px] mt-0.5 whitespace-nowrap">
                                             <User className="w-3 h-3 text-slate-400 shrink-0" />
@@ -1493,14 +1858,12 @@ export function DepoTakipClient({
                                     </button>
                                   )}
                                   <div className="min-w-0">
-                                    {item.delivered_date || item.delivered_by ? (
+                                    {item.delivered_date || item.delivered_by || deliveredImgs.length > 0 ? (
                                       <>
-                                        {item.delivered_date && (
-                                          <div className="flex items-center gap-1 text-slate-700 font-semibold text-xs whitespace-nowrap">
-                                            <Calendar className="w-3 h-3 text-emerald-600 shrink-0" />
-                                            <span>{item.delivered_date}</span>
-                                          </div>
-                                        )}
+                                        <div className="flex items-center gap-1 text-slate-700 font-semibold text-xs whitespace-nowrap">
+                                          <Calendar className="w-3 h-3 text-emerald-600 shrink-0" />
+                                          <span>{item.delivered_date || item.created_at?.slice(0, 10)}</span>
+                                        </div>
                                         {item.delivered_by && (
                                           <div className="flex items-center gap-1 text-slate-500 text-[11px] mt-0.5 whitespace-nowrap">
                                             <User className="w-3 h-3 text-slate-400 shrink-0" />
@@ -1567,6 +1930,38 @@ export function DepoTakipClient({
                           );
                         })}
                       </tbody>
+                      <tfoot>
+                        <tr className="bg-slate-50/90 hover:bg-indigo-50/40 border-t-2 border-dashed border-slate-200 transition">
+                          <td colSpan={5 + deliveryColumns.length} className="px-4 py-3.5 text-center">
+                            <div className="flex items-center justify-center gap-3">
+                              <button
+                                type="button"
+                                onClick={() => openNewDeliveryModal("depoya_teslim_edilen")}
+                                className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 active:scale-98 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                              >
+                                <Plus className="w-4 h-4" />
+                                <span>+ Yeni Teslimat / Satır Ekle</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openNewDeliveryModal("depoya_teslim_edilen")}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-sky-600 hover:bg-sky-700 active:scale-98 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                              >
+                                <ArrowDownLeft className="w-4 h-4" />
+                                <span>+ Depoya Teslim Girişi</span>
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => openNewDeliveryModal("depodan_teslim_alinan")}
+                                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 active:scale-98 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                              >
+                                <ArrowUpRight className="w-4 h-4" />
+                                <span>+ Depodan Teslim Çıkışı</span>
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      </tfoot>
                     </table>
                   </div>
                 </div>
@@ -1579,7 +1974,225 @@ export function DepoTakipClient({
         {/* 2. SEKME: KIRIKLAR & GÖRSELLER                            */}
         {/* ========================================================= */}
         {activeTab === "kiriklar" && (
-          <div>
+          <div className="space-y-4">
+            {/* EN ÜSTTE: AYLIK & YILLIK ZARAR KPI KARTLARI */}
+            <div className="bg-white rounded-3xl p-4 sm:p-5 border border-slate-200/90 shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                  <div className="flex items-center gap-2">
+                    <div className="w-8 h-8 rounded-xl bg-rose-100 text-rose-700 flex items-center justify-center">
+                      <TrendingDown className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h2 className="text-sm sm:text-base font-black text-slate-900">
+                        Kırık & Zayiat Finansal Zarar Takip Paneli
+                      </h2>
+                      <p className="text-[11px] text-slate-500">
+                        Ürün bazlı kırık kayıtları ve şirkete yansıyan maliyet özetleri
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={openNewBrokenModal}
+                    className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-rose-600 hover:bg-rose-700 active:scale-98 text-white text-xs font-bold rounded-xl shadow-xs transition shrink-0"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>+ Yeni Ürün Kırığı Ekle</span>
+                  </button>
+                </div>
+
+                {/* 4'lü KPI Grid */}
+                <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                  {/* Bu Ayki Zarar */}
+                  <div
+                    onClick={() =>
+                      setBrokenLossFilter(brokenLossFilter === "this_month" ? "all" : "this_month")
+                    }
+                    className={`cursor-pointer rounded-2xl p-4 transition-all relative overflow-hidden ${
+                      brokenLossFilter === "this_month"
+                        ? "bg-rose-700 text-white ring-2 ring-rose-400 shadow-md"
+                        : "bg-gradient-to-br from-rose-500 to-rose-600 text-white shadow-xs hover:shadow-md"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10.5px] uppercase font-bold tracking-wider text-rose-100">
+                        Bu Ayki Zarar ({lossMetrics.currentMonthName})
+                      </span>
+                      <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center">
+                        <CalendarDays className="w-4 h-4 text-white" />
+                      </div>
+                    </div>
+                    <div className="text-lg sm:text-2xl font-black mt-2 tracking-tight font-mono">
+                      {formatCurrency(lossMetrics.monthlyLoss)}
+                    </div>
+                    <div className="text-[11px] text-rose-100/90 mt-1 flex items-center justify-between">
+                      <span>{lossMetrics.monthlyCount} adet kayıt</span>
+                      <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-semibold">
+                        {brokenLossFilter === "this_month" ? "Filtrelendi" : "Filtrele"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Bu Yılki Zarar */}
+                  <div
+                    onClick={() =>
+                      setBrokenLossFilter(brokenLossFilter === "this_year" ? "all" : "this_year")
+                    }
+                    className={`cursor-pointer rounded-2xl p-4 transition-all relative overflow-hidden ${
+                      brokenLossFilter === "this_year"
+                        ? "bg-amber-700 text-white ring-2 ring-amber-400 shadow-md"
+                        : "bg-gradient-to-br from-amber-500 to-orange-600 text-white shadow-xs hover:shadow-md"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10.5px] uppercase font-bold tracking-wider text-amber-100">
+                        Bu Yılki Zarar ({lossMetrics.currentYear})
+                      </span>
+                      <div className="w-7 h-7 rounded-lg bg-white/20 flex items-center justify-center">
+                        <Coins className="w-4 h-4 text-white" />
+                      </div>
+                    </div>
+                    <div className="text-lg sm:text-2xl font-black mt-2 tracking-tight font-mono">
+                      {formatCurrency(lossMetrics.yearlyLoss)}
+                    </div>
+                    <div className="text-[11px] text-amber-100/90 mt-1 flex items-center justify-between">
+                      <span>{lossMetrics.yearlyCount} adet kayıt</span>
+                      <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-semibold">
+                        {brokenLossFilter === "this_year" ? "Filtrelendi" : "Filtrele"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Fiyat Bekleyenler */}
+                  <div
+                    onClick={() =>
+                      setBrokenLossFilter(brokenLossFilter === "unpriced" ? "all" : "unpriced")
+                    }
+                    className={`cursor-pointer rounded-2xl p-4 border transition-all ${
+                      brokenLossFilter === "unpriced"
+                        ? "bg-amber-100 border-amber-400 shadow-sm"
+                        : "bg-slate-50 border-slate-200/90 hover:border-amber-300 shadow-xs"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10.5px] uppercase font-bold tracking-wider text-slate-600">
+                        Fiyat Bekleyenler
+                      </span>
+                      <div className="w-7 h-7 rounded-lg bg-amber-100 text-amber-700 flex items-center justify-center">
+                        <AlertCircle className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div className="text-lg sm:text-2xl font-black text-slate-900 mt-2 font-mono">
+                      {lossMetrics.unpricedCount} <span className="text-xs font-semibold text-slate-400">kayıt</span>
+                    </div>
+                    <div className="text-[11px] text-amber-700 font-semibold mt-1">
+                      {brokenLossFilter === "unpriced" ? "✓ Filtrelendi (Kaldır)" : "Fiyatsızları filtrele"}
+                    </div>
+                  </div>
+
+                  {/* Genel Toplam Zarar */}
+                  <div
+                    onClick={() => setBrokenLossFilter("all")}
+                    className={`cursor-pointer rounded-2xl p-4 border transition-all ${
+                      brokenLossFilter === "all"
+                        ? "bg-slate-900 text-white border-slate-900 shadow-md"
+                        : "bg-slate-50 border-slate-200/90 hover:border-slate-300 shadow-xs"
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span
+                        className={`text-[10.5px] uppercase font-bold tracking-wider ${
+                          brokenLossFilter === "all" ? "text-slate-300" : "text-slate-600"
+                        }`}
+                      >
+                        Genel Toplam Zarar
+                      </span>
+                      <div
+                        className={`w-7 h-7 rounded-lg flex items-center justify-center ${
+                          brokenLossFilter === "all" ? "bg-white/20 text-white" : "bg-slate-200 text-slate-700"
+                        }`}
+                      >
+                        <DollarSign className="w-4 h-4" />
+                      </div>
+                    </div>
+                    <div
+                      className={`text-lg sm:text-2xl font-black mt-2 tracking-tight font-mono ${
+                        brokenLossFilter === "all" ? "text-white" : "text-slate-900"
+                      }`}
+                    >
+                      {formatCurrency(lossMetrics.totalAllLoss)}
+                    </div>
+                    <div
+                      className={`text-[11px] mt-1 ${
+                        brokenLossFilter === "all" ? "text-slate-300" : "text-slate-500"
+                      }`}
+                    >
+                      Toplam {lossMetrics.totalCount} kırık kaydı
+                    </div>
+                  </div>
+                </div>
+
+                {/* Hızlı Filtre Butonları */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-1 text-xs">
+                  <span className="text-slate-400 text-[11px] font-semibold mr-1">Filtre:</span>
+                  <button
+                    type="button"
+                    onClick={() => setBrokenLossFilter("all")}
+                    className={`px-3 py-1 rounded-xl font-bold transition ${
+                      brokenLossFilter === "all"
+                        ? "bg-slate-900 text-white"
+                        : "bg-slate-100 text-slate-600 hover:bg-slate-200"
+                    }`}
+                  >
+                    Tüm Kayıtlar ({lossMetrics.totalCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBrokenLossFilter("this_month")}
+                    className={`px-3 py-1 rounded-xl font-bold transition ${
+                      brokenLossFilter === "this_month"
+                        ? "bg-rose-600 text-white shadow-xs"
+                        : "bg-rose-50 text-rose-700 hover:bg-rose-100"
+                    }`}
+                  >
+                    Bu Ay ({lossMetrics.monthlyCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBrokenLossFilter("this_year")}
+                    className={`px-3 py-1 rounded-xl font-bold transition ${
+                      brokenLossFilter === "this_year"
+                        ? "bg-amber-600 text-white shadow-xs"
+                        : "bg-amber-50 text-amber-700 hover:bg-amber-100"
+                    }`}
+                  >
+                    Bu Yıl ({lossMetrics.yearlyCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBrokenLossFilter("unpriced")}
+                    className={`px-3 py-1 rounded-xl font-bold transition ${
+                      brokenLossFilter === "unpriced"
+                        ? "bg-amber-500 text-white shadow-xs"
+                        : "bg-amber-50 text-amber-800 hover:bg-amber-100"
+                    }`}
+                  >
+                    ⚠️ Fiyat Bekleyenler ({lossMetrics.unpricedCount})
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBrokenLossFilter("priced")}
+                    className={`px-3 py-1 rounded-xl font-bold transition ${
+                      brokenLossFilter === "priced"
+                        ? "bg-emerald-600 text-white shadow-xs"
+                        : "bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                    }`}
+                  >
+                    ✓ Fiyatı Girilmişler ({lossMetrics.pricedCount})
+                  </button>
+                </div>
+              </div>
+
             {filteredBrokenRecords.length === 0 ? (
               <div className="bg-white rounded-3xl p-8 sm:p-12 text-center border border-slate-200 shadow-xs">
                 <div className="w-16 h-16 rounded-3xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-3">
@@ -1589,19 +2202,32 @@ export function DepoTakipClient({
                   Kayıtlı Kırık Ürün Bulunamadı
                 </h3>
                 <p className="text-xs text-slate-500 max-w-sm mx-auto mb-4">
-                  Depoda kırılan veya hasar gören ürünlerin görselini ve sebebini hemen
-                  kaydedebilirsiniz.
+                  {brokenLossFilter !== "all"
+                    ? "Seçili filtreye uygun kırık kaydı bulunamadı. Filtreyi değiştirebilir veya yeni kırık ekleyebilirsiniz."
+                    : "Depoda kırılan veya hasar gören ürünlerin görselini ve sebebini hemen kaydedebilirsiniz."}
                 </p>
-                <button
-                  onClick={openNewBrokenModal}
-                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition"
-                >
-                  + Yeni Kırık Ürün Bildir
-                </button>
+                <div className="flex items-center justify-center gap-2">
+                  {brokenLossFilter !== "all" && (
+                    <button
+                      type="button"
+                      onClick={() => setBrokenLossFilter("all")}
+                      className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition"
+                    >
+                      Filtreyi Temizle
+                    </button>
+                  )}
+                  <button
+                    onClick={openNewBrokenModal}
+                    className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold rounded-xl shadow-xs transition"
+                  >
+                    + Yeni Kırık Ürün Bildir
+                  </button>
+                </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
-                {filteredBrokenRecords.map((item) => {
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
+                  {filteredBrokenRecords.map((item) => {
                   const imgList = sortImagesNewestFirst(
                     item.images && item.images.length > 0
                       ? item.images
@@ -1647,7 +2273,7 @@ export function DepoTakipClient({
                         <div className="absolute top-2 left-2 flex items-center gap-1">
                           <span className="px-2 py-1 bg-black/65 backdrop-blur-sm text-white rounded-lg text-[10px] font-semibold flex items-center gap-1">
                             <Calendar className="w-3 h-3 text-rose-300" />
-                            {item.broken_date}
+                            {item.broken_date || item.created_at?.slice(0, 10)}
                           </span>
                           {imgList.length > 1 && (
                             <span className="px-1.5 py-1 bg-rose-600 text-white rounded-lg text-[10px] font-bold">
@@ -1700,16 +2326,89 @@ export function DepoTakipClient({
                             </div>
                           )}
                           {item.product_name && (
-                            <div className="text-xs font-bold text-slate-900 mb-1">
-                              {item.product_name}
+                            <div className="text-xs font-bold text-slate-900 mb-1 flex items-center gap-1.5">
+                              <PackageCheck className="w-3.5 h-3.5 text-slate-500 shrink-0" />
+                              <span className="truncate">
+                                {item.product_code ? `[${item.product_code}] ` : ""}
+                                {item.product_name}
+                              </span>
+                              {item.quantity && (
+                                <span className="text-[11px] font-semibold text-slate-500 shrink-0">
+                                  ({item.quantity} {item.unit || "Adet"})
+                                </span>
+                              )}
                             </div>
                           )}
-                          <div className="text-xs sm:text-sm font-semibold text-rose-950 bg-rose-50/80 border border-rose-100 p-2.5 rounded-xl mb-3 leading-relaxed">
+                          <div className="text-xs sm:text-sm font-semibold text-rose-950 bg-rose-50/80 border border-rose-100 p-2.5 rounded-xl mb-2.5 leading-relaxed">
                             <div className="text-[10px] uppercase font-bold text-rose-600 tracking-wider mb-0.5">
                               Kırılma Sebebi
                             </div>
                             {item.reason}
                           </div>
+
+                          {/* KIRIKLARIN ALTINDA FİYAT / ZARAR KISMI */}
+                          {(() => {
+                            const loss = Number(item.total_price || item.price || 0);
+                            const uPrice = Number(item.unit_price || 0);
+                            const qty = Number(item.quantity || 1);
+
+                            if (loss > 0) {
+                              return (
+                                <div className="bg-rose-50/90 border border-rose-200/90 rounded-xl p-3 mb-2.5">
+                                  <div className="flex items-center justify-between">
+                                    <div className="text-[10px] uppercase font-bold text-rose-600 tracking-wider flex items-center gap-1">
+                                      <Coins className="w-3.5 h-3.5 text-rose-500" />
+                                      <span>Kırık Zarar Tutarı</span>
+                                    </div>
+                                    <button
+                                      type="button"
+                                      onClick={() => openQuickPriceModal(item)}
+                                      className="text-[10.5px] font-bold text-rose-700 hover:text-rose-900 bg-white hover:bg-rose-100 border border-rose-300 px-2.5 py-1 rounded-lg transition shadow-xs cursor-pointer flex items-center gap-1"
+                                      title="Fiyat ve Ürünü Düzenle"
+                                    >
+                                      <Edit3 className="w-3 h-3" />
+                                      <span>Fiyatı Düzenle</span>
+                                    </button>
+                                  </div>
+                                  {item.product_name && (
+                                    <div className="text-xs font-bold text-rose-950 mt-1 truncate" title={item.product_name}>
+                                      📦 {item.product_name} {item.product_code ? `[${item.product_code}]` : ""}
+                                    </div>
+                                  )}
+                                  <div className="text-base sm:text-lg font-black text-rose-950 font-mono mt-0.5">
+                                    {formatCurrency(loss)}
+                                  </div>
+                                  {(uPrice > 0 || qty > 1) && (
+                                    <div className="text-[11px] text-rose-700 font-medium mt-0.5">
+                                      {qty} {item.unit || "Adet"} × {formatCurrency(uPrice)}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div className="bg-amber-50/90 border border-dashed border-amber-300 rounded-xl p-3 mb-2.5 flex items-center justify-between gap-3">
+                                <div>
+                                  <div className="text-[10px] uppercase font-bold text-amber-700 tracking-wider flex items-center gap-1">
+                                    <AlertCircle className="w-3.5 h-3.5 text-amber-600" />
+                                    <span>Zarar / Fiyat Girilmedi</span>
+                                  </div>
+                                  <div className="text-[11px] text-amber-800/90 font-medium mt-0.5">
+                                    Ürün bazlı kırık maliyeti girilmemiş
+                                  </div>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => openQuickPriceModal(item)}
+                                  className="text-xs font-bold text-white bg-amber-600 hover:bg-amber-700 active:scale-98 px-3 py-1.5 rounded-xl shadow-xs transition shrink-0 cursor-pointer flex items-center gap-1"
+                                >
+                                  <Plus className="w-3.5 h-3.5" />
+                                  <span>Fiyat Belirle</span>
+                                </button>
+                              </div>
+                            );
+                          })()}
                         </div>
 
                         {/* Alt Bilgi & İşlemler */}
@@ -1741,6 +2440,19 @@ export function DepoTakipClient({
                   );
                 })}
               </div>
+
+              {/* Kırıklar Liste Altı Ekleme Butonu */}
+              <div className="pt-3 text-center">
+                <button
+                  type="button"
+                  onClick={openNewBrokenModal}
+                  className="inline-flex items-center gap-2 px-5 py-3 bg-rose-600 hover:bg-rose-700 active:scale-98 text-white text-xs font-bold rounded-2xl shadow-sm transition"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>+ Yeni Kırık Ürün Bildir</span>
+                </button>
+              </div>
+            </div>
             )}
           </div>
         )}
@@ -2050,8 +2762,196 @@ export function DepoTakipClient({
                 />
               </div>
 
-              {/* Ürün & Tarih */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {/* ÜRÜN & FİYAT / ZARAR BİLGİLERİ (Admin'e Özel) */}
+              {isAdmin ? (
+                <div className="bg-rose-50/60 border border-rose-200/90 rounded-2xl p-3.5 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-rose-950 flex items-center gap-1.5">
+                      <Tag className="w-3.5 h-3.5 text-rose-600" />
+                      Ürün & Zarar Maliyeti (Yönetici)
+                    </span>
+                    <span className="text-[10px] font-semibold text-rose-700 bg-rose-100 px-2 py-0.5 rounded-full">
+                      Sadece Admin Görür / Düzenler
+                    </span>
+                  </div>
+
+                  {/* Canlı Katalog Arama */}
+                  <div className="relative">
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Katalogdan Ürün Ara veya Seç (4.300+ Ürün)
+                    </label>
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        placeholder="Ürün adı veya kodu yazarak arayınız..."
+                        value={productSearchQuery}
+                        onChange={(e) => {
+                          setProductSearchQuery(e.target.value);
+                          setShowProductDropdown(true);
+                        }}
+                        onFocus={() => setShowProductDropdown(true)}
+                        className="w-full pl-8 pr-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium"
+                      />
+                      {isSearchingProducts && (
+                        <Loader2 className="w-3.5 h-3.5 text-rose-600 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
+                      )}
+                    </div>
+
+                    {/* Arama Sonuç Dropdown */}
+                    {showProductDropdown && productSearchResults.length > 0 && (
+                      <div className="absolute left-0 right-0 top-full mt-1 max-h-48 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-30 divide-y divide-slate-100">
+                        {productSearchResults.map((p) => {
+                          const costPrice = p.cost_price || p.default_sale_price || 0;
+                          return (
+                            <button
+                              key={p.id}
+                              type="button"
+                              onClick={() => {
+                                const unit = p.unit || "Adet";
+                                const uPrice = costPrice;
+                                const qty = Number(brokenForm.quantity) || 1;
+                                setBrokenForm((prev) => ({
+                                  ...prev,
+                                  product_id: p.id,
+                                  product_code: p.product_code || "",
+                                  product_name: p.product_name || "",
+                                  unit,
+                                  unit_price: uPrice > 0 ? uPrice : prev.unit_price,
+                                  total_price: uPrice > 0 ? (qty * uPrice).toFixed(2) : prev.total_price,
+                                }));
+                                setProductSearchQuery(p.product_name);
+                                setShowProductDropdown(false);
+                              }}
+                              className="w-full text-left p-2.5 hover:bg-rose-50/70 transition flex items-center justify-between text-xs"
+                            >
+                              <div className="min-w-0 pr-2">
+                                <div className="font-bold text-slate-900 truncate">
+                                  {p.product_code ? `[${p.product_code}] ` : ""}
+                                  {p.product_name}
+                                </div>
+                                <div className="text-[10px] text-slate-500 flex items-center gap-2 mt-0.5">
+                                  <span>Birim: {p.unit || "Adet"}</span>
+                                  {p.stock_qty != null && <span>Stok: {p.stock_qty}</span>}
+                                </div>
+                              </div>
+                              {costPrice > 0 && (
+                                <div className="text-right shrink-0">
+                                  <span className="text-[10px] text-slate-400 block">Birim Fiyat</span>
+                                  <span className="font-bold text-rose-700 font-mono">
+                                    {formatCurrency(costPrice)}
+                                  </span>
+                                </div>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Serbest Ürün Adı */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-700 mb-1">
+                      Kayıtlı Ürün Adı / Açıklama
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="Örn: 60x120 Seramik Beyaz"
+                      value={brokenForm.product_name}
+                      onChange={(e) =>
+                        setBrokenForm((prev) => ({ ...prev, product_name: e.target.value }))
+                      }
+                      className="w-full px-3 py-2 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium"
+                    />
+                  </div>
+
+                  {/* Miktar, Birim, Birim Fiyat, Toplam Zarar */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                        Kırık Miktar
+                      </label>
+                      <input
+                        type="number"
+                        min="0.01"
+                        step="any"
+                        value={brokenForm.quantity}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const num = Number(val) || 0;
+                          const uPrice = Number(brokenForm.unit_price) || 0;
+                          setBrokenForm((prev) => ({
+                            ...prev,
+                            quantity: val,
+                            total_price: uPrice > 0 ? (num * uPrice).toFixed(2) : prev.total_price,
+                          }));
+                        }}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-bold"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                        Birim
+                      </label>
+                      <select
+                        value={brokenForm.unit}
+                        onChange={(e) => setBrokenForm((prev) => ({ ...prev, unit: e.target.value }))}
+                        className="w-full px-2 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium"
+                      >
+                        <option value="Adet">Adet</option>
+                        <option value="m²">m²</option>
+                        <option value="Kutu">Kutu</option>
+                        <option value="Paket">Paket</option>
+                        <option value="Palet">Palet</option>
+                        <option value="Kg">Kg</option>
+                        <option value="Mt">Mt</option>
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-700 mb-1">
+                        Birim Fiyat (₺)
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="0.00"
+                        value={brokenForm.unit_price}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          const uPrice = Number(val) || 0;
+                          const qty = Number(brokenForm.quantity) || 1;
+                          setBrokenForm((prev) => ({
+                            ...prev,
+                            unit_price: val,
+                            total_price: (qty * uPrice).toFixed(2),
+                          }));
+                        }}
+                        className="w-full px-2.5 py-1.5 text-xs bg-white border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-bold font-mono"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-[10px] font-bold text-rose-700 mb-1">
+                        Toplam Zarar (₺) *
+                      </label>
+                      <input
+                        type="number"
+                        min="0"
+                        step="any"
+                        placeholder="0.00"
+                        value={brokenForm.total_price}
+                        onChange={(e) => setBrokenForm((prev) => ({ ...prev, total_price: e.target.value }))}
+                        className="w-full px-2.5 py-1.5 text-xs bg-rose-100/60 border border-rose-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-black font-mono text-rose-950"
+                      />
+                    </div>
+                  </div>
+                </div>
+              ) : (
+                /* Çalışanlar için sadece basit ürün adı alanı (Fiyat tamamen gizli) */
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">
                     Ürün Adı / Kodu (İsteğe Bağlı)
@@ -2066,32 +2966,34 @@ export function DepoTakipClient({
                     className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 focus:bg-white"
                   />
                 </div>
+              )}
+
+              {/* Tarih & Bildiren Personel */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-700 mb-1">Tarih</label>
                   <input
                     type="date"
-                    value={brokenForm.broken_date}
+                    value={brokenForm.broken_date || new Date().toISOString().slice(0, 10)}
                     onChange={(e) =>
                       setBrokenForm((prev) => ({ ...prev, broken_date: e.target.value }))
                     }
                     className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 focus:bg-white font-medium"
                   />
                 </div>
-              </div>
-
-              {/* Bildiren Personel */}
-              <div>
-                <label className="block text-xs font-bold text-slate-700 mb-1">
-                  Bildiren Personel
-                </label>
-                <input
-                  type="text"
-                  value={brokenForm.reported_by}
-                  onChange={(e) =>
-                    setBrokenForm((prev) => ({ ...prev, reported_by: e.target.value }))
-                  }
-                  className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 focus:bg-white font-medium"
-                />
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">
+                    Bildiren Personel
+                  </label>
+                  <input
+                    type="text"
+                    value={brokenForm.reported_by}
+                    onChange={(e) =>
+                      setBrokenForm((prev) => ({ ...prev, reported_by: e.target.value }))
+                    }
+                    className="w-full px-3 py-2 text-xs sm:text-sm bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 focus:bg-white font-medium"
+                  />
+                </div>
               </div>
 
               {/* Notlar */}
@@ -2108,29 +3010,266 @@ export function DepoTakipClient({
             </div>
 
             {/* Butonlar */}
-            <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50 rounded-b-3xl">
-              <button
-                type="button"
-                onClick={() => setIsBrokenModalOpen(false)}
-                className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-800 rounded-xl"
-              >
-                İptal
-              </button>
-              {!editingBroken && (
+            <div className="p-4 sm:p-5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-50 rounded-b-3xl">
+              <div>
+                {isAdmin && brokenForm.images.length === 0 && !brokenForm.image_url && (
+                  <span className="text-[10.5px] text-slate-500 italic">
+                    ℹ️ Yönetici olarak fotoğrafsız ürün zararı kaydı açabilirsiniz.
+                  </span>
+                )}
+              </div>
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsBrokenModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:text-slate-800 rounded-xl"
+                >
+                  İptal
+                </button>
+                {!editingBroken && (
+                  <button
+                    type="button"
+                    disabled={isPending}
+                    onClick={() => handleSaveBroken(true)}
+                    className="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
+                    Kaydet ve Yeni Ekle
+                  </button>
+                )}
                 <button
                   type="button"
                   disabled={isPending}
-                  onClick={() => handleSaveBroken(true)}
-                  className="px-4 py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 rounded-xl text-xs font-bold transition flex items-center gap-1.5"
+                  onClick={() => handleSaveBroken(false)}
+                  className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/30 transition flex items-center gap-1.5"
                 >
-                  <RefreshCw className="w-3.5 h-3.5 text-slate-500" />
-                  Kaydet ve Yeni Ekle
+                  {isPending ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Kaydediliyor...
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4" />
+                      Kaydet
+                    </>
+                  )}
                 </button>
-              )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ========================================================= */}
+      {/* MODAL 1.5: HIZLI FİYAT & ZARAR BELİRLEME (Admin'e Özel)   */}
+      {/* ========================================================= */}
+      {quickPriceRecord && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl border border-slate-200 overflow-hidden">
+            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between bg-rose-50/60">
+              <div className="flex items-center gap-2">
+                <div className="w-9 h-9 rounded-xl bg-rose-600 text-white flex items-center justify-center font-bold shadow-xs">
+                  <Coins className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-slate-900 text-sm sm:text-base">
+                    Zarar Tutarı & Fiyat Belirle
+                  </h3>
+                  <p className="text-[11px] text-slate-500">
+                    {quickPriceRecord.customer_name || quickPriceRecord.reason || "Kırık Kaydı"}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setQuickPriceRecord(null)}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 sm:p-5 space-y-3.5">
+              {/* Canlı Ürün Arama */}
+              <div className="relative">
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Katalogdan Ürün Seç (İsteğe Bağlı)
+                </label>
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-1/2 -translate-y-1/2" />
+                  <input
+                    type="text"
+                    placeholder="Katalogda ara veya serbest ürün giriniz..."
+                    value={productSearchQuery}
+                    onChange={(e) => {
+                      setProductSearchQuery(e.target.value);
+                      setShowProductDropdown(true);
+                    }}
+                    onFocus={() => setShowProductDropdown(true)}
+                    className="w-full pl-8 pr-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium"
+                  />
+                  {isSearchingProducts && (
+                    <Loader2 className="w-3.5 h-3.5 text-rose-600 animate-spin absolute right-2.5 top-1/2 -translate-y-1/2" />
+                  )}
+                </div>
+
+                {showProductDropdown && productSearchResults.length > 0 && (
+                  <div className="absolute left-0 right-0 top-full mt-1 max-h-40 overflow-y-auto bg-white border border-slate-200 rounded-xl shadow-xl z-30 divide-y divide-slate-100">
+                    {productSearchResults.map((p) => {
+                      const costPrice = p.cost_price || p.default_sale_price || 0;
+                      return (
+                        <button
+                          key={p.id}
+                          type="button"
+                          onClick={() => {
+                            const unit = p.unit || "Adet";
+                            const uPrice = costPrice;
+                            const qty = Number(quickPriceForm.quantity) || 1;
+                            setQuickPriceForm((prev) => ({
+                              ...prev,
+                              product_id: p.id,
+                              product_code: p.product_code || "",
+                              product_name: p.product_name || "",
+                              unit,
+                              unit_price: uPrice > 0 ? uPrice : prev.unit_price,
+                              total_price: uPrice > 0 ? (qty * uPrice).toFixed(2) : prev.total_price,
+                            }));
+                            setProductSearchQuery(p.product_name);
+                            setShowProductDropdown(false);
+                          }}
+                          className="w-full text-left p-2.5 hover:bg-rose-50 transition flex items-center justify-between text-xs"
+                        >
+                          <div className="min-w-0 pr-2">
+                            <div className="font-bold text-slate-900 truncate">
+                              {p.product_code ? `[${p.product_code}] ` : ""}
+                              {p.product_name}
+                            </div>
+                            <div className="text-[10px] text-slate-400">
+                              Birim: {p.unit || "Adet"}
+                            </div>
+                          </div>
+                          {costPrice > 0 && (
+                            <span className="font-mono font-bold text-rose-700 text-xs shrink-0">
+                              {formatCurrency(costPrice)}
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* Ürün Adı */}
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">Ürün Adı</label>
+                <input
+                  type="text"
+                  placeholder="Örn: 60x120 Seramik Beyaz"
+                  value={quickPriceForm.product_name}
+                  onChange={(e) =>
+                    setQuickPriceForm((prev) => ({ ...prev, product_name: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium"
+                />
+              </div>
+
+              {/* Miktar, Birim, Birim Fiyat */}
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 mb-1">Miktar</label>
+                  <input
+                    type="number"
+                    min="0.01"
+                    step="any"
+                    value={quickPriceForm.quantity}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const num = Number(val) || 0;
+                      const uPrice = Number(quickPriceForm.unit_price) || 0;
+                      setQuickPriceForm((prev) => ({
+                        ...prev,
+                        quantity: val,
+                        total_price: uPrice > 0 ? (num * uPrice).toFixed(2) : prev.total_price,
+                      }));
+                    }}
+                    className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 mb-1">Birim</label>
+                  <select
+                    value={quickPriceForm.unit}
+                    onChange={(e) =>
+                      setQuickPriceForm((prev) => ({ ...prev, unit: e.target.value }))
+                    }
+                    className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-medium"
+                  >
+                    <option value="Adet">Adet</option>
+                    <option value="m²">m²</option>
+                    <option value="Kutu">Kutu</option>
+                    <option value="Paket">Paket</option>
+                    <option value="Palet">Palet</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-700 mb-1">Birim Fiyat (₺)</label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="any"
+                    placeholder="0.00"
+                    value={quickPriceForm.unit_price}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      const uPrice = Number(val) || 0;
+                      const qty = Number(quickPriceForm.quantity) || 1;
+                      setQuickPriceForm((prev) => ({
+                        ...prev,
+                        unit_price: val,
+                        total_price: (qty * uPrice).toFixed(2),
+                      }));
+                    }}
+                    className="w-full px-2 py-1.5 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-bold font-mono"
+                  />
+                </div>
+              </div>
+
+              {/* Toplam Zarar Tutarı */}
+              <div className="bg-rose-50/80 border border-rose-200 p-3 rounded-2xl">
+                <label className="block text-xs font-bold text-rose-950 mb-1">
+                  Toplam Zarar Tutarı (₺) *
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  step="any"
+                  placeholder="0.00"
+                  value={quickPriceForm.total_price}
+                  onChange={(e) =>
+                    setQuickPriceForm((prev) => ({ ...prev, total_price: e.target.value }))
+                  }
+                  className="w-full px-3 py-2 text-sm bg-white border border-rose-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-rose-500 font-black font-mono text-rose-950"
+                />
+                <span className="text-[10px] text-rose-600/80 block mt-1">
+                  Miktar × Birim Fiyat ile otomatik hesaplanır, elle de değiştirebilirsiniz.
+                </span>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-5 border-t border-slate-100 flex items-center justify-end gap-2 bg-slate-50">
+              <button
+                type="button"
+                onClick={() => setQuickPriceRecord(null)}
+                className="px-4 py-2 text-xs font-bold text-slate-600 hover:text-slate-800 rounded-xl"
+              >
+                İptal
+              </button>
               <button
                 type="button"
                 disabled={isPending}
-                onClick={() => handleSaveBroken(false)}
+                onClick={handleSaveQuickPrice}
                 className="px-5 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-md shadow-rose-600/30 transition flex items-center gap-1.5"
               >
                 {isPending ? (
@@ -2141,7 +3280,7 @@ export function DepoTakipClient({
                 ) : (
                   <>
                     <CheckCircle2 className="w-4 h-4" />
-                    Kaydet
+                    Zarar Tutarını Kaydet
                   </>
                 )}
               </button>
@@ -2300,7 +3439,7 @@ export function DepoTakipClient({
                       </label>
                       <input
                         type="date"
-                        value={deliveryForm.received_date}
+                        value={deliveryForm.received_date || new Date().toISOString().slice(0, 10)}
                         onChange={(e) =>
                           setDeliveryForm((prev) => ({ ...prev, received_date: e.target.value }))
                         }
@@ -2417,7 +3556,7 @@ export function DepoTakipClient({
                       </label>
                       <input
                         type="date"
-                        value={deliveryForm.delivered_date}
+                        value={deliveryForm.delivered_date || new Date().toISOString().slice(0, 10)}
                         onChange={(e) =>
                           setDeliveryForm((prev) => ({ ...prev, delivered_date: e.target.value }))
                         }
